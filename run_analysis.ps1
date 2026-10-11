@@ -2,16 +2,16 @@
 .SYNOPSIS
     Automated Update, Multi-Agent Analysis & Report Generation Script for NSE Stock Predictor.
 .DESCRIPTION
-    1. Pulls latest repository updates & daily Bhavcopy data.
-    2. Syncs Python dependencies via uv.
-    3. Runs the multi-agent LangGraph workflow for target symbols in symbols.json.
-    4. Generates timestamped report files in the reports directory.
+    1. Pulls latest repository updates (git pull).
+    2. Syncs Python dependencies via uv & checks Valkey/dashboard services.
+    3. Syncs split-adjusted historical data & exports Excel workbook (NSE_Historical_Data.xlsx).
+    4. Runs the multi-agent LangGraph workflow and generates prediction reports.
 #>
 
 # Trap script cancellation (Ctrl+C) to prevent PowerShell hanging
 trap {
     if ($_ -match "PipelineStopped" -or $_ -match "ScriptCmdletBaseExecInterrupt" -or $_.Exception -is [System.Management.Automation.PipelineStoppedException]) {
-        Write-Host "`n🛑 Script stopped by user (Ctrl+C). Cleanup complete." -ForegroundColor Yellow
+        Write-Host "`n[STOP] Script stopped by user (Ctrl+C). Cleanup complete." -ForegroundColor Yellow
         exit 0
     }
 }
@@ -39,30 +39,14 @@ catch {
     Write-Host "Notice: Git pull skipped or encountered warning. Continuing with local data..." -ForegroundColor DarkYellow
 }
 
-# # Step 2: Download latest daily Bhavcopy if NodeJS script is available
-if (Test-Path "$ScriptDir\dataDownloader.js") {
-    Write-Host ""
-    Write-Host "[2/4] Checking latest daily Bhavcopy data..." -ForegroundColor Yellow
-    try {
-        node "$ScriptDir\dataDownloader.js"
-    }
-    catch {
-        Write-Host "Data downloader notice: Continuing with existing Bhavcopy dataset..." -ForegroundColor DarkYellow
-    }
-}
-else {
-    Write-Host ""
-    Write-Host "[2/4] Daily Bhavcopy data directory verified." -ForegroundColor Yellow
-}
-
-# Step 3: Sync Python Environment via UV & Check Valkey Status
+# Step 2: Sync Python Dependencies via UV & Check Background Services
 Write-Host ""
-Write-Host "[3/4] Syncing Python dependencies using uv..." -ForegroundColor Yellow
+Write-Host "[2/4] Syncing Python dependencies using uv..." -ForegroundColor Yellow
 try {
     uv sync
 }
 catch {
-    Write-Host "uv sync warning: Ensure uv is installed. Attempting python execution directly..." -ForegroundColor DarkYellow
+    Write-Host "uv sync warning: Ensure uv is installed. Continuing with active environment..." -ForegroundColor DarkYellow
 }
 
 # Check Valkey Server Availability on port 6379
@@ -81,11 +65,21 @@ catch {
 try {
     $dashSocket = New-Object System.Net.Sockets.TcpClient("localhost", 8000)
     $dashSocket.Close()
-    Write-Host "🌐 Realtime Dashboard Server running at http://localhost:8000" -ForegroundColor Green
+    Write-Host "Realtime Dashboard Server running at http://localhost:8000" -ForegroundColor Green
 }
 catch {
-    Write-Host "🌐 Launching Realtime Dashboard Server on http://localhost:8000..." -ForegroundColor Yellow
+    Write-Host "Launching Realtime Dashboard Server on http://localhost:8000..." -ForegroundColor Yellow
     Start-Process -FilePath "uv" -ArgumentList "run python `"$ScriptDir\dashboard_server.py`"" -WindowStyle Hidden
+}
+
+# Step 3: Sync Reliable Historical Market Data & Export to Excel
+Write-Host ""
+Write-Host "[3/4] Syncing split-adjusted historical data & updating Excel dataset..." -ForegroundColor Yellow
+try {
+    uv run python "$ScriptDir\tools\historical_data_tools.py" --sync --excel
+}
+catch {
+    Write-Host "Data sync notice: Continuing with existing SQLite historical dataset..." -ForegroundColor DarkYellow
 }
 
 # Step 4: Run Multi-Agent Analysis & Generate Report
@@ -99,7 +93,7 @@ try {
     uv run python "$ScriptDir\main.py"
 }
 catch [System.Management.Automation.PipelineStoppedException] {
-    Write-Host "`n🛑 Execution stopped by user." -ForegroundColor Yellow
+    Write-Host "`n[STOP] Execution stopped by user." -ForegroundColor Yellow
     exit 0
 }
 catch {
@@ -113,8 +107,7 @@ catch {
 
 Write-Host ""
 Write-Host "========================================================================" -ForegroundColor Cyan
-Write-Host "  ANALYSIS COMPLETE! Report generated in: $ScriptDir\reports" -ForegroundColor Cyan
-Write-Host "  🌐 Open Realtime Dashboard: http://localhost:8000" -ForegroundColor Green
-Write-Host "========================================================================" -ForegroundColor Cyan
-Write-Host "  🌐 Open Realtime Dashboard: http://localhost:8000" -ForegroundColor Green
+Write-Host "  ANALYSIS COMPLETE! Reports generated in: $ScriptDir\reports" -ForegroundColor Cyan
+Write-Host "  * Excel Historical Dataset: $ScriptDir\reports\NSE_Historical_Data.xlsx" -ForegroundColor Green
+Write-Host "  * Realtime Dashboard Server: http://localhost:8000" -ForegroundColor Green
 Write-Host "========================================================================" -ForegroundColor Cyan

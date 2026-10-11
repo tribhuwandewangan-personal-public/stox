@@ -203,7 +203,13 @@ def main():
             synth_res = cache_mgr.get_latest_agent_output(sym, "Master Prediction Synthesizer Agent", max_age_hours=168)
             if synth_res:
                 report_text = synth_res.get("final_report", "No report text returned.")
-                last_price = synth_res.get("last_price", "N/A")
+                last_price = synth_res.get("last_price")
+                if not last_price or last_price == "N/A":
+                    candles = cache_mgr.get_cached_candles(sym, limit_days=1)
+                    if candles:
+                        last_price = round(float(candles[-1].get("CLOSE_PRICE", 0)), 2)
+                    else:
+                        last_price = "N/A"
 
                 report_markdown.append(f"\n## {sym} - {c_name}")
                 report_markdown.append(f"**Sector**: {sec}  | **Last Price**: Rs. {last_price}\n")

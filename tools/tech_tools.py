@@ -8,13 +8,14 @@ import pandas as pd
 import numpy as np
 from typing import Dict, Any
 
-from tools.bhavcopy_rag import BhavcopyRAGEngine
+from typing import Dict, Any, Optional
 
+from tools.historical_data_tools import HistoricalDataEngine
 from storage.cache_manager import CacheManager
 
 class TechnicalAnalysisEngine:
-    def __init__(self, rag_engine: BhavcopyRAGEngine = None, cache_manager: CacheManager = None):
-        self.rag_engine = rag_engine or BhavcopyRAGEngine(cache_manager=cache_manager)
+    def __init__(self, rag_engine: Optional[HistoricalDataEngine] = None, cache_manager: Optional[CacheManager] = None):
+        self.rag_engine = rag_engine or HistoricalDataEngine(cache_manager=cache_manager)
 
     def analyze_symbol(self, symbol: str) -> Dict[str, Any]:
         """Calculates key technical metrics for a stock symbol."""

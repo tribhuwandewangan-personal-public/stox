@@ -1,191 +1,8 @@
 # NSE Multi-Agent Stock Analysis & Prediction Report
-**Generated At**: 2026-10-05 06:49:09  
-**Model Engine**: Ollama (`qwen2.5:7b`) [Zero-Cost Local Setup]  
-**Total Symbols**: 21
+**Updated At**: 2026-10-12 | **Model Engine**: Ollama (qwen2.5:7b)
+**Total Symbols**: 31
 
 ---
-
-## RELIANCE - Reliance Industries Limited
-**Sector**: Energy & Retail  | **Last Price**: Rs. 1167.7
-
-### Structured Prediction Report for RELIANCE (Reliance Industries Limited)
-
----
-
-#### OVERALL VERDICT: **Sell**
-
-#### CONFIDENCE RATING: **Medium (50%)**
-
----
-
-#### TARGET PRICE FORECAST:
-- **Short-Term (1-4 weeks):** Rs. 1150 - Rs. 1160
-- **Medium-Term (1-6 months):** Rs. 1120 - Rs. 1130
-
----
-
-#### KEY RATIONALE:
-1. **Technical Analysis:**
-   - **Bearish Trends:** The stock is currently below multiple moving averages (SMA20, SMA50, SMA200), indicating a strong bearish trend.
-   - **Oversold Condition:** The RSI is below 30, suggesting the stock is oversold and may experience a potential bounce, but the overall bearish trend remains.
-   - **Volume and Delivery:** Slight accumulation but increased volume might not translate into higher demand, leading to more selling pressure.
-
-2. **Fundamental Analysis:**
-   - **Moderate Valuation:** The stock is fairly valued with a moderate P/E and P/B ratio, but the high debt-to-equity ratio and missing ROE data are concerning.
-   - **Revenue Growth:** Strong revenue growth, but profitability is moderate, indicating potential risks.
-
-3. **Risk & Volatility:**
-   - **High Volatility:** The stock exhibits high volatility, necessitating strict risk management.
-   - **Stop-Loss Implementation:** Immediate execution of stop-loss at Rs. 1107.51 to limit potential losses.
-
-4. **Global Macro Environment:**
-   - **Positive US Market Sentiment:** Positive US market sentiment could attract foreign investment.
-   - **Lower Oil Prices:** Lower oil prices could boost corporate profits and consumer spending, which might be favorable for the stock.
-
-5. **Real-Time News & Sentiment:**
-   - **Neutral Sentiment:** Balanced trading activity with no significant positive or negative catalysts.
-
----
-
-#### ACTIONABLE RECOMMENDATION & RISK MITIGATION:
-
-1. **Short-Term Strategy:**
-   - **Sell:** Given the bearish technical indicators and the stock's current position below key support levels, a sell recommendation is appropriate.
-   - **Stop-Loss:** Set a stop-loss at Rs. 1107.51 to limit potential losses.
-   - **Trailing Stop-Loss:** Consider implementing a trailing stop-loss to protect gains while allowing for potential price appreciation.
-
-2. **Medium-Term Strategy:**
-   - **Hold with Caution:** If the stock price breaks above the resistance level of Rs. 1180.8, consider a re-evaluation of the position.
-   - **Monitor Key Levels:** Keep a close eye on the support level of Rs. 1157.7 and the resistance level of Rs. 1180.8.
-
-3. **Risk Mitigation:**
-   - **Diversification:** Diversify the portfolio to mitigate risks associated with individual stock performance.
-   - **Risk Management:** Implement position sizing guardrails to limit the risk per trade to 1-2% of the total portfolio value.
-   - **Regular Re-evaluation:** Periodically re-evaluate the stock's position based on market conditions and fundamental changes.
-
-4. **Long-Term Strategy:**
-   - **Monitor Fundamental Improvements:** Keep a close watch on the company's financial health, particularly the debt-to-equity ratio and ROE.
-   - **Sector Trends:** Monitor broader sector trends and economic indicators that could impact the stock's performance.
-
----
-
-### Conclusion:
-The overall technical and fundamental analysis suggests a bearish outlook for RELIANCE in the short to medium term. While the stock is currently oversold, the bearish trends and high volatility necessitate a cautious approach. A sell recommendation is advised with strict risk management measures in place. Regular monitoring and re-evaluation of the stock's position will be crucial for effective portfolio management.
-
----
-
-
-## HDFCBANK - HDFC Bank Limited
-**Sector**: Banking & Financial Services  | **Last Price**: Rs. 721.2
-
-### 🎯 VERDICT: ACCUMULATE | Confidence: MEDIUM (65%)
-- **When to Buy (Entry Range)**: Rs.700 - Rs.720
-- **When to Sell (Target Price)**: Rs.795.75
-- **Stop Loss**: Rs.683.92
-- **Holding Horizon**: Medium-Term (1-3 Months)
-
-**Key Rationale**: Given the positive global market sentiment and favorable economic conditions, HDFCBANK is undervalued and presents a medium-term accumulation opportunity. The technical indicators suggest a short-term bearish trend, but the overall market environment supports a positive outlook.
-**Action Plan**: 1. Accumulate HDFCBANK shares within the entry range of Rs.700 - Rs.720. 2. Set a stop loss at Rs.683.92 to protect against short-term volatility. 3. Target a price of Rs.795.75 for potential profit taking. 4. Monitor the stock's performance and market conditions closely over the next 1-3 months.
-
-
----
-
-
-## ICICIBANK - ICICI Bank Limited
-**Sector**: Banking & Financial Services  | **Last Price**: Rs. 1310.6
-
-### 🎯 VERDICT: ACCUMULATE | Confidence: MEDIUM (65%)
-- **When to Buy (Entry Range)**: Rs.1271.28 - Rs.1310.6
-- **When to Sell (Target Price)**: Rs.1389.24
-- **Stop Loss**: Rs.1271.28
-- **Holding Horizon**: Medium-Term (1-3 Months)
-
-**Key Rationale**: ICICIBANK presents a value opportunity with undervalued fundamentals and positive global market sentiment, despite short-term technical bearish signals.
-**Action Plan**: 1. Accumulate ICICIBANK shares at current levels or slightly below the last price. 2. Set a stop loss at Rs.1271.28 to protect against short-term volatility. 3. Target a medium-term holding period for potential appreciation to Rs.1389.24.
-
-
----
-
-
-## TATAMOTORS - Tata Motors Limited
-**Sector**: Automobile  | **Last Price**: Rs. 405.85
-
-### 🎯 VERDICT: ACCUMULATE | Confidence: MEDIUM (65%)
-- **When to Buy (Entry Range)**: Rs.390 - Rs.410
-- **When to Sell (Target Price)**: Rs.447.25
-- **Stop Loss**: Rs.385.15
-- **Holding Horizon**: Medium-Term (1-3 Months)
-
-**Key Rationale**: Given the favorable global market environment and the potential for increased foreign investment, TATAMOTORS is a suitable candidate for accumulation. However, the bearish technical indicators suggest caution.
-**Action Plan**: 1. Accumulate TATAMOTORS shares within the entry range of Rs.390 - Rs.410. 2. Set a stop loss at Rs.385.15 to protect against potential short-term declines. 3. Monitor the stock's performance and broader market trends. 4. Reassess the investment at the target price of Rs.447.25 or if the stock breaks below the 50-day SMA.
-
-
----
-
-
-## SBIN - State Bank of India
-**Sector**: Banking & Financial Services  | **Last Price**: Rs. N/A
-
-### 🎯 VERDICT: BUY | Confidence: MEDIUM (65%)
-- **When to Buy (Entry Range)**: Rs. 1000 - Rs. 1100
-- **When to Sell (Target Price)**: Rs. 1200
-- **Stop Loss**: Rs. 950
-- **Holding Horizon**: Medium-Term (1-3 Months)
-
-**Key Rationale**: Given the positive global market environment and favorable macro indicators, SBIN is undervalued and presents a value opportunity. The stock is expected to benefit from the overall market sentiment and sector trends.
-**Action Plan**: 1. Monitor the stock for optimal entry in the range of Rs. 1000 - Rs. 1100. 2. Set a target price of Rs. 1200 for profit-taking. 3. Place a stop-loss order at Rs. 950 to protect against potential downside. 4. Hold the position for 1-3 months, reassessing the market conditions and stock fundamentals before making any further decisions.
-
-
----
-
-
-## BHARTIARTL - Bharti Airtel Limited
-**Sector**: Telecommunication  | **Last Price**: Rs. 1741.1
-
-### 🎯 VERDICT: HOLD | Confidence: MEDIUM (65%)
-- **When to Buy (Entry Range)**: Rs.1726.3 - Rs.1741.1
-- **When to Sell (Target Price)**: Rs.1845.57
-- **Stop Loss**: Rs.1688.87
-- **Holding Horizon**: Medium-Term (1-3 Months)
-
-**Key Rationale**: The stock is currently in a short-term downtrend and below key moving averages, but the medium-term outlook is positive due to favorable global market conditions. The stock is fairly valued, and the risk-reward ratio is favorable.
-**Action Plan**: Monitor the stock for potential entry points in the optimal range of Rs.1726.3 - Rs.1741.1. Set a stop loss at Rs.1688.87 and a target price at Rs.1845.57. Maintain a medium-term holding horizon given the current market conditions and the stock's valuation.
-
-
----
-
-
-## LT - Larsen & Toubro Limited
-**Sector**: Capital Goods & Construction  | **Last Price**: Rs. 3693.4
-
-### 🎯 VERDICT: ACCUMULATE | Confidence: MEDIUM (65%)
-- **When to Buy (Entry Range)**: Rs.3500 - Rs.3600
-- **When to Sell (Target Price)**: Rs.3900 - Rs.4000
-- **Stop Loss**: Rs.3573.87
-- **Holding Horizon**: Medium-Term (1-3 Months)
-
-**Key Rationale**: Given the positive US market sentiment and lower oil prices, the stock is fairly valued with a medium confidence rating. The technical indicators suggest a short-term bearish trend, but the medium-term outlook remains positive.
-**Action Plan**: 1. Accumulate LT shares between Rs.3500 - Rs.3600. 2. Set a stop loss at Rs.3573.87. 3. Target a price range of Rs.3900 - Rs.4000 for exit. 4. Monitor technical indicators and macroeconomic factors closely.
-
-
----
-
-
-## MOTHERSON - Samvardhana Motherson International Limited
-**Sector**: Auto Ancillaries  | **Last Price**: Rs. 157.03
-
-### 🎯 VERDICT: HOLD | Confidence: MEDIUM (65%)
-- **When to Buy (Entry Range)**: Rs.150 - Rs.155
-- **When to Sell (Target Price)**: Rs.175
-- **Stop Loss**: Rs.145
-- **Holding Horizon**: Medium-Term (1-3 Months)
-
-**Key Rationale**: The stock is currently in a neutral technical state with a bearish short-term trend but a long-term bullish trend. Given the favorable global market environment, the stock is considered fairly valued, making a hold recommendation appropriate.
-**Action Plan**: 1. Monitor the stock for any significant technical breakouts or news events that could shift the trend. 2. Consider accumulating positions at the entry range of Rs.150 - Rs.155 if the stock breaks above Rs.155. 3. Set a stop loss at Rs.145 to manage risk. 4. Hold the position for 1-3 months, with a target price of Rs.175.
-
-
----
-
 
 ## TATASTEEL - Tata Steel Limited
 **Sector**: Metals & Mining  | **Last Price**: Rs. 178.0
@@ -390,6 +207,22 @@ The overall technical and fundamental analysis suggests a bearish outlook for RE
 
 **Key Rationale**: Given the positive US market sentiment and supportive economic conditions, MTARTECH presents a favorable investment opportunity. The stock is currently above its 50-day and 200-day SMA, indicating a bullish trend.
 **Action Plan**: 1. Enter a long position when the stock price trades within the optimal entry range of Rs.7500 - Rs.7800. 2. Set a stop loss at Rs.7256.37 to manage risk. 3. Target a profit at Rs.8878.25. 4. Monitor the stock's performance and macroeconomic indicators for any changes in the market environment.
+
+
+---
+
+
+## KRBL - KRBL Limited
+**Sector**: Agro-Business (Rice)  | **Last Price**: Rs. 389.2
+
+### 🎯 VERDICT: ACCUMULATE | Confidence: MEDIUM (65%)
+- **When to Buy (Entry Range)**: Rs.375 - Rs.385
+- **When to Sell (Target Price)**: Rs.420 - Rs.430
+- **Stop Loss**: Rs.369.55
+- **Holding Horizon**: Medium-Term (1-3 Months)
+
+**Key Rationale**: Given the positive global market context and stable commodity prices, KRBL presents a value opportunity. The stock is undervalued with a favorable macro environment, making it a suitable accumulation target.
+**Action Plan**: 1. Accumulate KRBL shares in the entry range of Rs.375 - Rs.385. 2. Set a stop loss at Rs.369.55 to manage downside risk. 3. Target a medium-term holding period of 1-3 months, with potential exit at Rs.420 - Rs.430 based on technical signals and macroeconomic indicators.
 
 
 ---

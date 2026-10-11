@@ -1,8 +1,6 @@
-[![GetBhavCopy](https://github.com/tilak999/NSE-Data-bank/actions/workflows/autoDownload.yml/badge.svg?branch=main)](https://github.com/tilak999/NSE-Data-bank/actions/workflows/autoDownload.yml)
-
 # NSE-Data-bank & Multi-Agent Stock Predictor
 
-This repository contains daily NSE Bhavcopy stock data spanning over two decades, paired with a zero-cost **LangGraph & LangChain Multi-Agent RAG Stock Prediction System** powered by **Ollama (`qwen2.5:7b`)**.
+This repository contains corporate-action adjusted historical stock market data paired with a zero-cost **LangGraph & LangChain Multi-Agent RAG Stock Prediction System** powered by **Ollama (`qwen2.5:7b`)**. Historical data is automatically synced to SQLite (`storage/cache.db`) and exported to Excel ([`reports/NSE_Historical_Data.xlsx`](file:///c:/Users/tdewa/Documents/LearnPython/NSE-Data-bank/reports/NSE_Historical_Data.xlsx)).
 
 ---
 
@@ -11,9 +9,9 @@ This repository contains daily NSE Bhavcopy stock data spanning over two decades
 The system uses 8 specialized AI agents working together to evaluate equities listed in `symbols.json`:
 
 1. **Supervisor / Orchestrator Agent**: Manages execution flow, checks incremental SQLite cache (`storage/cache.db`), and orchestrates agent runs.
-2. **Historical Data RAG Agent**: Performs RAG over local daily Bhavcopy CSV files in `data/`, evaluating price action memory, volume surges, and delivery trends.
+2. **Historical Data RAG Agent**: Evaluates corporate-action adjusted price history, volume surges, and long-term momentum trends.
 3. **Technical Analysis Agent**: Computes SMA 20/50/200, RSI, MACD, Bollinger Bands, and Support/Resistance pivot levels.
-4. **Real-Time News & Sentiment Agent**: Scrapes online news using free DuckDuckGo search and calculates sentiment scores.
+4. **Real-Time News & Sentiment Agent**: Scrapes online news using free RSS & DuckDuckGo search and calculates sentiment scores.
 5. **Global Macro & Market Agent**: Evaluates global market indicators (S&P 500, Nasdaq, Crude Oil, DXY Dollar Index, Gold).
 6. **Fundamental Analyst Agent**: Evaluates financial health (P/E, P/B, ROE, Debt/Equity, Revenue Growth).
 7. **Risk & Volatility Agent**: Computes Beta, 95% VaR, Maximum Drawdown, stop-loss placement, and risk-reward ratio.

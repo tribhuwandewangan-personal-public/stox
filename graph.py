@@ -37,7 +37,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from storage.cache_manager import CacheManager
-from tools.bhavcopy_rag import BhavcopyRAGEngine
+from tools.historical_data_tools import HistoricalDataEngine
 from tools.tech_tools import TechnicalAnalysisEngine
 from tools.news_tools import NewsSentimentEngine
 from tools.macro_tools import GlobalMacroEngine
@@ -73,13 +73,13 @@ class MultiAgentWorkflow:
         self.cache_manager = cache_manager or CacheManager()
         
         # Engines initialized with shared SQLite cache_manager
-        bhav_engine = BhavcopyRAGEngine(cache_manager=self.cache_manager)
-        tech_engine = TechnicalAnalysisEngine(rag_engine=bhav_engine, cache_manager=self.cache_manager)
+        hist_engine = HistoricalDataEngine(cache_manager=self.cache_manager)
+        tech_engine = TechnicalAnalysisEngine(rag_engine=hist_engine, cache_manager=self.cache_manager)
         news_engine = NewsSentimentEngine(cache_manager=self.cache_manager)
         macro_engine = GlobalMacroEngine(cache_manager=self.cache_manager)
-        risk_engine = RiskManagementEngine(rag_engine=bhav_engine, cache_manager=self.cache_manager)
+        risk_engine = RiskManagementEngine(rag_engine=hist_engine, cache_manager=self.cache_manager)
 
-        self.hist_agent = HistoricalRAGAgent(rag_engine=bhav_engine)
+        self.hist_agent = HistoricalRAGAgent(rag_engine=hist_engine)
         self.tech_agent = TechnicalAnalysisAgent(tech_engine=tech_engine)
         self.news_agent = NewsSentimentAgent(news_engine=news_engine)
         self.macro_agent = GlobalMacroAgent(macro_engine=macro_engine)
@@ -108,7 +108,7 @@ class MultiAgentWorkflow:
         # Helper functions for parallel tasks
         def run_hist():
             if VERBOSE_LOGGING:
-                safe_print(f"  ├─ [Parallel Task 1/6] Running Historical Bhavcopy RAG Agent...")
+                safe_print(f"  ├─ [Parallel Task 1/6] Running Historical Quant RAG Agent...")
             t0 = time.time()
             out = self.hist_agent.run(symbol)
             self.cache_manager.save_agent_output(symbol, "Historical Data RAG Agent", out)

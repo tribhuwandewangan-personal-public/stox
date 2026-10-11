@@ -6,15 +6,14 @@ optimal stop-loss placement, and target risk-reward ratios for stock symbols.
 
 import numpy as np
 import pandas as pd
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
-from tools.bhavcopy_rag import BhavcopyRAGEngine
-
+from tools.historical_data_tools import HistoricalDataEngine
 from storage.cache_manager import CacheManager
 
 class RiskManagementEngine:
-    def __init__(self, rag_engine: BhavcopyRAGEngine = None, cache_manager: CacheManager = None):
-        self.rag_engine = rag_engine or BhavcopyRAGEngine(cache_manager=cache_manager)
+    def __init__(self, rag_engine: Optional[HistoricalDataEngine] = None, cache_manager: Optional[CacheManager] = None):
+        self.rag_engine = rag_engine or HistoricalDataEngine(cache_manager=cache_manager)
 
     def evaluate_risk(self, symbol: str) -> Dict[str, Any]:
         """Calculates quantitative risk parameters for a target symbol."""

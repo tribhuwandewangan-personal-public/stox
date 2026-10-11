@@ -26,21 +26,28 @@ class CacheManager:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             
-            # Historical Bhavcopy summary per stock
+            # Drop legacy bhavcopy table if present
+            cursor.execute("DROP TABLE IF EXISTS bhavcopy_cache")
+
+            # Reliable historical adjusted candles per stock
             cursor.execute("""
-                CREATE TABLE IF NOT EXISTS bhavcopy_cache (
+                CREATE TABLE IF NOT EXISTS historical_candles (
                     symbol TEXT,
                     date TEXT,
                     open REAL,
                     high REAL,
                     low REAL,
                     close REAL,
-                    prev_close REAL,
+                    adj_close REAL,
                     volume INTEGER,
-                    deliv_qty INTEGER,
-                    deliv_per REAL,
+                    dividends REAL DEFAULT 0.0,
+                    splits REAL DEFAULT 0.0,
                     PRIMARY KEY (symbol, date)
                 )
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_hist_candles_sym_date 
+                ON historical_candles(symbol, date)
             """)
 
             # Online News & Sentiment Cache
@@ -148,14 +155,14 @@ class CacheManager:
             """, (now_str, sentiment_label, macro_summary, json.dumps(raw_indicators)))
             conn.commit()
 
-    # --- Bhavcopy Historical Cache API ---
-    def get_cached_bhavcopy_history(self, symbol: str, limit_days: int = 500) -> List[Dict[str, Any]]:
-        """Retrieves cached Bhavcopy history from SQLite database for a symbol."""
+    # --- Reliable Historical Candles SQLite API ---
+    def get_cached_candles(self, symbol: str, limit_days: int = 500) -> List[Dict[str, Any]]:
+        """Retrieves split-adjusted historical candles from SQLite database for a symbol."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT date, open, high, low, close, prev_close, volume, deliv_qty, deliv_per
-                FROM bhavcopy_cache
+                SELECT date, open, high, low, close, adj_close, volume, dividends, splits
+                FROM historical_candles
                 WHERE symbol = ?
                 ORDER BY date ASC
             """, (symbol.upper(),))
@@ -163,30 +170,35 @@ class CacheManager:
             if not rows:
                 return []
             
-            result = [
-                {
+            result = []
+            prev_close = rows[0][4]
+            for r in rows:
+                close_val = float(r[4] or 0.0)
+                result.append({
                     "SYMBOL": symbol.upper(),
                     "DATE": r[0],
-                    "OPEN_PRICE": r[1],
-                    "HIGH_PRICE": r[2],
-                    "LOW_PRICE": r[3],
-                    "CLOSE_PRICE": r[4],
-                    "PREV_CLOSE": r[5],
-                    "TTL_TRD_QNTY": r[6],
-                    "DELIV_QTY": r[7],
-                    "DELIV_PER": r[8]
-                }
-                for r in rows
-            ]
+                    "OPEN_PRICE": float(r[1] or 0.0),
+                    "HIGH_PRICE": float(r[2] or 0.0),
+                    "LOW_PRICE": float(r[3] or 0.0),
+                    "CLOSE_PRICE": close_val,
+                    "ADJ_CLOSE": float(r[5] or close_val),
+                    "PREV_CLOSE": prev_close,
+                    "TTL_TRD_QNTY": int(r[6] or 0),
+                    "VOLUME": int(r[6] or 0),
+                    "DIVIDENDS": float(r[7] or 0.0),
+                    "SPLITS": float(r[8] or 0.0)
+                })
+                prev_close = close_val
+                
             return result[-limit_days:]
 
-    def save_bhavcopy_records(self, records: List[Dict[str, Any]]):
-        """Batch inserts parsed Bhavcopy daily records into SQLite database."""
+    def save_historical_candles(self, records: List[Dict[str, Any]]):
+        """Batch inserts parsed corporate-action adjusted daily candles into SQLite database."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.executemany("""
-                INSERT OR REPLACE INTO bhavcopy_cache
-                (symbol, date, open, high, low, close, prev_close, volume, deliv_qty, deliv_per)
+                INSERT OR REPLACE INTO historical_candles
+                (symbol, date, open, high, low, close, adj_close, volume, dividends, splits)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, [
                 (
@@ -196,14 +208,21 @@ class CacheManager:
                     float(r.get("high", 0.0)),
                     float(r.get("low", 0.0)),
                     float(r.get("close", 0.0)),
-                    float(r.get("prev_close", 0.0)),
+                    float(r.get("adj_close", r.get("close", 0.0))),
                     int(r.get("volume", 0)),
-                    int(r.get("deliv_qty", 0)),
-                    float(r.get("deliv_per", 0.0))
+                    float(r.get("dividends", 0.0)),
+                    float(r.get("splits", 0.0))
                 )
                 for r in records
             ])
             conn.commit()
+
+    # Backwards compatibility shims
+    def get_cached_bhavcopy_history(self, symbol: str, limit_days: int = 500) -> List[Dict[str, Any]]:
+        return self.get_cached_candles(symbol, limit_days=limit_days)
+
+    def save_bhavcopy_records(self, records: List[Dict[str, Any]]):
+        return self.save_historical_candles(records)
 
     # --- News Cache API ---
     def get_cached_news(self, symbol: str, max_age_hours: int = 24) -> List[Dict[str, Any]]:

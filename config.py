@@ -35,7 +35,8 @@ MAX_SYMBOL_WORKERS = int(os.getenv("MAX_SYMBOL_WORKERS", "2"))
 # Target Symbols Config File
 SYMBOLS_FILE_PATH = os.path.join(os.path.dirname(__file__), "symbols.json")
 CACHE_DB_PATH = os.path.join(os.path.dirname(__file__), "storage", "cache.db")
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+REPORTS_DIR = os.path.join(os.path.dirname(__file__), "reports")
+HISTORICAL_EXCEL_PATH = os.path.join(REPORTS_DIR, "NSE_Historical_Data.xlsx")
 
 
 def get_llm(model_name: Optional[str] = None, temperature: float = 0.2):

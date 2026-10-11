@@ -27,7 +27,20 @@ class MasterPredictionSynthesizerAgent:
 
         raw_tech = agent_outputs.get("technical", {}).get("raw_indicators", {})
         raw_risk = agent_outputs.get("risk", {}).get("raw_risk", {})
-        last_price = raw_tech.get("last_price") or raw_risk.get("last_price") or "N/A"
+        raw_hist = agent_outputs.get("historical_rag", {}).get("raw_stats", {})
+        last_price = raw_tech.get("last_price") or raw_risk.get("last_price") or raw_hist.get("last_close")
+        if not last_price or last_price == "N/A":
+            candles = self.cache_manager.get_cached_candles(symbol, limit_days=1)
+            if candles:
+                last_price = candles[-1].get("CLOSE_PRICE", "N/A")
+        if last_price != "N/A":
+            try:
+                last_price = round(float(last_price), 2)
+            except Exception:
+                pass
+        else:
+            last_price = "N/A"
+
         suggested_sl = raw_risk.get("suggested_stop_loss", "N/A")
         suggested_tp = raw_risk.get("suggested_target_price", "N/A")
 
