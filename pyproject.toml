@@ -1,0 +1,28 @@
+[project]
+name = "nse-data-bank"
+version = "0.1.0"
+description = "NSE Multi-Agent RAG & Stock Prediction System using LangGraph, LangChain, and Ollama (qwen2.5:7b)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "langgraph>=0.2.0",
+    "langchain>=0.3.0",
+    "langchain-community>=0.3.0",
+    "langchain-core>=0.3.0",
+    "langchain-ollama>=0.2.0",
+    "langchain-google-genai>=2.0.0",
+    "redis>=5.0.0",
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    "yfinance>=0.2.40",
+    "duckduckgo-search>=6.0.0",
+    "requests>=2.31.0"
+]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0"
+]

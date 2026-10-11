@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NSE Multi-Agent Stock Predictor | Realtime Dashboard</title>
+  
+  <!-- Google Fonts: Inter & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg-dark: #090d16;
+      --bg-card: rgba(18, 26, 43, 0.7);
+      --bg-card-hover: rgba(28, 40, 65, 0.85);
+      --border-glow: rgba(56, 189, 248, 0.2);
+      --border-card: rgba(255, 255, 255, 0.08);
+      
+      --accent-green: #10b981;
+      --accent-red: #ef4444;
+      --accent-blue: #38bdf8;
+      --accent-purple: #8b5cf6;
+      --accent-amber: #f59e0b;
+
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+
+    body {
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(at 15% 15%, rgba(56, 189, 248, 0.08) 0px, transparent 50%),
+        radial-gradient(at 85% 85%, rgba(139, 92, 246, 0.08) 0px, transparent 50%);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding-bottom: 50px;
+    }
+
+    /* Ticker Ribbon */
+    .ticker-bar {
+      background: rgba(10, 15, 26, 0.9);
+      border-bottom: 1px solid var(--border-card);
+      padding: 10px 20px;
+      display: flex;
+      gap: 25px;
+      overflow-x: auto;
+      white-space: nowrap;
+      font-size: 0.85rem;
+      backdrop-filter: blur(10px);
+    }
+    .ticker-item { display: flex; align-items: center; gap: 8px; }
+    .ticker-name { color: var(--text-muted); font-weight: 500; }
+    .ticker-val { font-weight: 600; color: #fff; }
+    .ticker-up { color: var(--accent-green); }
+    .ticker-down { color: var(--accent-red); }
+
+    /* Top Navigation Header */
+    header {
+      padding: 24px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-card);
+      backdrop-filter: blur(12px);
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand-logo {
+      width: 42px; height: 42px;
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.4rem;
+      box-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
+    }
+    .brand-title h1 {
+      font-family: 'Outfit', sans-serif; font-size: 1.4rem; font-weight: 700;
+      background: linear-gradient(to right, #fff, #93c5fd);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .brand-title p { font-size: 0.8rem; color: var(--text-muted); }
+
+    .header-badges { display: flex; gap: 12px; }
+    .status-badge {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-card);
+      padding: 8px 14px; border-radius: 20px; font-size: 0.8rem;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .pulse-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--accent-green); box-shadow: 0 0 10px var(--accent-green);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(1.2); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+
+    /* Container & Main Layout */
+    .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+    /* Shared Market Context Bulletin */
+    .bulletin-card {
+      background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(56, 189, 248, 0.1));
+      border: 1px solid rgba(139, 92, 246, 0.3);
+      border-radius: 16px; padding: 20px; margin-bottom: 24px;
+      backdrop-filter: blur(12px); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    }
+    .bulletin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .bulletin-title {
+      font-family: 'Outfit', sans-serif; font-size: 1rem; font-weight: 700;
+      color: var(--accent-blue); display: flex; align-items: center; gap: 8px;
+    }
+    .bulletin-body { font-size: 0.95rem; line-height: 1.5; color: #e5e7eb; }
+
+    /* Stock Cards Grid */
+    .grid-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .grid-title { font-family: 'Outfit', sans-serif; font-size: 1.2rem; font-weight: 700; }
+
+    .stock-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      gap: 20px;
+    }
+
+    .stock-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: 16px; padding: 20px;
+      backdrop-filter: blur(12px);
+      transition: all 0.3s ease;
+      cursor: pointer;
+      position: relative;
+    }
+    .stock-card:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-glow);
+      transform: translateY(-4px);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
+    }
+
+    .action-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .verdict-badge {
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.9rem;
+      font-weight: 800;
+      padding: 6px 14px;
+      border-radius: 20px;
+      letter-spacing: 0.5px;
+    }
+    .verdict-buy { background: rgba(16, 185, 129, 0.25); color: #34d399; border: 1px solid #10b981; }
+    .verdict-sell { background: rgba(239, 68, 68, 0.25); color: #f87171; border: 1px solid #ef4444; }
+    .verdict-hold { background: rgba(245, 158, 11, 0.25); color: #fbbf24; border: 1px solid #f59e0b; }
+
+    .confidence-box {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .confidence-bar {
+      width: 60px; height: 6px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .confidence-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent-blue), var(--accent-green));
+    }
+
+    .card-info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin: 12px 0;
+      background: rgba(0,0,0,0.25);
+      padding: 10px;
+      border-radius: 10px;
+      font-size: 0.82rem;
+    }
+    .info-item { display: flex; flex-direction: column; }
+    .info-label { color: var(--text-muted); font-size: 0.72rem; }
+    .info-val { font-weight: 600; color: #fff; margin-top: 2px; }
+
+    .report-snippet {
+      font-size: 0.85rem;
+      color: #d1d5db;
+      background: rgba(0, 0, 0, 0.2);
+      padding: 10px;
+      border-radius: 8px;
+      margin-top: 10px;
+      line-height: 1.4;
+      max-height: 80px;
+      overflow: hidden;
+    }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(8px);
+      display: none; align-items: center; justify-content: center;
+      z-index: 1000;
+    }
+    .modal-card {
+      background: #111827;
+      border: 1px solid var(--border-glow);
+      border-radius: 20px;
+      width: 90%; max-width: 800px; max-height: 85vh;
+      overflow-y: auto; padding: 28px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+      position: relative;
+    }
+    .modal-close {
+      position: absolute; top: 20px; right: 20px;
+      font-size: 1.5rem; cursor: pointer; color: var(--text-muted);
+    }
+    .btn-trigger {
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+      color: #fff; border: none; padding: 8px 16px; border-radius: 8px;
+      font-weight: 600; cursor: pointer; transition: transform 0.2s;
+    }
+    .btn-trigger:hover { transform: scale(1.04); }
+  </style>
+</head>
+<body>
+
+  <!-- Ticker Ribbon -->
+  <div class="ticker-bar" id="tickerBar">
+    <div class="ticker-item"><span class="ticker-name">Loading Global Macro Tickers...</span></div>
+  </div>
+
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-logo">N</div>
+      <div class="brand-title">
+        <h1>NSE Multi-Agent Stock Predictor</h1>
+        <p>Realtime Buy/Sell Signals, Holding Horizons & Confidence Ratings</p>
+      </div>
+    </div>
+    <div class="header-badges">
+      <div class="status-badge">
+        <div class="pulse-dot"></div>
+        <span id="modelEngine">Ollama (qwen2.5:7b)</span>
+      </div>
+      <div class="status-badge" id="queueBadge">
+        Queue Engine Active
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <div class="container">
+    
+    <!-- Shared Market Context Bulletin -->
+    <div class="bulletin-card">
+      <div class="bulletin-header">
+        <div class="bulletin-title">
+          <span>🌐</span> LIVE COMMON MARKET BULLETIN
+        </div>
+        <span class="pill pill-bullish" id="bulletinLabel">BULLISH MARKET ALIGNMENT</span>
+      </div>
+      <div class="bulletin-body" id="bulletinBody">
+        Synthesizing common global market tailwinds (S&P 500 futures, GIFT Nifty, Crude Oil, DXY Dollar Index)...
+      </div>
+    </div>
+
+    <!-- Grid Header -->
+    <div class="grid-header">
+      <div class="grid-title">Equities Decision Dashboard (symbols.json)</div>
+      <button class="btn-trigger" onclick="fetchAllData()">🔄 Refresh Data</button>
+    </div>
+
+    <!-- Stock Cards Grid -->
+    <div class="stock-grid" id="stockGrid">
+      <!-- Dynamic Stock Cards Injected Here -->
+    </div>
+
+  </div>
+
+  <!-- Modal Drawer -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal-card" id="modalCard">
+      <span class="modal-close" onclick="closeModal()">&times;</span>
+      <div id="modalContent"></div>
+    </div>
+  </div>
+
+  <script>
+    async function fetchStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        
+        document.getElementById('modelEngine').innerText = `Ollama (${data.model})`;
+        if (data.queue_status) {
+          document.getElementById('queueBadge').innerText = `${data.queue_status.engine}: ${data.queue_status.pending} Pending | ${data.queue_status.completed || 0} Done`;
+        }
+
+        if (data.macro_items && data.macro_items.length > 0) {
+          const tickerHTML = data.macro_items.map(m => `
+            <div class="ticker-item">
+              <span class="ticker-name">${m.indicator}:</span>
+              <span class="ticker-val">${m.value} ${m.unit}</span>
+              <span class="${m.pct_change >= 0 ? 'ticker-up' : 'ticker-down'}">
+                ${m.pct_change >= 0 ? '+' : ''}${m.pct_change || 0}%
+              </span>
+            </div>
+          `).join('');
+          document.getElementById('tickerBar').innerHTML = tickerHTML;
+        }
+
+        if (data.bulletin) {
+          document.getElementById('bulletinBody').innerText = data.bulletin.summary;
+          const labelEl = document.getElementById('bulletinLabel');
+          labelEl.innerText = `${data.bulletin.sentiment_label.toUpperCase()} ALIGNMENT`;
+          labelEl.className = `pill ${data.bulletin.sentiment_label === 'Bullish' ? 'pill-bullish' : data.bulletin.sentiment_label === 'Bearish' ? 'pill-bearish' : 'pill-neutral'}`;
+        }
+      } catch (e) { console.error("Status fetch error", e); }
+    }
+
+    async function fetchStockCards() {
+      try {
+        const res = await fetch('/api/stocks');
+        const stocks = await res.json();
+        
+        const grid = document.getElementById('stockGrid');
+        grid.innerHTML = stocks.map(s => {
+          const synth = s.synth_output ? s.synth_output.structured_signal : {};
+          const tech = s.tech_output ? s.tech_output.raw_indicators : {};
+          const risk = s.risk_output ? s.risk_output.raw_risk : {};
+
+          const verdict = synth.action_verdict || "ANALYZING";
+          const confidence = synth.confidence_rating || "MEDIUM (65%)";
+          const confPct = synth.confidence_percentage || 65;
+          const entry = synth.when_to_buy_entry || (tech.last_price ? `Rs. ${tech.last_price}` : "N/A");
+          const target = synth.when_to_sell_target || (risk.suggested_target_price ? `Rs. ${risk.suggested_target_price}` : "N/A");
+          const stopLoss = synth.stop_loss || (risk.suggested_stop_loss ? `Rs. ${risk.suggested_stop_loss}` : "N/A");
+          const horizon = synth.holding_horizon || "Medium-Term (1-3 Months)";
+
+          const verdictClass = verdict.includes('BUY') || verdict.includes('ACCUMULATE') ? 'verdict-buy' : verdict.includes('SELL') ? 'verdict-sell' : 'verdict-hold';
+
+          return `
+            <div class="stock-card" onclick='openModal(${JSON.stringify(s).replace(/'/g, "&apos;")})'>
+              
+              <div class="action-row">
+                <div class="symbol-box">
+                  <h3 style="font-family:'Outfit'; font-size:1.3rem;">${s.symbol}</h3>
+                  <p style="font-size:0.78rem; color:var(--text-muted);">${s.name}</p>
+                </div>
+                <div class="verdict-badge ${verdictClass}">${verdict}</div>
+              </div>
+
+              <div class="confidence-box" style="margin-bottom:10px;">
+                <span>Confidence: <b>${confidence}</b></span>
+                <div class="confidence-bar">
+                  <div class="confidence-fill" style="width: ${confPct}%"></div>
+                </div>
+              </div>
+
+              <div class="card-info-grid">
+                <div class="info-item">
+                  <span class="info-label">🛒 WHEN TO BUY (ENTRY)</span>
+                  <span class="info-val">${entry}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">🎯 WHEN TO SELL (TARGET)</span>
+                  <span class="info-val" style="color:var(--accent-green);">${target}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">🛡️ STOP LOSS</span>
+                  <span class="info-val" style="color:var(--accent-red);">${stopLoss}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">⏳ HOLDING HORIZON</span>
+                  <span class="info-val">${horizon}</span>
+                </div>
+              </div>
+
+              <div class="report-snippet">
+                ${synth.key_rationale || s.synth_output?.final_report || '<i>Multi-agent analysis calculating prediction...</i>'}
+              </div>
+
+            </div>
+          `;
+        }).join('');
+      } catch (e) { console.error("Stock fetch error", e); }
+    }
+
+    function openModal(s) {
+      const synth = s.synth_output ? s.synth_output.structured_signal || {} : {};
+      const report = s.synth_output ? s.synth_output.final_report : "Analysis pending...";
+      
+      const content = `
+        <h2 style="font-family:'Outfit'; font-size:1.8rem; margin-bottom:4px;">${s.symbol} - ${s.name}</h2>
+        <p style="color:var(--text-muted); margin-bottom:16px;">Sector: ${s.sector}</p>
+
+        <div style="display:flex; gap:12px; margin-bottom:20px;">
+          <div class="verdict-badge ${synth.action_verdict?.includes('BUY') ? 'verdict-buy' : 'verdict-hold'}">
+            SIGNAL: ${synth.action_verdict || 'ANALYZING'}
+          </div>
+          <div class="status-badge">Confidence: ${synth.confidence_rating || 'N/A'}</div>
+          <div class="status-badge">Horizon: ${synth.holding_horizon || 'N/A'}</div>
+        </div>
+
+        <button class="btn-trigger" style="margin-bottom:20px;" onclick="triggerSingleAnalysis('${s.symbol}')">⚡ Force Re-Analyze Stock</button>
+
+        <div style="background:rgba(0,0,0,0.3); padding:18px; border-radius:12px; font-size:0.95rem; line-height:1.6; white-space:pre-wrap;">
+${report}
+        </div>
+      `;
+      document.getElementById('modalContent').innerHTML = content;
+      document.getElementById('modalOverlay').style.display = 'flex';
+    }
+
+    function closeModal() { document.getElementById('modalOverlay').style.display = 'none'; }
+
+    async function triggerSingleAnalysis(symbol) {
+      await fetch('/api/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol })
+      });
+      alert(`Triggered analysis for ${symbol}. Realtime screen will update automatically!`);
+      closeModal();
+    }
+
+    function fetchAllData() { fetchStatus(); fetchStockCards(); }
+
+    fetchAllData();
+    setInterval(fetchAllData, 3000);
+  </script>
+</body>
+</html>

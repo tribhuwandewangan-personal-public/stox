@@ -1,0 +1,12 @@
+langgraph>=0.2.0
+langchain>=0.3.0
+langchain-community>=0.3.0
+langchain-core>=0.3.0
+langchain-ollama>=0.2.0
+langchain-google-genai>=2.0.0
+redis>=5.0.0
+pandas>=2.0.0
+numpy>=1.24.0
+yfinance>=0.2.40
+duckduckgo-search>=6.0.0
+requests>=2.31.0

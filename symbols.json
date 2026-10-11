@@ -1,0 +1,133 @@
+{
+  "description": "List of NSE stock symbols for multi-agent RAG analysis and prediction",
+  "updated_at": "2026-10-04",
+  "default_timeframe_days": 365,
+  "symbols": [
+    {
+      "symbol": "RELIANCE",
+      "name": "Reliance Industries Limited",
+      "sector": "Energy & Retail",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "HDFCBANK",
+      "name": "HDFC Bank Limited",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "ICICIBANK",
+      "name": "ICICI Bank Limited",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "TATAMOTORS",
+      "name": "Tata Motors Limited",
+      "sector": "Automobile",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "SBIN",
+      "name": "State Bank of India",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "BHARTIARTL",
+      "name": "Bharti Airtel Limited",
+      "sector": "Telecommunication",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "LT",
+      "name": "Larsen & Toubro Limited",
+      "sector": "Capital Goods & Construction",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "MOTHERSON",
+      "name": "Samvardhana Motherson International Limited",
+      "sector": "Auto Ancillaries",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "TATASTEEL",
+      "name": "Tata Steel Limited",
+      "sector": "Metals & Mining",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "LINDEINDIA",
+      "name": "Linde India Limited",
+      "sector": "Chemicals & Industrial Gases",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "CGPOWER",
+      "name": "CG Power and Industrial Solutions Limited",
+      "sector": "Capital Goods & Electricals",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "KAYNES",
+      "name": "Kaynes Technology India Limited",
+      "sector": "Electronics Manufacturing (EMS)",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "DIXON",
+      "name": "Dixon Technologies (India) Limited",
+      "sector": "Consumer Electronics & EMS",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "MOSCHIP",
+      "name": "MosChip Technologies Limited",
+      "sector": "Semiconductor & Electronics",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "RIR",
+      "name": "RIR Power Electronics Limited",
+      "sector": "Semiconductors & Power Electronics",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "AETHER",
+      "name": "Aether Industries Limited",
+      "sector": "Specialty Chemicals",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "BEL",
+      "name": "Bharat Electronics Limited",
+      "sector": "Aerospace & Defence",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "ASTRAMICRO",
+      "name": "Astra Microwave Products Limited",
+      "sector": "Defence & Electronics",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "MAZDOCK",
+      "name": "Mazagon Dock Shipbuilders Limited",
+      "sector": "Defence & Shipbuilding",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "ZENTEC",
+      "name": "Zen Technologies Limited",
+      "sector": "Defence & Simulators",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "MTARTECH",
+      "name": "MTAR Technologies Limited",
+      "sector": "Precision Engineering & Defence",
+      "exchange": "NSE"
+    }
+  ]
+}
