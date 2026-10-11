@@ -52,6 +52,28 @@ Stock symbols analyzed by the multi-agent system are defined in [`symbols.json`]
 
 ---
 
+## 📰 Daily Multi-Source Market & Stock News Reports
+
+The system continuously collects and curates online financial news from **Google News RSS**, **The Economic Times**, **Livemint**, **Moneycontrol**, and **DuckDuckGo**, generating exactly two reports per day in **`news_reports/YYYY-MM-DD/`**:
+
+1. **Generic Market & Macro News** ([`general_market_news.md`](file:///c:/Users/tdewa/Documents/LearnPython/NSE-Data-bank/news_reports/latest_market_news.md)):
+   - **Crude Oil Price & Trend** (Brent & WTI prices, daily changes, and sectoral transmission impact on OMCs, aviation, paints, chemicals)
+   - **Indian Rupee (USD/INR) Dynamics** (exchange rates, forex reserves, and IT/pharma vs importer impacts)
+   - **Global Market Cues** (S&P 500, Nasdaq, US 10Y Yields, DXY Dollar Index, Gold)
+   - **Domestic Catalysts & FII/DII Flows**
+   - **Curated Market-Moving Headlines** from *The Economic Times*, *Livemint*, and *Moneycontrol*
+
+2. **Stock-Specific News Digest** ([`stock_specific_news.md`](file:///c:/Users/tdewa/Documents/LearnPython/NSE-Data-bank/news_reports/latest_stocks_news.md)):
+   - A single consolidated file containing news from multiple sources for all tracked stocks in `symbols.json`.
+   - Quick navigation index, article counts, source attribution, direct article URLs, publication dates, and bullish/neutral/bearish sentiment ratings.
+
+Run news generation independently anytime:
+```bash
+uv run python generate_news_report.py
+```
+
+---
+
 ## ⚡ Incremental Data Storage
 
 All parsed metrics, news, macro sentiment, and agent reports are stored incrementally in **`storage/cache.db`** (SQLite). Re-running analysis utilizes cached data when fresh (<12h old), reducing analysis time and network overhead.

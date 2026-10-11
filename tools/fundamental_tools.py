@@ -18,7 +18,7 @@ class FundamentalAnalysisEngine:
             for sym in candidates:
                 try:
                     # Suppress noisy yfinance stderr 404 messages
-                    with open(os.devnull, 'w') as devnull:
+                    with open(os.devnull, 'w', encoding='utf-8', errors='replace') as devnull:
                         with contextlib.redirect_stderr(devnull), contextlib.redirect_stdout(devnull):
                             ticker = yf.Ticker(sym)
                             info = ticker.info or {}

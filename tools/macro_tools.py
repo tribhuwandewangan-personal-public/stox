@@ -23,12 +23,13 @@ class GlobalMacroEngine:
         macro_data = []
 
         # Tickers to query via yfinance:
-        # ^GSPC: S&P 500, ^IXIC: Nasdaq, CL=F: Crude Oil, DX=F: Dollar Index, GC=F: Gold, USDINR=X: USD/INR
+        # ^GSPC: S&P 500, ^IXIC: Nasdaq, BZ=F: Brent Crude, USDINR=X: USD/INR, DX-Y.NYB: Dollar Index, GC=F: Gold
         tickers = {
             "S&P 500": "^GSPC",
             "Nasdaq": "^IXIC",
-            "Brent Crude Oil": "CL=F",
-            "US Dollar Index (DXY)": "DX=F",
+            "Brent Crude Oil": "BZ=F",
+            "USD / INR (Rupee)": "USDINR=X",
+            "US Dollar Index (DXY)": "DX-Y.NYB",
             "Gold Futures": "GC=F"
         }
 
@@ -44,10 +45,11 @@ class GlobalMacroEngine:
                         pct_change = round(((last_close - prev_close) / (prev_close + 1e-5)) * 100, 2)
                         
                         summary = f"Trading at {last_close:.2f} ({'+' if pct_change >= 0 else ''}{pct_change}%)"
+                        unit_str = "INR" if "Rupee" in name else ("USD" if "Index" not in name else "pts")
                         macro_data.append({
                             "indicator": name,
                             "value": round(last_close, 2),
-                            "unit": "USD" if "Index" not in name else "pts",
+                            "unit": unit_str,
                             "pct_change": pct_change,
                             "summary": summary
                         })

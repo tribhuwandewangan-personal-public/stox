@@ -53,9 +53,15 @@ class CacheManager:
                     source TEXT,
                     fetch_date TEXT,
                     sentiment_score REAL,
-                    sentiment_label TEXT
+                    sentiment_label TEXT,
+                    pub_date TEXT
                 )
             """)
+            try:
+                cursor.execute("ALTER TABLE news_cache ADD COLUMN pub_date TEXT")
+            except sqlite3.OperationalError:
+                pass
+
 
             # Global Macro Metrics Cache
             cursor.execute("""
@@ -206,7 +212,7 @@ class CacheManager:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT title, snippet, source, fetch_date, sentiment_score, sentiment_label
+                SELECT url, title, snippet, source, fetch_date, sentiment_score, sentiment_label, COALESCE(pub_date, fetch_date)
                 FROM news_cache
                 WHERE symbol = ? AND fetch_date >= ?
                 ORDER BY fetch_date DESC
@@ -214,11 +220,37 @@ class CacheManager:
             rows = cursor.fetchall()
             return [
                 {
-                    "title": r[0], "snippet": r[1], "source": r[2],
-                    "fetch_date": r[3], "sentiment_score": r[4], "sentiment_label": r[5]
+                    "url": r[0], "title": r[1], "snippet": r[2], "source": r[3],
+                    "fetch_date": r[4], "sentiment_score": r[5], "sentiment_label": r[6],
+                    "pub_date": r[7]
                 }
                 for r in rows
             ]
+
+    def get_all_cached_news(self, max_age_hours: int = 48) -> Dict[str, List[Dict[str, Any]]]:
+        """Retrieves all cached news grouped by symbol within max_age_hours."""
+        cutoff_date = (datetime.now() - timedelta(hours=max_age_hours)).isoformat()
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT symbol, url, title, snippet, source, fetch_date, sentiment_score, sentiment_label, COALESCE(pub_date, fetch_date)
+                FROM news_cache
+                WHERE fetch_date >= ?
+                ORDER BY symbol ASC, fetch_date DESC
+            """, (cutoff_date,))
+            rows = cursor.fetchall()
+            result: Dict[str, List[Dict[str, Any]]] = {}
+            for r in rows:
+                sym = r[0]
+                item = {
+                    "symbol": sym, "url": r[1], "title": r[2], "snippet": r[3], "source": r[4],
+                    "fetch_date": r[5], "sentiment_score": r[6], "sentiment_label": r[7],
+                    "pub_date": r[8]
+                }
+                if sym not in result:
+                    result[sym] = []
+                result[sym].append(item)
+            return result
 
     def save_news(self, symbol: str, news_items: List[Dict[str, Any]]):
         """Saves scraped news items into cache."""
@@ -227,10 +259,11 @@ class CacheManager:
             now_str = datetime.now().isoformat()
             for item in news_items:
                 url = item.get("url") or f"{symbol}_{hash(item.get('title', ''))}"
+                pub_date = item.get("pub_date") or now_str
                 cursor.execute("""
                     INSERT OR REPLACE INTO news_cache 
-                    (symbol, url, title, snippet, source, fetch_date, sentiment_score, sentiment_label)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (symbol, url, title, snippet, source, fetch_date, sentiment_score, sentiment_label, pub_date)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     symbol.upper(),
                     url,
@@ -239,7 +272,8 @@ class CacheManager:
                     item.get("source", "Web"),
                     now_str,
                     item.get("sentiment_score", 0.0),
-                    item.get("sentiment_label", "Neutral")
+                    item.get("sentiment_label", "Neutral"),
+                    pub_date
                 ))
             conn.commit()
 

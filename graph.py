@@ -10,6 +10,28 @@ import json
 import sys
 import os
 
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+if hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+def safe_print(*args, **kwargs):
+    try:
+        print(*args, **kwargs)
+    except UnicodeEncodeError:
+        try:
+            enc = getattr(sys.stdout, "encoding", "ascii") or "ascii"
+            clean_args = [str(a).encode(enc, errors="replace").decode(enc, errors="replace") for a in args]
+            print(*clean_args, **kwargs)
+        except Exception:
+            pass
+
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
@@ -77,71 +99,71 @@ class MultiAgentWorkflow:
         if not force_refresh:
             cached_synth = self.cache_manager.get_latest_agent_output(symbol, "Master Prediction Synthesizer Agent", max_age_hours=12)
             if cached_synth:
-                print(f"⚡ [Cache Hit] Returning incremental cached prediction for {symbol}")
+                safe_print(f"⚡ [Cache Hit] Returning incremental cached prediction for {symbol}")
                 return cached_synth
 
-        print(f"\n🤖 [LangGraph Pipeline] Starting multi-agent analysis for {symbol} ({company_name})...")
+        safe_print(f"\n🤖 [LangGraph Pipeline] Starting multi-agent analysis for {symbol} ({company_name})...")
         start_time = time.time()
 
         # Helper functions for parallel tasks
         def run_hist():
             if VERBOSE_LOGGING:
-                print(f"  ├─ [Parallel Task 1/6] Running Historical Bhavcopy RAG Agent...")
+                safe_print(f"  ├─ [Parallel Task 1/6] Running Historical Bhavcopy RAG Agent...")
             t0 = time.time()
             out = self.hist_agent.run(symbol)
             self.cache_manager.save_agent_output(symbol, "Historical Data RAG Agent", out)
             if VERBOSE_LOGGING:
-                print(f"  ├─ [Done 1/6] Historical RAG Agent completed in {time.time()-t0:.2f}s")
+                safe_print(f"  ├─ [Done 1/6] Historical RAG Agent completed in {time.time()-t0:.2f}s")
             return "historical_rag", out
 
         def run_tech():
             if VERBOSE_LOGGING:
-                print(f"  ├─ [Parallel Task 2/6] Computing Technical Indicators Agent...")
+                safe_print(f"  ├─ [Parallel Task 2/6] Computing Technical Indicators Agent...")
             t0 = time.time()
             out = self.tech_agent.run(symbol)
             self.cache_manager.save_agent_output(symbol, "Technical Analysis Agent", out)
             if VERBOSE_LOGGING:
-                print(f"  ├─ [Done 2/6] Technical Analysis Agent completed in {time.time()-t0:.2f}s")
+                safe_print(f"  ├─ [Done 2/6] Technical Analysis Agent completed in {time.time()-t0:.2f}s")
             return "technical", out
 
         def run_news():
             if VERBOSE_LOGGING:
-                print(f"  ├─ [Parallel Task 3/6] Fetching Live Web News & Sentiment Agent...")
+                safe_print(f"  ├─ [Parallel Task 3/6] Fetching Live Web News & Sentiment Agent...")
             t0 = time.time()
             out = self.news_agent.run(symbol, company_name)
             self.cache_manager.save_agent_output(symbol, "News & Sentiment Agent", out)
             if VERBOSE_LOGGING:
-                print(f"  ├─ [Done 3/6] News & Sentiment Agent completed in {time.time()-t0:.2f}s")
+                safe_print(f"  ├─ [Done 3/6] News & Sentiment Agent completed in {time.time()-t0:.2f}s")
             return "news_sentiment", out
 
         def run_macro():
             if VERBOSE_LOGGING:
-                print(f"  ├─ [Parallel Task 4/6] Querying Global Macro Market Sentiment Agent...")
+                safe_print(f"  ├─ [Parallel Task 4/6] Querying Global Macro Market Sentiment Agent...")
             t0 = time.time()
             out = self.macro_agent.run(symbol)
             self.cache_manager.save_agent_output(symbol, "Global Macro Agent", out)
             if VERBOSE_LOGGING:
-                print(f"  ├─ [Done 4/6] Global Macro Agent completed in {time.time()-t0:.2f}s")
+                safe_print(f"  ├─ [Done 4/6] Global Macro Agent completed in {time.time()-t0:.2f}s")
             return "macro", out
 
         def run_fund():
             if VERBOSE_LOGGING:
-                print(f"  ├─ [Parallel Task 5/6] Analyzing Fundamental Valuation Agent...")
+                safe_print(f"  ├─ [Parallel Task 5/6] Analyzing Fundamental Valuation Agent...")
             t0 = time.time()
             out = self.fund_agent.run(symbol)
             self.cache_manager.save_agent_output(symbol, "Fundamental Analyst Agent", out)
             if VERBOSE_LOGGING:
-                print(f"  ├─ [Done 5/6] Fundamental Analyst Agent completed in {time.time()-t0:.2f}s")
+                safe_print(f"  ├─ [Done 5/6] Fundamental Analyst Agent completed in {time.time()-t0:.2f}s")
             return "fundamental", out
 
         def run_risk():
             if VERBOSE_LOGGING:
-                print(f"  ├─ [Parallel Task 6/6] Computing Risk & Volatility Bounds Agent...")
+                safe_print(f"  ├─ [Parallel Task 6/6] Computing Risk & Volatility Bounds Agent...")
             t0 = time.time()
             out = self.risk_agent.run(symbol)
             self.cache_manager.save_agent_output(symbol, "Risk & Volatility Agent", out)
             if VERBOSE_LOGGING:
-                print(f"  ├─ [Done 6/6] Risk & Volatility Agent completed in {time.time()-t0:.2f}s")
+                safe_print(f"  ├─ [Done 6/6] Risk & Volatility Agent completed in {time.time()-t0:.2f}s")
             return "risk", out
 
         # Step 1: Execute all 6 analyst agents concurrently in parallel
@@ -160,17 +182,17 @@ class MultiAgentWorkflow:
                     key, out = future.result()
                     agent_outputs[key] = out
                 except Exception as e:
-                    print(f"  ⚠️ Warning: Agent task execution error: {e}")
+                    safe_print(f"  ⚠️ Warning: Agent task execution error: {e}")
 
         # Step 2: Master Prediction Synthesizer
         if VERBOSE_LOGGING:
-            print(f"  └─ [Synthesis Phase] Master Synthesizer combining all 6 agent outputs...")
+            safe_print(f"  └─ [Synthesis Phase] Master Synthesizer combining all 6 agent outputs...")
         
         t_synth = time.time()
         final_synth = self.synth_agent.run(symbol, company_name, agent_outputs)
         
         if VERBOSE_LOGGING:
-            print(f"  └─ [Complete] Total multi-agent parallel runtime: {time.time()-start_time:.2f}s (Synthesis: {time.time()-t_synth:.2f}s)")
+            safe_print(f"  └─ [Complete] Total multi-agent parallel runtime: {time.time()-start_time:.2f}s (Synthesis: {time.time()-t_synth:.2f}s)")
 
         # Save Synthesizer output in incremental cache
         self.cache_manager.save_agent_output(symbol, "Master Prediction Synthesizer Agent", final_synth)

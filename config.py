@@ -4,7 +4,20 @@ Zero-cost design: Uses local Ollama or Google Gemini Free Tier.
 """
 
 import os
+import sys
 from typing import Optional
+
+# Ensure UTF-8 output encoding across all modules importing config
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+if hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 # Primary Local Ollama Model
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")

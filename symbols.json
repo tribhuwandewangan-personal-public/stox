@@ -128,6 +128,66 @@
       "name": "MTAR Technologies Limited",
       "sector": "Precision Engineering & Defence",
       "exchange": "NSE"
+    },
+    {
+      "symbol": "POLYCAB",
+      "name": "Polycab India Limited",
+      "sector": "Electrical Equipment & Wires",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "COFORGE",
+      "name": "Coforge Limited",
+      "sector": "IT Services & Consulting",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "KRBL",
+      "name": "KRBL Limited",
+      "sector": "Agro-Business (Rice)",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "CARBORUNIV",
+      "name": "Carborundum Universal Limited",
+      "sector": "Abrasives & Industrial Ceramics",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "POWERINDIA",
+      "name": "Hitachi Energy India Limited",
+      "sector": "Heavy Electrical & Power Equipment",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "AGI",
+      "name": "AGI Greenpac Limited",
+      "sector": "Packaging & Glass Containers",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "XPROINDIA",
+      "name": "Xpro India Limited",
+      "sector": "Polymer Processing & Capacitor Films",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "MOLDTKPAC",
+      "name": "Mold-Tek Packaging Limited",
+      "sector": "Packaging & Rigid Plastic Containers",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "GABRIEL",
+      "name": "Gabriel India Limited",
+      "sector": "Auto Ancillaries (Ride Control)",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "TATATECH",
+      "name": "Tata Technologies Limited",
+      "sector": "Engineering R&D & IT Services",
+      "exchange": "NSE"
     }
   ]
 }

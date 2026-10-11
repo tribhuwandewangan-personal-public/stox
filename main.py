@@ -30,6 +30,7 @@ if hasattr(sys.stderr, "reconfigure"):
 
 from config import SYMBOLS_FILE_PATH, OLLAMA_MODEL, VERBOSE_LOGGING, MAX_PARALLEL_WORKERS, MAX_SYMBOL_WORKERS
 from storage.queue_manager import ValkeyQueueManager
+from storage.cache_manager import CacheManager
 from agents.macro_sentinel import BackgroundMacroSentinel
 from graph import MultiAgentWorkflow
 
@@ -104,6 +105,7 @@ def main():
     try:
         # Initialize Valkey / Persistent SQLite Queue Manager
         queue_mgr = ValkeyQueueManager()
+        cache_mgr = CacheManager()
         queue_mgr.enqueue_symbols(symbols_list)
         
         q_status = queue_mgr.get_queue_status()
@@ -198,7 +200,7 @@ def main():
             sec = item.get("sector", "")
             
             # Fetch latest prediction from cache if available
-            synth_res = queue_mgr.cache_manager.get_latest_agent_output(sym, "Master Prediction Synthesizer Agent", max_age_hours=168)
+            synth_res = cache_mgr.get_latest_agent_output(sym, "Master Prediction Synthesizer Agent", max_age_hours=168)
             if synth_res:
                 report_text = synth_res.get("final_report", "No report text returned.")
                 last_price = synth_res.get("last_price", "N/A")
@@ -214,10 +216,21 @@ def main():
         with open(latest_report_filepath, "w", encoding="utf-8") as f:
             f.write(full_report_content)
 
+        # Generate multi-source news markdown reports in date-named folder (2 files: general and stock-specific)
+        try:
+            from tools.news_tools import NewsSentimentEngine
+            news_engine = NewsSentimentEngine(cache_manager=cache_mgr)
+            news_res = news_engine.generate_both_reports(symbols=symbols_list)
+            news_path = f"{news_res.get('general_market_news')} & {news_res.get('stock_specific_news')}"
+        except Exception as e:
+            news_path = "N/A"
+            print(f"⚠️ [News Report Notice] Could not generate news markdown reports: {e}")
+
         print("\n" + "═" * 80)
         print("🎉 REPORT GENERATION COMPLETE!")
         print(f"   • Total Pipeline Time: {int(time.time() - pipeline_start_time)} seconds")
-        print(f"   • Report Saved: {latest_report_filepath}")
+        print(f"   • Stock Predictions Report: {latest_report_filepath}")
+        print(f"   • Multi-Source News Reports: {news_path}")
         print("═" * 80 + "\n")
     except KeyboardInterrupt:
         graceful_exit()
