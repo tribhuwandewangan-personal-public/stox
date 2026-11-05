@@ -37,7 +37,8 @@ class HistoricalDataEngine:
 
         symbol_clean = symbol.upper().strip()
         alias_map = {
-            "TATAMOTORS": ["TMPV.NS", "TMCV.NS", "TATAMOTORS.NS", "TATAMOTORS.BO"]
+            "TATAMOTORS": ["TMPV.NS", "TMCV.NS", "TATAMOTORS.NS", "TATAMOTORS.BO"],
+            "NSE": ["NSE.BO", "NSE.NS"]
         }
         candidates = alias_map.get(symbol_clean, [f"{symbol_clean}.NS", f"{symbol_clean}.BO"])
         

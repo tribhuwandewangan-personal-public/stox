@@ -6,7 +6,24 @@
     2. Syncs Python dependencies via uv & checks Valkey/dashboard services.
     3. Syncs split-adjusted historical data & exports Excel workbook (NSE_Historical_Data.xlsx).
     4. Runs the multi-agent LangGraph workflow and generates prediction reports.
+.PARAMETER Force
+    Force reset persistent queue and fresh re-analysis of all symbols.
+.PARAMETER Symbol
+    Specific comma-separated symbol(s) to analyze (e.g. -Symbol "RELIANCE,TCS").
+.PARAMETER Fast
+    [DEPRECATED - now default] Explicitly enable fast quantitative mode (zero-LLM, all 34 stocks in <60s).
+.PARAMETER NoFast
+    Disable fast mode and use Ollama LLM narrative synthesis (requires Ollama running locally).
+    WARNING: Takes 1-3 hours for all 34 symbols without cache.
 #>
+
+[CmdletBinding()]
+param(
+    [switch]$Force,
+    [switch]$Fast,       # Kept for backward compatibility (now default)
+    [switch]$NoFast,     # Opt-in to full Ollama LLM synthesis (slow: ~1-3hrs for 34 symbols)
+    [string]$Symbol = ""
+)
 
 # Trap script cancellation (Ctrl+C) to prevent PowerShell hanging
 trap {
@@ -29,15 +46,15 @@ Write-Host "====================================================================
 Write-Host "  NSE MULTI-AGENT STOCK PREDICTOR - AUTOMATED RUNNER" -ForegroundColor Cyan
 Write-Host "========================================================================" -ForegroundColor Cyan
 
-# Step 1: Update Repository & Download Data
-Write-Host ""
-Write-Host "[1/4] Checking for repository updates..." -ForegroundColor Yellow
-try {
-    git pull origin main
-}
-catch {
-    Write-Host "Notice: Git pull skipped or encountered warning. Continuing with local data..." -ForegroundColor DarkYellow
-}
+# # Step 1: Update Repository & Download Data
+# Write-Host ""
+# Write-Host "[1/4] Checking for repository updates..." -ForegroundColor Yellow
+# try {
+#     git pull origin main
+# }
+# catch {
+#     Write-Host "Notice: Git pull skipped or encountered warning. Continuing with local data..." -ForegroundColor DarkYellow
+# }
 
 # Step 2: Sync Python Dependencies via UV & Check Background Services
 Write-Host ""
@@ -61,15 +78,58 @@ catch {
     Write-Host "   Resilient fallback to SQLite task queue enabled." -ForegroundColor DarkGray
 }
 
-# Start Dashboard Server in background if port 8000 is free
+# Dashboard Server Configuration (Uncommon Port 8765)
+$DashPort = 8765
+$DashUrl = "http://localhost:$DashPort"
+
+# Check if Dashboard Server is already listening
+$serverRunning = $false
 try {
-    $dashSocket = New-Object System.Net.Sockets.TcpClient("localhost", 8000)
+    $dashSocket = New-Object System.Net.Sockets.TcpClient
+    $dashSocket.Connect("127.0.0.1", $DashPort)
+    $serverRunning = $true
     $dashSocket.Close()
-    Write-Host "Realtime Dashboard Server running at http://localhost:8000" -ForegroundColor Green
 }
 catch {
-    Write-Host "Launching Realtime Dashboard Server on http://localhost:8000..." -ForegroundColor Yellow
-    Start-Process -FilePath "uv" -ArgumentList "run python `"$ScriptDir\dashboard_server.py`"" -WindowStyle Hidden
+    $serverRunning = $false
+}
+
+if ($serverRunning) {
+    Write-Host "Realtime Dashboard Server running at $DashUrl" -ForegroundColor Green
+}
+else {
+    Write-Host "Launching Realtime Dashboard Server on $DashUrl..." -ForegroundColor Yellow
+    Start-Process -FilePath "uv" -ArgumentList @("run", "python", "$ScriptDir\dashboard_server.py", "--port", "$DashPort") -WindowStyle Hidden
+    
+    # Wait briefly for server to bind
+    $retries = 6
+    while ($retries -gt 0) {
+        Start-Sleep -Milliseconds 500
+        try {
+            $testSocket = New-Object System.Net.Sockets.TcpClient
+            $testSocket.Connect("127.0.0.1", $DashPort)
+            $serverRunning = $true
+            $testSocket.Close()
+            break
+        }
+        catch {}
+        $retries--
+    }
+    if ($serverRunning) {
+        Write-Host "Realtime Dashboard Server started successfully at $DashUrl" -ForegroundColor Green
+    }
+    else {
+        Write-Host "Notice: Dashboard background process launched at $DashUrl" -ForegroundColor DarkYellow
+    }
+}
+
+# Automatically launch browser
+try {
+    Start-Process $DashUrl
+    Write-Host "Opening dashboard in web browser: $DashUrl" -ForegroundColor Cyan
+}
+catch {
+    Write-Host "Dashboard available at: $DashUrl" -ForegroundColor DarkGray
 }
 
 # Step 3: Sync Reliable Historical Market Data & Export to Excel
@@ -89,8 +149,23 @@ Write-Host "Target Symbols Configuration: $ScriptDir\symbols.json" -ForegroundCo
 Write-Host "Press Ctrl+C at any time to interrupt cleanly." -ForegroundColor DarkGray
 Write-Host ""
 
+$mainArgs = @()
+if ($Force) { $mainArgs += "--force" }
+if ($NoFast) {
+    # Explicitly disable fast mode - use Ollama LLM (slow, requires Ollama running)
+    $env:FAST_MODE = "false"
+    Write-Host "WARNING: NoFast mode enabled. Ollama LLM synthesis active." -ForegroundColor Yellow
+    Write-Host "         Estimated time: 1-3 hours for 34 symbols." -ForegroundColor Yellow
+    Write-Host "         Ensure Ollama is running: ollama serve" -ForegroundColor DarkYellow
+} else {
+    # Default: fast quantitative mode (all 34 stocks in <60 seconds, no Ollama required)
+    $mainArgs += "--fast"
+    Write-Host "Fast Mode: ON (quantitative synthesis, zero LLM calls, <60s for 34 symbols)" -ForegroundColor Green
+}
+if ($Symbol -and $Symbol.Trim() -ne "") { $mainArgs += @("--symbol", $Symbol.Trim()) }
+
 try {
-    uv run python "$ScriptDir\main.py"
+    uv run python "$ScriptDir\main.py" @mainArgs
 }
 catch [System.Management.Automation.PipelineStoppedException] {
     Write-Host "`n[STOP] Execution stopped by user." -ForegroundColor Yellow
@@ -98,7 +173,7 @@ catch [System.Management.Automation.PipelineStoppedException] {
 }
 catch {
     try {
-        python "$ScriptDir\main.py"
+        python "$ScriptDir\main.py" @mainArgs
     }
     catch {
         Write-Host "Notice: Pipeline finished or was interrupted." -ForegroundColor DarkYellow
@@ -109,5 +184,5 @@ Write-Host ""
 Write-Host "========================================================================" -ForegroundColor Cyan
 Write-Host "  ANALYSIS COMPLETE! Reports generated in: $ScriptDir\reports" -ForegroundColor Cyan
 Write-Host "  * Excel Historical Dataset: $ScriptDir\reports\NSE_Historical_Data.xlsx" -ForegroundColor Green
-Write-Host "  * Realtime Dashboard Server: http://localhost:8000" -ForegroundColor Green
+Write-Host "  * Realtime Dashboard Server: $DashUrl" -ForegroundColor Green
 Write-Host "========================================================================" -ForegroundColor Cyan

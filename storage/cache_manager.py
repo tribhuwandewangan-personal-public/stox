@@ -152,7 +152,7 @@ class CacheManager:
             cursor.execute("""
                 INSERT INTO shared_market_bulletin (timestamp, sentiment_label, macro_summary, raw_indicators)
                 VALUES (?, ?, ?, ?)
-            """, (now_str, sentiment_label, macro_summary, json.dumps(raw_indicators)))
+            """, (now_str, sentiment_label, macro_summary, self._safe_json_dumps(raw_indicators)))
             conn.commit()
 
     # --- Reliable Historical Candles SQLite API ---
@@ -324,6 +324,32 @@ class CacheManager:
             conn.commit()
 
     # --- Agent Runs Cache ---
+    @staticmethod
+    def _safe_json_dumps(data) -> str:
+        """JSON-serialize data: NaN/Infinity ? null, bool ? int, other non-serializable ? str."""
+        import math
+
+        def _sanitize(obj):
+            if isinstance(obj, float):
+                return None if (math.isnan(obj) or math.isinf(obj)) else obj
+            if isinstance(obj, dict):
+                return {k: _sanitize(v) for k, v in obj.items()}
+            if isinstance(obj, (list, tuple)):
+                return [_sanitize(v) for v in obj]
+            return obj
+
+        def _default(obj):
+            if isinstance(obj, bool):
+                return int(obj)
+            try:
+                v = float(obj)
+                return None if (math.isnan(v) or math.isinf(v)) else v
+            except Exception:
+                pass
+            return str(obj)
+
+        return json.dumps(_sanitize(data), default=_default)
+
     def save_agent_output(self, symbol: str, agent_name: str, output_data: Dict[str, Any]):
         run_id = f"{symbol.upper()}_{agent_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         with self._get_connection() as conn:
@@ -331,18 +357,25 @@ class CacheManager:
             cursor.execute("""
                 INSERT OR REPLACE INTO agent_runs_cache (run_id, symbol, timestamp, agent_name, output_data)
                 VALUES (?, ?, ?, ?, ?)
-            """, (run_id, symbol.upper(), datetime.now().isoformat(), agent_name, json.dumps(output_data)))
+            """, (run_id, symbol.upper(), datetime.now().isoformat(), agent_name, self._safe_json_dumps(output_data)))
             conn.commit()
 
-    def get_latest_agent_output(self, symbol: str, agent_name: str, max_age_hours: int = 12) -> Optional[Dict[str, Any]]:
-        cutoff = (datetime.now() - timedelta(hours=max_age_hours)).isoformat()
+    def get_latest_agent_output(self, symbol: str, agent_name: str, max_age_hours: Optional[int] = 12) -> Optional[Dict[str, Any]]:
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
-                SELECT output_data FROM agent_runs_cache
-                WHERE symbol = ? AND agent_name = ? AND timestamp >= ?
-                ORDER BY timestamp DESC LIMIT 1
-            """, (symbol.upper(), agent_name, cutoff))
+            if max_age_hours is not None:
+                cutoff = (datetime.now() - timedelta(hours=max_age_hours)).isoformat()
+                cursor.execute("""
+                    SELECT output_data FROM agent_runs_cache
+                    WHERE symbol = ? AND agent_name = ? AND timestamp >= ?
+                    ORDER BY timestamp DESC LIMIT 1
+                """, (symbol.upper(), agent_name, cutoff))
+            else:
+                cursor.execute("""
+                    SELECT output_data FROM agent_runs_cache
+                    WHERE symbol = ? AND agent_name = ?
+                    ORDER BY timestamp DESC LIMIT 1
+                """, (symbol.upper(), agent_name))
             row = cursor.fetchone()
             if row:
                 return json.loads(row[0])

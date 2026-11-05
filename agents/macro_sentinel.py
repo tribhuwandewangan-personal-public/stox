@@ -9,7 +9,7 @@ import threading
 import time
 from typing import Dict, Any, Optional
 
-from config import get_llm, VERBOSE_LOGGING
+from config import get_llm, VERBOSE_LOGGING, FAST_MODE
 from storage.cache_manager import CacheManager
 from tools.macro_tools import GlobalMacroEngine
 from langchain_core.prompts import PromptTemplate
@@ -18,10 +18,16 @@ class BackgroundMacroSentinel:
     def __init__(self, cache_manager: CacheManager = None, poll_interval_seconds: int = 300):
         self.cache_manager = cache_manager or CacheManager()
         self.macro_engine = GlobalMacroEngine(self.cache_manager)
-        self.llm = get_llm(temperature=0.1)
+        self._llm = None
         self.poll_interval = poll_interval_seconds
         self._stop_event = threading.Event()
         self._thread = None
+
+    @property
+    def llm(self):
+        if self._llm is None:
+            self._llm = get_llm(temperature=0.1, max_tokens=150, timeout=12)
+        return self._llm
 
     def start(self):
         """Starts the background sentinel monitor thread."""
@@ -53,6 +59,20 @@ class BackgroundMacroSentinel:
         try:
             macro_res = self.macro_engine.fetch_macro_indicators()
             indicators = macro_res.get("indicators", [])
+
+            if FAST_MODE:
+                sentiment_label = "Neutral"
+                summary_text = "Global market indicators reflect a stable, neutral-to-balanced macroeconomic backdrop for Indian equities."
+                self.cache_manager.save_market_bulletin(
+                    sentiment_label=sentiment_label,
+                    macro_summary=summary_text,
+                    raw_indicators={"indicators": indicators}
+                )
+                return {
+                    "sentiment_label": sentiment_label,
+                    "summary": summary_text,
+                    "indicators": indicators
+                }
 
             indic_text = "\n".join([f"- {m['indicator']}: {m['summary']}" for m in indicators])
 

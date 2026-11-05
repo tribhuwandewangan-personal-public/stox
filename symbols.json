@@ -1,192 +1,314 @@
 {
   "description": "List of NSE stock symbols for multi-agent RAG analysis and prediction",
-  "updated_at": "2026-10-04",
-  "default_timeframe_days": 365,
+  "updated_at": "2026-11-05",
+  "default_timeframe_days": 1825,
   "symbols": [
     {
       "symbol": "RELIANCE",
       "name": "Reliance Industries Limited",
-      "sector": "Energy & Retail",
+      "sector": "Energy & Conglomerate",
+      "sub_sector": "Refining, Petrochemicals, Retail & Telecom",
       "exchange": "NSE"
     },
     {
       "symbol": "HDFCBANK",
       "name": "HDFC Bank Limited",
       "sector": "Banking & Financial Services",
+      "sub_sector": "Private Sector Bank",
       "exchange": "NSE"
     },
     {
       "symbol": "ICICIBANK",
       "name": "ICICI Bank Limited",
       "sector": "Banking & Financial Services",
+      "sub_sector": "Private Sector Bank",
       "exchange": "NSE"
     },
     {
-      "symbol": "TATAMOTORS",
-      "name": "Tata Motors Limited",
+      "symbol": "TMPV",
+      "name": "Tata Motors Passanger Vehicle",
       "sector": "Automobile",
+      "sub_sector": "Commercial & Passenger Vehicles",
       "exchange": "NSE"
     },
     {
       "symbol": "SBIN",
       "name": "State Bank of India",
       "sector": "Banking & Financial Services",
+      "sub_sector": "Public Sector Bank",
       "exchange": "NSE"
     },
     {
       "symbol": "BHARTIARTL",
       "name": "Bharti Airtel Limited",
       "sector": "Telecommunication",
+      "sub_sector": "Telecom Services",
       "exchange": "NSE"
     },
     {
       "symbol": "LT",
       "name": "Larsen & Toubro Limited",
       "sector": "Capital Goods & Construction",
+      "sub_sector": "EPC & Infrastructure",
       "exchange": "NSE"
     },
     {
       "symbol": "MOTHERSON",
       "name": "Samvardhana Motherson International Limited",
       "sector": "Auto Ancillaries",
+      "sub_sector": "Wiring Harness & Auto Components",
       "exchange": "NSE"
     },
     {
       "symbol": "TATASTEEL",
       "name": "Tata Steel Limited",
       "sector": "Metals & Mining",
+      "sub_sector": "Integrated Steel",
       "exchange": "NSE"
     },
     {
       "symbol": "LINDEINDIA",
       "name": "Linde India Limited",
-      "sector": "Chemicals & Industrial Gases",
+      "sector": "Chemicals",
+      "sub_sector": "Industrial Gases",
       "exchange": "NSE"
     },
     {
       "symbol": "CGPOWER",
       "name": "CG Power and Industrial Solutions Limited",
       "sector": "Capital Goods & Electricals",
+      "sub_sector": "Motors, Transformers & Switchgear",
       "exchange": "NSE"
     },
     {
       "symbol": "KAYNES",
       "name": "Kaynes Technology India Limited",
-      "sector": "Electronics Manufacturing (EMS)",
+      "sector": "Electronics Manufacturing",
+      "sub_sector": "EMS & OSAT",
       "exchange": "NSE"
     },
     {
       "symbol": "DIXON",
       "name": "Dixon Technologies (India) Limited",
-      "sector": "Consumer Electronics & EMS",
+      "sector": "Electronics Manufacturing",
+      "sub_sector": "Consumer Electronics & EMS",
       "exchange": "NSE"
     },
     {
       "symbol": "MOSCHIP",
       "name": "MosChip Technologies Limited",
-      "sector": "Semiconductor & Electronics",
+      "sector": "Semiconductors & Electronics",
+      "sub_sector": "Chip Design & VLSI Services",
       "exchange": "NSE"
     },
     {
       "symbol": "RIR",
       "name": "RIR Power Electronics Limited",
-      "sector": "Semiconductors & Power Electronics",
+      "sector": "Semiconductors & Electronics",
+      "sub_sector": "Power Semiconductors (SiC)",
       "exchange": "NSE"
     },
     {
       "symbol": "AETHER",
       "name": "Aether Industries Limited",
-      "sector": "Specialty Chemicals",
+      "sector": "Chemicals",
+      "sub_sector": "Specialty Chemicals",
       "exchange": "NSE"
     },
     {
       "symbol": "BEL",
       "name": "Bharat Electronics Limited",
       "sector": "Aerospace & Defence",
+      "sub_sector": "Defence Electronics (PSU)",
       "exchange": "NSE"
     },
     {
       "symbol": "ASTRAMICRO",
       "name": "Astra Microwave Products Limited",
-      "sector": "Defence & Electronics",
+      "sector": "Aerospace & Defence",
+      "sub_sector": "Radar & RF/Microwave Systems",
       "exchange": "NSE"
     },
     {
       "symbol": "MAZDOCK",
       "name": "Mazagon Dock Shipbuilders Limited",
-      "sector": "Defence & Shipbuilding",
+      "sector": "Aerospace & Defence",
+      "sub_sector": "Naval Shipbuilding (PSU)",
       "exchange": "NSE"
     },
     {
       "symbol": "ZENTEC",
       "name": "Zen Technologies Limited",
-      "sector": "Defence & Simulators",
+      "sector": "Aerospace & Defence",
+      "sub_sector": "Simulators & Anti-Drone Systems",
       "exchange": "NSE"
     },
     {
       "symbol": "MTARTECH",
       "name": "MTAR Technologies Limited",
-      "sector": "Precision Engineering & Defence",
+      "sector": "Aerospace & Defence",
+      "sub_sector": "Precision Engineering (Nuclear, Space, Clean Energy)",
       "exchange": "NSE"
     },
     {
       "symbol": "POLYCAB",
       "name": "Polycab India Limited",
-      "sector": "Electrical Equipment & Wires",
+      "sector": "Capital Goods & Electricals",
+      "sub_sector": "Wires, Cables & FMEG",
       "exchange": "NSE"
     },
     {
       "symbol": "COFORGE",
       "name": "Coforge Limited",
-      "sector": "IT Services & Consulting",
+      "sector": "Information Technology",
+      "sub_sector": "IT Services & Consulting",
       "exchange": "NSE"
     },
     {
       "symbol": "KRBL",
       "name": "KRBL Limited",
-      "sector": "Agro-Business (Rice)",
+      "sector": "FMCG & Agri",
+      "sub_sector": "Basmati Rice",
       "exchange": "NSE"
     },
     {
       "symbol": "CARBORUNIV",
       "name": "Carborundum Universal Limited",
-      "sector": "Abrasives & Industrial Ceramics",
+      "sector": "Industrial Products",
+      "sub_sector": "Abrasives & Industrial Ceramics",
       "exchange": "NSE"
     },
     {
       "symbol": "POWERINDIA",
       "name": "Hitachi Energy India Limited",
-      "sector": "Heavy Electrical & Power Equipment",
+      "sector": "Capital Goods & Electricals",
+      "sub_sector": "Power Transmission Equipment (HVDC, Transformers)",
       "exchange": "NSE"
     },
     {
       "symbol": "AGI",
       "name": "AGI Greenpac Limited",
-      "sector": "Packaging & Glass Containers",
+      "sector": "Packaging",
+      "sub_sector": "Glass Containers & Plastic Packaging",
       "exchange": "NSE"
     },
     {
       "symbol": "XPROINDIA",
       "name": "Xpro India Limited",
-      "sector": "Polymer Processing & Capacitor Films",
+      "sector": "Industrial Products",
+      "sub_sector": "Polymer Films & Capacitor Films",
       "exchange": "NSE"
     },
     {
       "symbol": "MOLDTKPAC",
       "name": "Mold-Tek Packaging Limited",
-      "sector": "Packaging & Rigid Plastic Containers",
+      "sector": "Packaging",
+      "sub_sector": "Rigid Plastic Containers",
       "exchange": "NSE"
     },
     {
       "symbol": "GABRIEL",
       "name": "Gabriel India Limited",
-      "sector": "Auto Ancillaries (Ride Control)",
+      "sector": "Auto Ancillaries",
+      "sub_sector": "Ride Control (Shock Absorbers & Struts)",
       "exchange": "NSE"
     },
     {
       "symbol": "TATATECH",
       "name": "Tata Technologies Limited",
-      "sector": "Engineering R&D & IT Services",
+      "sector": "Information Technology",
+      "sub_sector": "Engineering R&D Services",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "BSE",
+      "name": "BSE Limited",
+      "sector": "Capital Markets",
+      "sub_sector": "Stock Exchange",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "CDSL",
+      "name": "Central Depository Services (India) Limited",
+      "sector": "Capital Markets",
+      "sub_sector": "Depository Services",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "NSE",
+      "name": "National Stock Exchange of India Limited",
+      "sector": "Capital Markets",
+      "sub_sector": "Stock Exchange",
+      "exchange": "BSE"
+    },
+    {
+      "symbol": "DATAPATTNS",
+      "name": "Data Patterns (India) Limited",
+      "sector": "Aerospace & Defence",
+      "sub_sector": "Defence & Aerospace Electronics",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "SYRMA",
+      "name": "Syrma SGS Technology Limited",
+      "sector": "Electronics Manufacturing",
+      "sub_sector": "EMS & Magnetics",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "STLTECH",
+      "name": "Sterlite Technologies Limited",
+      "sector": "Telecommunication Equipment",
+      "sub_sector": "Optical Fibre & Network Solutions",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "TARIL",
+      "name": "Transformers and Rectifiers (India) Limited",
+      "sector": "Capital Goods & Electricals",
+      "sub_sector": "Power & Distribution Transformers",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "HARSHA",
+      "name": "Harsha Engineers International Limited",
+      "sector": "Industrial Products",
+      "sub_sector": "Precision Bearing Cages",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "RML",
+      "name": "Rane (Madras) Limited",
+      "sector": "Auto Ancillaries",
+      "sub_sector": "Steering, Linkages & Aluminium Die Casting",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "ADANIPORTS",
+      "name": "Adani Ports and Special Economic Zone Limited",
+      "sector": "Infrastructure & Logistics",
+      "sub_sector": "Ports & Terminals",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "AMBUJACEM",
+      "name": "Ambuja Cements Limited",
+      "sector": "Construction Materials",
+      "sub_sector": "Cement",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "LLOYDSENGG",
+      "name": "Lloyds Engineering Works Limited",
+      "sector": "Capital Goods & Electricals",
+      "sub_sector": "Heavy Engineering & Process Equipment",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "MUTHOOTFIN",
+      "name": "Muthoot Finance Limited",
+      "sector": "Banking & Financial Services",
+      "sub_sector": "NBFC (Gold Loans)",
       "exchange": "NSE"
     }
   ]

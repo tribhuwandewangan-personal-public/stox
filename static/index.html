@@ -3,27 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NSE Multi-Agent Stock Predictor | Realtime Dashboard</title>
+  <title>NSE Multi-Agent Stock Predictor | Real-Time Technical Intelligence</title>
   
-  <!-- Google Fonts: Inter & Outfit -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   
   <style>
     :root {
       --bg-dark: #090d16;
       --bg-card: rgba(18, 26, 43, 0.7);
-      --bg-card-hover: rgba(28, 40, 65, 0.85);
-      --border-glow: rgba(56, 189, 248, 0.2);
+      --bg-card-hover: rgba(26, 38, 64, 0.85);
       --border-card: rgba(255, 255, 255, 0.08);
-      
-      --accent-green: #10b981;
-      --accent-red: #ef4444;
+      --border-glow: rgba(56, 189, 248, 0.3);
       --accent-blue: #38bdf8;
+      --accent-green: #10b981;
       --accent-purple: #8b5cf6;
+      --accent-red: #ef4444;
       --accent-amber: #f59e0b;
-
+      --accent-teal: #14b8a6;
       --text-main: #f3f4f6;
       --text-muted: #9ca3af;
     }
@@ -33,66 +31,64 @@
     body {
       background-color: var(--bg-dark);
       background-image: 
-        radial-gradient(at 15% 15%, rgba(56, 189, 248, 0.08) 0px, transparent 50%),
-        radial-gradient(at 85% 85%, rgba(139, 92, 246, 0.08) 0px, transparent 50%);
+        radial-gradient(at 10% 10%, rgba(56, 189, 248, 0.06) 0px, transparent 50%),
+        radial-gradient(at 90% 90%, rgba(139, 92, 246, 0.06) 0px, transparent 50%);
       color: var(--text-main);
       min-height: 100vh;
-      padding-bottom: 50px;
+      overflow-x: hidden;
     }
 
-    /* Ticker Ribbon */
+    /* Live Ticker Bar */
     .ticker-bar {
-      background: rgba(10, 15, 26, 0.9);
+      background: rgba(10, 15, 26, 0.95);
       border-bottom: 1px solid var(--border-card);
-      padding: 10px 20px;
+      padding: 8px 16px;
       display: flex;
-      gap: 25px;
       overflow-x: auto;
       white-space: nowrap;
-      font-size: 0.85rem;
-      backdrop-filter: blur(10px);
+      gap: 24px;
+      font-size: 0.8rem;
     }
-    .ticker-item { display: flex; align-items: center; gap: 8px; }
+    .ticker-item { display: inline-flex; align-items: center; gap: 6px; }
     .ticker-name { color: var(--text-muted); font-weight: 500; }
-    .ticker-val { font-weight: 600; color: #fff; }
+    .ticker-val { font-weight: 600; font-family: 'JetBrains Mono', monospace; }
     .ticker-up { color: var(--accent-green); }
     .ticker-down { color: var(--accent-red); }
 
-    /* Top Navigation Header */
+    /* Header */
     header {
-      padding: 24px 32px;
+      padding: 16px 28px;
       display: flex;
       justify-content: space-between;
       align-items: center;
       border-bottom: 1px solid var(--border-card);
+      background: rgba(13, 20, 36, 0.6);
       backdrop-filter: blur(12px);
+      flex-wrap: wrap;
+      gap: 14px;
     }
-    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand { display: flex; align-items: center; gap: 14px; }
     .brand-logo {
-      width: 42px; height: 42px;
+      width: 40px; height: 40px; border-radius: 10px;
       background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
-      border-radius: 12px;
       display: flex; align-items: center; justify-content: center;
-      font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.4rem;
-      box-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
+      font-weight: 800; font-size: 1.25rem; font-family: 'Outfit', sans-serif;
     }
-    .brand-title h1 {
-      font-family: 'Outfit', sans-serif; font-size: 1.4rem; font-weight: 700;
-      background: linear-gradient(to right, #fff, #93c5fd);
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-    }
-    .brand-title p { font-size: 0.8rem; color: var(--text-muted); }
+    .brand-title h1 { font-family: 'Outfit', sans-serif; font-size: 1.3rem; font-weight: 700; }
+    .brand-title p { font-size: 0.78rem; color: var(--text-muted); }
 
-    .header-badges { display: flex; gap: 12px; }
+    .header-badges { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     .status-badge {
       background: rgba(255, 255, 255, 0.05);
       border: 1px solid var(--border-card);
-      padding: 8px 14px; border-radius: 20px; font-size: 0.8rem;
-      display: flex; align-items: center; gap: 8px;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      display: flex; align-items: center; gap: 6px;
     }
     .pulse-dot {
       width: 8px; height: 8px; border-radius: 50%;
-      background: var(--accent-green); box-shadow: 0 0 10px var(--accent-green);
+      background: var(--accent-green);
       animation: pulse 2s infinite;
     }
     @keyframes pulse {
@@ -102,13 +98,13 @@
     }
 
     /* Container & Main Layout */
-    .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+    .container { max-width: 1440px; margin: 0 auto; padding: 24px; }
 
     /* Shared Market Context Bulletin */
     .bulletin-card {
       background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(56, 189, 248, 0.1));
       border: 1px solid rgba(139, 92, 246, 0.3);
-      border-radius: 16px; padding: 20px; margin-bottom: 24px;
+      border-radius: 16px; padding: 20px; margin-bottom: 20px;
       backdrop-filter: blur(12px); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
     }
     .bulletin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
@@ -118,13 +114,55 @@
     }
     .bulletin-body { font-size: 0.95rem; line-height: 1.5; color: #e5e7eb; }
 
+    .pill { padding: 4px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+    .pill-bullish { background: rgba(16, 185, 129, 0.2); color: var(--accent-green); border: 1px solid rgba(16, 185, 129, 0.4); }
+    .pill-bearish { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); border: 1px solid rgba(239, 68, 68, 0.4); }
+    .pill-neutral { background: rgba(245, 158, 11, 0.2); color: var(--accent-amber); border: 1px solid rgba(245, 158, 11, 0.4); }
+
+    /* Upcoming Market Catalysts & Events Banner */
+    .events-banner-card {
+      background: rgba(15, 23, 42, 0.75);
+      border: 1px solid rgba(56, 189, 248, 0.2);
+      border-radius: 16px; padding: 18px 20px; margin-bottom: 24px;
+      backdrop-filter: blur(12px);
+    }
+    .events-banner-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .events-banner-title {
+      font-family: 'Outfit', sans-serif; font-size: 0.95rem; font-weight: 700;
+      color: var(--accent-blue); display: flex; align-items: center; gap: 8px;
+    }
+    .events-counter-badge {
+      background: rgba(56, 189, 248, 0.15); color: var(--accent-blue);
+      border: 1px solid rgba(56, 189, 248, 0.3); font-size: 0.72rem; font-weight: 600;
+      padding: 3px 8px; border-radius: 10px;
+    }
+    .events-scroll-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+    }
+    .event-card-item {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-card);
+      border-radius: 10px; padding: 10px 14px;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .event-item-top { display: flex; justify-content: space-between; align-items: center; font-size: 0.72rem; }
+    .event-date-chip { font-family: 'JetBrains Mono', monospace; color: var(--accent-blue); font-weight: 600; }
+    .event-impact-chip { padding: 1px 6px; border-radius: 6px; font-weight: 700; font-size: 0.68rem; }
+    .event-impact-Critical { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); }
+    .event-impact-High { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
+    .event-impact-Medium { background: rgba(56, 189, 248, 0.2); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); }
+    .event-item-name { font-size: 0.82rem; font-weight: 600; color: #fff; line-height: 1.3; }
+    .event-item-sectors { font-size: 0.7rem; color: var(--text-muted); }
+
     /* Stock Cards Grid */
     .grid-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-    .grid-title { font-family: 'Outfit', sans-serif; font-size: 1.2rem; font-weight: 700; }
+    .grid-title { font-family: 'Outfit', sans-serif; font-size: 1.25rem; font-weight: 700; }
 
     .stock-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
       gap: 20px;
     }
 
@@ -136,6 +174,8 @@
       transition: all 0.3s ease;
       cursor: pointer;
       position: relative;
+      display: flex;
+      flex-direction: column;
     }
     .stock-card:hover {
       background: var(--bg-card-hover);
@@ -148,19 +188,118 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 12px;
+      margin-bottom: 8px;
     }
     .verdict-badge {
       font-family: 'Outfit', sans-serif;
-      font-size: 0.9rem;
+      font-size: 0.88rem;
       font-weight: 800;
-      padding: 6px 14px;
+      padding: 5px 12px;
       border-radius: 20px;
       letter-spacing: 0.5px;
     }
     .verdict-buy { background: rgba(16, 185, 129, 0.25); color: #34d399; border: 1px solid #10b981; }
     .verdict-sell { background: rgba(239, 68, 68, 0.25); color: #f87171; border: 1px solid #ef4444; }
     .verdict-hold { background: rgba(245, 158, 11, 0.25); color: #fbbf24; border: 1px solid #f59e0b; }
+    .verdict-analyzing { background: rgba(56, 189, 248, 0.25); color: #38bdf8; border: 1px solid #38bdf8; }
+    .verdict-queued { background: rgba(148, 163, 184, 0.2); color: #cbd5e1; border: 1px solid #64748b; }
+
+    /* Pattern Pills */
+    .pattern-badges-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 8px 0;
+    }
+    .pattern-pill {
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      letter-spacing: 0.2px;
+    }
+    .badge-pattern-saucer {
+      background: rgba(20, 184, 166, 0.18);
+      border: 1px solid rgba(20, 184, 166, 0.4);
+      color: #2dd4bf;
+    }
+    .badge-pattern-squeeze {
+      background: rgba(139, 92, 246, 0.2);
+      border: 1px solid rgba(139, 92, 246, 0.45);
+      color: #c084fc;
+    }
+    .badge-pattern-bollinger {
+      background: rgba(56, 189, 248, 0.18);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      color: #7dd3fc;
+    }
+    .badge-pattern-bull {
+      background: rgba(16, 185, 129, 0.18);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      color: #6ee7b7;
+    }
+    .badge-pattern-bear {
+      background: rgba(239, 68, 68, 0.18);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      color: #fca5a5;
+    }
+    .badge-pattern-neutral {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-card);
+      color: #cbd5e1;
+    }
+
+    /* Event Badge Row */
+    .event-badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .event-pill {
+      font-size: 0.72rem;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .event-earnings {
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      color: #93c5fd;
+    }
+    .event-div {
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      color: #6ee7b7;
+    }
+
+    /* Sparkline & Mini Chart */
+    .sparkline-wrapper {
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin: 6px 0 10px 0;
+      border: 1px solid rgba(255, 255, 255, 0.04);
+    }
+    .sparkline-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+    .sparkline-svg {
+      width: 100%;
+      height: 48px;
+      display: block;
+      overflow: visible;
+    }
 
     .confidence-box {
       font-size: 0.78rem;
@@ -184,7 +323,7 @@
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 8px;
-      margin: 12px 0;
+      margin: 8px 0;
       background: rgba(0,0,0,0.25);
       padding: 10px;
       border-radius: 10px;
@@ -195,30 +334,43 @@
     .info-val { font-weight: 600; color: #fff; margin-top: 2px; }
 
     .report-snippet {
-      font-size: 0.85rem;
+      font-size: 0.84rem;
       color: #d1d5db;
       background: rgba(0, 0, 0, 0.2);
       padding: 10px;
       border-radius: 8px;
-      margin-top: 10px;
+      margin-top: auto;
       line-height: 1.4;
-      max-height: 80px;
+      max-height: 75px;
       overflow: hidden;
+    }
+
+    .card-footer-cta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      font-size: 0.75rem;
+      color: var(--accent-blue);
+      font-weight: 600;
     }
 
     /* Modal */
     .modal-overlay {
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0, 0, 0, 0.8);
+      background: rgba(0, 0, 0, 0.85);
       backdrop-filter: blur(8px);
       display: none; align-items: center; justify-content: center;
       z-index: 1000;
+      padding: 20px;
     }
     .modal-card {
-      background: #111827;
+      background: #0f172a;
       border: 1px solid var(--border-glow);
       border-radius: 20px;
-      width: 90%; max-width: 800px; max-height: 85vh;
+      width: 100%; max-width: 980px; max-height: 90vh;
       overflow-y: auto; padding: 28px;
       box-shadow: 0 20px 50px rgba(0,0,0,0.8);
       position: relative;
@@ -226,13 +378,704 @@
     .modal-close {
       position: absolute; top: 20px; right: 20px;
       font-size: 1.5rem; cursor: pointer; color: var(--text-muted);
+      transition: color 0.2s;
     }
+    .modal-close:hover { color: #fff; }
+
     .btn-trigger {
       background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
       color: #fff; border: none; padding: 8px 16px; border-radius: 8px;
       font-weight: 600; cursor: pointer; transition: transform 0.2s;
     }
     .btn-trigger:hover { transform: scale(1.04); }
+
+    /* Modal Chart Box */
+    #modalChartCanvas {
+      width: 100%;
+      display: block;
+    }
+    .modal-chart-box {
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--border-card);
+      border-radius: 14px;
+      padding: 16px;
+      margin: 16px 0;
+      position: relative;
+    }
+    .chart-controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .chart-legend {
+      display: flex;
+      gap: 14px;
+      font-size: 0.75rem;
+      align-items: center;
+    }
+    .legend-item { display: flex; align-items: center; gap: 5px; }
+    .legend-color { width: 12px; height: 3px; border-radius: 2px; }
+    .chart-time-tabs { display: flex; gap: 6px; }
+    .tab-btn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border-card);
+      color: var(--text-muted);
+      padding: 4px 10px; border-radius: 6px;
+      font-size: 0.75rem; font-weight: 600; cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tab-btn.active, .tab-btn:hover {
+      background: rgba(56, 189, 248, 0.2);
+      border-color: var(--accent-blue);
+      color: #fff;
+    }
+    #modalChartCanvas {
+      width: 100%;
+      height: 320px;
+      display: block;
+      cursor: crosshair;
+    }
+    .chart-tooltip-box {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+      color: #94a3b8;
+      margin-top: 8px;
+      min-height: 18px;
+    }
+
+    /* Modal Details Grid */
+    .modal-details-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin: 16px 0;
+    }
+    @media (max-width: 768px) {
+      .modal-details-grid { grid-template-columns: 1fr; }
+    }
+    .detail-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-card);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .detail-card-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.92rem;
+      font-weight: 700;
+      color: var(--accent-blue);
+      margin-bottom: 10px;
+      display: flex; align-items: center; gap: 8px;
+    }
+
+    /* Header & Navigation Action Links */
+    .nav-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-card);
+      padding: 8px 14px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--text-main);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+    .nav-btn:hover {
+      background: rgba(56, 189, 248, 0.15);
+      border-color: var(--accent-blue);
+      color: #fff;
+      transform: translateY(-1px);
+    }
+    .nav-btn.highlight {
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(139, 92, 246, 0.2));
+      border-color: rgba(56, 189, 248, 0.4);
+      color: #93c5fd;
+    }
+    .nav-btn.highlight:hover {
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.3);
+    }
+
+    /* Bulletin Footer Actions */
+    .bulletin-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .bulletin-meta {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+    .bulletin-action-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      color: var(--accent-blue);
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+    .bulletin-action-link:hover {
+      background: rgba(56, 189, 248, 0.25);
+      border-color: var(--accent-blue);
+      color: #fff;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(56, 189, 248, 0.2);
+    }
+
+    /* Grid Actions */
+    .grid-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .btn-secondary-link {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border-card);
+      color: #e5e7eb;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .btn-secondary-link:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: var(--border-glow);
+      color: #fff;
+      transform: translateY(-1px);
+    }
+
+    /* App Layout with Stocks Navigator Sidebar */
+    .dashboard-layout {
+      display: flex;
+      width: 100%;
+      min-height: calc(100vh - 105px);
+      position: relative;
+    }
+
+    .sidebar-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(4px);
+      z-index: 85;
+    }
+
+    .stocks-sidebar {
+      width: 320px;
+      min-width: 320px;
+      max-width: 320px;
+      background: rgba(13, 20, 36, 0.88);
+      backdrop-filter: blur(16px);
+      border-right: 1px solid var(--border-card);
+      height: calc(100vh - 105px);
+      position: sticky;
+      top: 0;
+      display: flex;
+      flex-direction: column;
+      z-index: 80;
+      transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .stocks-sidebar.collapsed {
+      margin-left: -320px;
+    }
+
+    .sidebar-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border-card);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      background: rgba(10, 15, 26, 0.7);
+    }
+
+    .sidebar-title-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .sidebar-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sidebar-badge {
+      background: rgba(56, 189, 248, 0.15);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      color: var(--accent-blue);
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 12px;
+    }
+
+    .sidebar-close-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 1.1rem;
+      padding: 4px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    .sidebar-close-btn:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .sidebar-search-box {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .sidebar-search-input {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-card);
+      border-radius: 8px;
+      padding: 7px 28px 7px 10px;
+      font-size: 0.8rem;
+      color: #fff;
+      outline: none;
+      transition: all 0.2s;
+    }
+    .sidebar-search-input:focus {
+      border-color: var(--accent-blue);
+      background: rgba(255, 255, 255, 0.08);
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
+    }
+
+    .sidebar-search-clear {
+      position: absolute;
+      right: 8px;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 0.82rem;
+      display: none;
+    }
+
+    .sidebar-filters {
+      display: flex;
+      gap: 4px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+    .sidebar-filters::-webkit-scrollbar {
+      height: 3px;
+    }
+    .sidebar-filters::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+    }
+
+    .sidebar-filter-chip {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-card);
+      color: var(--text-muted);
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 3px 7px;
+      border-radius: 10px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+    .sidebar-filter-chip:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.09);
+    }
+    .sidebar-filter-chip.active {
+      background: rgba(56, 189, 248, 0.2);
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
+    }
+
+    .sidebar-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .sidebar-list::-webkit-scrollbar {
+      width: 5px;
+    }
+    .sidebar-list::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 4px;
+    }
+
+    .sidebar-stock-item {
+      padding: 8px 10px;
+      border-radius: 9px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      position: relative;
+    }
+    .sidebar-stock-item:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: var(--border-glow);
+      transform: translateX(2px);
+    }
+    .sidebar-stock-item.active {
+      background: rgba(56, 189, 248, 0.12);
+      border-color: rgba(56, 189, 248, 0.45);
+    }
+
+    .sidebar-item-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .sidebar-item-symbol {
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.92rem;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .sidebar-item-pill {
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 8px;
+      letter-spacing: 0.3px;
+    }
+
+    .sidebar-item-bottom {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+    .sidebar-item-price {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      color: #e2e8f0;
+    }
+    .sidebar-item-sector {
+      max-width: 140px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .sidebar-open-btn {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      opacity: 0;
+      background: rgba(56, 189, 248, 0.2);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      color: var(--accent-blue);
+      border-radius: 6px;
+      padding: 2px 6px;
+      font-size: 0.68rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .sidebar-stock-item:hover .sidebar-open-btn {
+      opacity: 1;
+    }
+    .sidebar-open-btn:hover {
+      background: var(--accent-blue);
+      color: #090d16;
+    }
+
+    .main-content {
+      flex: 1;
+      min-width: 0;
+      width: 100%;
+    }
+
+    /* Sidebar Toggle Button in Header */
+    .sidebar-toggle-btn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border-card);
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      transition: all 0.2s;
+    }
+    .sidebar-toggle-btn:hover {
+      background: rgba(56, 189, 248, 0.15);
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
+    }
+    .sidebar-toggle-btn .badge {
+      background: rgba(56, 189, 248, 0.2);
+      color: var(--accent-blue);
+      padding: 1px 6px;
+      border-radius: 10px;
+      font-size: 0.72rem;
+    }
+
+    /* Card pulse glow animation when jumped to from sidebar */
+    @keyframes cardPulseGlow {
+      0% {
+        box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.8), 0 0 30px rgba(56, 189, 248, 0.5);
+        border-color: var(--accent-blue);
+        transform: translateY(-4px) scale(1.02);
+      }
+      50% {
+        box-shadow: 0 0 0 12px rgba(56, 189, 248, 0), 0 0 40px rgba(56, 189, 248, 0.7);
+        border-color: var(--accent-blue);
+        transform: translateY(-4px) scale(1.02);
+      }
+      100% {
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
+        border-color: var(--border-card);
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    .card-highlight-pulse {
+      animation: cardPulseGlow 2.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+      border-color: var(--accent-blue) !important;
+    }
+
+    .sidebar-empty-state {
+      padding: 24px 12px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+
+    @media (max-width: 1024px) {
+      .stocks-sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 100vh;
+        z-index: 1000;
+        box-shadow: 0 0 50px rgba(0, 0, 0, 0.85);
+        transform: translateX(-100%);
+        margin-left: 0 !important;
+      }
+      .stocks-sidebar.mobile-open {
+        transform: translateX(0);
+      }
+      .sidebar-overlay.active {
+        display: block;
+      }
+    }
+
+    /* ===== Search & Add Symbol Modal ===== */
+    #addStockModalOverlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.78);
+      display: none; align-items: center; justify-content: center;
+      z-index: 9000; backdrop-filter: blur(6px);
+    }
+    #addStockModalOverlay.open { display: flex; }
+
+    .add-stock-modal-card {
+      background: linear-gradient(135deg, rgba(15,23,42,0.98), rgba(18,26,52,0.98));
+      border: 1px solid rgba(56,189,248,0.3);
+      border-radius: 18px;
+      width: min(560px, 94vw);
+      max-height: 85vh;
+      overflow-y: auto;
+      padding: 28px 26px 24px;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.6), 0 0 60px rgba(56,189,248,0.08);
+      display: flex; flex-direction: column; gap: 18px;
+    }
+    .add-stock-modal-card::-webkit-scrollbar { width: 5px; }
+    .add-stock-modal-card::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius:4px; }
+
+    .add-modal-header {
+      display: flex; justify-content: space-between; align-items: flex-start;
+    }
+    .add-modal-title { font-family: 'Outfit', sans-serif; font-size: 1.25rem; font-weight: 700; color: #fff; }
+    .add-modal-subtitle { font-size: 0.78rem; color: var(--text-muted); margin-top: 3px; }
+    .add-modal-close {
+      background: rgba(255,255,255,0.08); border: 1px solid var(--border-card);
+      color: var(--text-muted); border-radius: 8px; cursor: pointer;
+      padding: 5px 10px; font-size: 1.1rem; line-height:1; transition: all 0.2s;
+    }
+    .add-modal-close:hover { background: rgba(239,68,68,0.2); border-color: var(--accent-red); color: var(--accent-red); }
+
+    .internet-search-box { display: flex; gap: 8px; }
+    .internet-search-input {
+      flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--border-card);
+      border-radius: 10px; padding: 10px 14px; font-size: 0.88rem;
+      color: var(--text-main); outline: none; transition: border-color 0.2s;
+    }
+    .internet-search-input:focus { border-color: var(--accent-blue); }
+    .internet-search-btn {
+      background: rgba(56,189,248,0.2); border: 1px solid var(--accent-blue);
+      color: var(--accent-blue); border-radius: 10px; padding: 10px 16px;
+      font-size: 0.84rem; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap;
+    }
+    .internet-search-btn:hover { background: var(--accent-blue); color: #0a0f1a; }
+
+    .search-results-list { display: flex; flex-direction: column; gap: 8px; }
+    .search-result-card {
+      display: flex; justify-content: space-between; align-items: center;
+      background: rgba(255,255,255,0.03); border: 1px solid var(--border-card);
+      border-radius: 10px; padding: 10px 14px; gap: 10px; transition: border-color 0.2s;
+    }
+    .search-result-card:hover { border-color: rgba(56,189,248,0.3); }
+    .search-result-info { flex: 1; min-width: 0; }
+    .search-result-symbol { font-family:'Outfit',sans-serif; font-weight:700; font-size:0.95rem; color:#fff; }
+    .search-result-name { font-size:0.76rem; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .search-result-meta { font-size:0.72rem; color: rgba(255,255,255,0.4); margin-top:2px; }
+    .btn-add-stock {
+      background: rgba(16,185,129,0.2); border: 1px solid var(--accent-green);
+      color: var(--accent-green); border-radius: 8px; padding: 5px 12px;
+      font-size: 0.78rem; font-weight: 600; cursor: pointer; white-space:nowrap; transition:all 0.2s;
+    }
+    .btn-add-stock:hover { background: var(--accent-green); color:#0a0f1a; }
+    .btn-remove-stock-search {
+      background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3);
+      color: var(--accent-red); border-radius: 8px; padding: 5px 12px;
+      font-size: 0.78rem; font-weight: 600; cursor: pointer; white-space:nowrap; transition:all 0.2s;
+    }
+    .btn-remove-stock-search:hover { background: var(--accent-red); color:#fff; }
+    .pill-already-added {
+      background: rgba(255,255,255,0.06); border: 1px solid var(--border-card);
+      color: var(--text-muted); border-radius: 8px; padding: 5px 12px;
+      font-size: 0.78rem; font-weight: 600; white-space:nowrap;
+    }
+    .search-loading { text-align:center; color:var(--text-muted); font-size:0.84rem; padding:16px 0; }
+    .search-no-results { text-align:center; color:var(--text-muted); font-size:0.84rem; padding:16px 0; }
+
+    .manual-add-section { border-top: 1px solid var(--border-card); padding-top:16px; }
+    .manual-add-title { font-size:0.8rem; font-weight:600; color:var(--text-muted); margin-bottom:10px; letter-spacing:0.5px; text-transform:uppercase; }
+    .manual-add-row { display:flex; gap:8px; flex-wrap:wrap; }
+    .manual-add-input {
+      flex:1; min-width: 110px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-card);
+      border-radius: 8px; padding: 8px 12px; font-size: 0.82rem; color: var(--text-main); outline: none; transition: border-color 0.2s;
+    }
+    .manual-add-input:focus { border-color: var(--accent-blue); }
+    .btn-manual-add {
+      background: rgba(139,92,246,0.2); border: 1px solid var(--accent-purple);
+      color: var(--accent-purple); border-radius: 8px; padding: 8px 16px;
+      font-size: 0.82rem; font-weight: 600; cursor: pointer; transition:all 0.2s; white-space:nowrap;
+    }
+    .btn-manual-add:hover { background: var(--accent-purple); color:#fff; }
+
+    .add-stock-status-banner {
+      border-radius: 8px; padding: 10px 14px; font-size: 0.84rem; font-weight:500;
+      display: none; align-items:center; gap:8px;
+    }
+    .add-stock-status-banner.success { display:flex; background:rgba(16,185,129,0.15); border:1px solid var(--accent-green); color:var(--accent-green); }
+    .add-stock-status-banner.error { display:flex; background:rgba(239,68,68,0.15); border:1px solid var(--accent-red); color:var(--accent-red); }
+
+    /* ===== Add Symbol btn in grid actions ===== */
+    .btn-add-watchlist {
+      background: rgba(56,189,248,0.15); border: 1px solid rgba(56,189,248,0.4);
+      color: var(--accent-blue); border-radius: 8px; padding: 7px 14px;
+      font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn-add-watchlist:hover { background: var(--accent-blue); color: #090d16; }
+
+    /* ===== Sidebar Add Symbol mini-btn ===== */
+    .sidebar-add-btn {
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      background: rgba(56,189,248,0.1); border: 1px solid rgba(56,189,248,0.25);
+      color: var(--accent-blue); border-radius: 8px; padding: 7px 10px;
+      font-size: 0.75rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
+      width: 100%; margin: 2px 0 6px; flex-shrink: 0;
+    }
+    .sidebar-add-btn:hover { background: rgba(56,189,248,0.22); border-color: var(--accent-blue); }
+
+    /* ===== Sidebar view toggle: Flat / By Sector ===== */
+    .sidebar-view-toggle {
+      display: flex; gap: 4px; padding: 0 8px 4px; flex-shrink: 0;
+    }
+    .sidebar-view-btn {
+      flex: 1; padding: 4px 8px; font-size: 0.7rem; font-weight: 600;
+      border-radius: 7px; cursor: pointer; border: 1px solid var(--border-card);
+      background: transparent; color: var(--text-muted); transition: all 0.2s;
+    }
+    .sidebar-view-btn.active {
+      background: rgba(56,189,248,0.15); border-color: var(--accent-blue); color: var(--accent-blue);
+    }
+
+    /* ===== Sidebar Sector Grouping ===== */
+    .sidebar-sector-group { margin-bottom: 2px; }
+    .sidebar-sector-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 5px 10px; cursor: pointer; user-select: none;
+      border-radius: 7px; transition: background 0.15s; margin-bottom: 2px;
+    }
+    .sidebar-sector-header:hover { background: rgba(255,255,255,0.05); }
+    .sidebar-sector-label {
+      font-size: 0.67rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.6px; color: var(--accent-blue); display: flex; align-items: center; gap: 5px;
+    }
+    .sidebar-sector-right { display: flex; align-items: center; gap: 6px; }
+    .sidebar-sector-count {
+      font-size: 0.65rem; background: rgba(56,189,248,0.12); color: var(--accent-blue);
+      padding: 1px 6px; border-radius: 8px;
+    }
+    .sidebar-sector-chevron { font-size: 0.65rem; color: var(--text-muted); transition: transform 0.2s; }
+    .sidebar-sector-chevron.open { transform: rotate(90deg); }
+    .sidebar-sector-items { display: flex; flex-direction: column; gap: 3px; padding-left: 4px; }
+    .sidebar-sector-items.collapsed { display: none; }
+
+    /* ===== Export Button ===== */
+    .btn-export {
+      background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.4);
+      color: var(--accent-green); border-radius: 8px; padding: 7px 14px;
+      font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn-export:hover { background: var(--accent-green); color: #090d16; }
   </style>
 </head>
 <body>
@@ -245,13 +1088,24 @@
   <!-- Header -->
   <header>
     <div class="brand">
+      <button class="sidebar-toggle-btn" onclick="toggleSidebar()" id="sidebarToggleBtn" title="Toggle Stocks Navigator Sidebar">
+        <span class="sidebar-toggle-icon">☰</span>
+        <span class="toggle-text">Stocks Navigator</span>
+        <span class="badge" id="headerStockCount">0</span>
+      </button>
       <div class="brand-logo">N</div>
       <div class="brand-title">
         <h1>NSE Multi-Agent Stock Predictor</h1>
-        <p>Realtime Buy/Sell Signals, Holding Horizons & Confidence Ratings</p>
+        <p>Technical Indicators, Pattern Recognition (H&S, Bollinger, Saucer) & Catalysts Calendar</p>
       </div>
     </div>
     <div class="header-badges">
+      <a href="/news_reports/latest_market_news.md" target="_blank" rel="noopener noreferrer" class="nav-btn highlight" id="headerMarketNewsBtn" title="Open Latest Market News Markdown report">
+        <span>📰</span> Market News (.md) ↗
+      </a>
+      <a href="/news_reports/latest_stocks_news.md" target="_blank" rel="noopener noreferrer" class="nav-btn" id="headerStocksNewsBtn" title="Open Latest Stocks News Markdown report">
+        <span>📊</span> Stocks News (.md) ↗
+      </a>
       <div class="status-badge">
         <div class="pulse-dot"></div>
         <span id="modelEngine">Ollama (qwen2.5:7b)</span>
@@ -262,8 +1116,53 @@
     </div>
   </header>
 
-  <!-- Main Container -->
-  <div class="container">
+  <!-- Mobile Sidebar Backdrop Overlay -->
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar(false)"></div>
+
+  <!-- Dashboard Layout: Sidebar + Main Content -->
+  <div class="dashboard-layout" id="dashboardLayout">
+    
+    <!-- Stocks Navigator Sidebar -->
+    <aside class="stocks-sidebar" id="stocksSidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-title-row">
+          <div class="sidebar-title">
+            <span>📋</span> Stocks Watchlist
+            <span class="sidebar-badge" id="sidebarStockCount">0</span>
+          </div>
+          <button class="sidebar-close-btn" onclick="toggleSidebar(false)" title="Collapse Sidebar">✕</button>
+        </div>
+
+        <div class="sidebar-search-box">
+          <input type="text" id="sidebarSearch" class="sidebar-search-input" placeholder="🔍 Search symbol, sector..." oninput="onSidebarSearchInput(this.value)">
+          <button id="sidebarSearchClear" class="sidebar-search-clear" onclick="clearSidebarSearch()" title="Clear search">✕</button>
+        </div>
+
+        <div class="sidebar-filters" id="sidebarFilterChips">
+          <button class="sidebar-filter-chip active" data-filter="ALL" onclick="setSidebarFilter('ALL')">All <span id="countAll">0</span></button>
+          <button class="sidebar-filter-chip" data-filter="BUY" onclick="setSidebarFilter('BUY')">Buy <span id="countBuy">0</span></button>
+          <button class="sidebar-filter-chip" data-filter="HOLD" onclick="setSidebarFilter('HOLD')">Hold <span id="countHold">0</span></button>
+          <button class="sidebar-filter-chip" data-filter="SELL" onclick="setSidebarFilter('SELL')">Sell <span id="countSell">0</span></button>
+          <button class="sidebar-filter-chip" data-filter="ACTIVE" onclick="setSidebarFilter('ACTIVE')">Active <span id="countActive">0</span></button>
+        </div>
+      </div>
+
+      <!-- Sidebar View toggle -->
+      <div class="sidebar-view-toggle">
+        <button class="sidebar-view-btn active" id="sidebarViewFlat" onclick="setSidebarView('flat')">&#128203; Flat</button>
+        <button class="sidebar-view-btn" id="sidebarViewSector" onclick="setSidebarView('sector')">&#127981; By Sector</button>
+      </div>
+      <button class="sidebar-add-btn" onclick="openAddStockModal()">&#127758; &#10133; Add Symbol</button>
+
+      <div class="sidebar-list" id="sidebarList">
+        <!-- Stock items rendered dynamically -->
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Main Container -->
+      <div class="container">
     
     <!-- Shared Market Context Bulletin -->
     <div class="bulletin-card">
@@ -276,12 +1175,84 @@
       <div class="bulletin-body" id="bulletinBody">
         Synthesizing common global market tailwinds (S&P 500 futures, GIFT Nifty, Crude Oil, DXY Dollar Index)...
       </div>
+      <div class="bulletin-footer">
+        <span class="bulletin-meta">Aggregated real-time macro telemetry, Brent crude & financial news</span>
+        <a href="/news_reports/latest_market_news.md" target="_blank" rel="noopener noreferrer" class="bulletin-action-link" id="bulletinMarketNewsLink">
+          <span>📄</span> Open Latest Market News Report (.md) ↗
+        </a>
+      </div>
+    </div>
+
+    <!-- Upcoming Market Catalysts & Events Banner -->
+    <div class="events-banner-card">
+      <div class="events-banner-header">
+        <div class="events-banner-title">
+          <span>📅</span> UPCOMING HIGH-IMPACT MARKET CATALYSTS & ECONOMIC CALENDAR
+        </div>
+        <span class="events-counter-badge">Scheduled Releases</span>
+      </div>
+      <div class="events-scroll-grid" id="macroEventsGrid">
+        <div class="event-card-item">
+          <div class="event-item-top">
+            <span class="event-date-chip">Nov 12, 2026</span>
+            <span class="event-impact-chip event-impact-High">High</span>
+          </div>
+          <div class="event-item-name">India CPI Inflation Release (MoM/YoY)</div>
+          <div class="event-item-sectors">Banking, FMCG, Auto</div>
+        </div>
+        <div class="event-card-item">
+          <div class="event-item-top">
+            <span class="event-date-chip">Nov 14, 2026</span>
+            <span class="event-impact-chip event-impact-Medium">Medium</span>
+          </div>
+          <div class="event-item-name">India WPI Wholesale Inflation</div>
+          <div class="event-item-sectors">Manufacturing, Metals, Chem</div>
+        </div>
+        <div class="event-card-item">
+          <div class="event-item-top">
+            <span class="event-date-chip">Nov 30, 2026</span>
+            <span class="event-impact-chip event-impact-High">High</span>
+          </div>
+          <div class="event-item-name">India Q2 GDP Growth Data</div>
+          <div class="event-item-sectors">All Sectors, Capital Goods</div>
+        </div>
+        <div class="event-card-item">
+          <div class="event-item-top">
+            <span class="event-date-chip">Dec 06, 2026</span>
+            <span class="event-impact-chip event-impact-Critical">Critical</span>
+          </div>
+          <div class="event-item-name">RBI MPC Rate Decision & Stance</div>
+          <div class="event-item-sectors">Banking, Auto, Real Estate</div>
+        </div>
+        <div class="event-card-item">
+          <div class="event-item-top">
+            <span class="event-date-chip">Dec 11, 2026</span>
+            <span class="event-impact-chip event-impact-Critical">Critical</span>
+          </div>
+          <div class="event-item-name">US Fed FOMC Rate Meeting & Powell</div>
+          <div class="event-item-sectors">IT & Tech, FII Inflows</div>
+        </div>
+        <div class="event-card-item">
+          <div class="event-item-top">
+            <span class="event-date-chip">Dec 15, 2026</span>
+            <span class="event-impact-chip event-impact-High">High</span>
+          </div>
+          <div class="event-item-name">OPEC+ Oil Production Review</div>
+          <div class="event-item-sectors">Energy, Paints, Chemicals</div>
+        </div>
+      </div>
     </div>
 
     <!-- Grid Header -->
     <div class="grid-header">
       <div class="grid-title">Equities Decision Dashboard (symbols.json)</div>
-      <button class="btn-trigger" onclick="fetchAllData()">🔄 Refresh Data</button>
+      <div class="grid-actions">
+        <a href="/news_reports/latest_market_news.md" target="_blank" rel="noopener noreferrer" class="btn-secondary-link" id="gridMarketNewsLink">
+          <span>📰</span> Market News (.md) ↗
+        </a>
+        <button class="btn-trigger" onclick="fetchAllData()">🔄 Refresh Data</button>
+        <button class="btn-add-watchlist" onclick="openAddStockModal()">🌐 ➕ Add Symbol</button>
+      </div>
     </div>
 
     <!-- Stock Cards Grid -->
@@ -289,10 +1260,48 @@
       <!-- Dynamic Stock Cards Injected Here -->
     </div>
 
+      </div>
+    </main>
   </div>
 
-  <!-- Modal Drawer -->
-  <div class="modal-overlay" id="modalOverlay">
+  <!-- Add Stock Modal: Search Internet & Add Symbol -->
+  <div id="addStockModalOverlay" onclick="handleAddModalOverlayClick(event)">
+    <div class="add-stock-modal-card" id="addStockModalCard">
+      <div class="add-modal-header">
+        <div>
+          <div class="add-modal-title">&#127758; Search &amp; Add Stock Symbol</div>
+          <div class="add-modal-subtitle">Search NSE/BSE symbols &amp; add directly to your watchlist</div>
+        </div>
+        <button class="add-modal-close" onclick="closeAddStockModal()">&#x2715;</button>
+      </div>
+
+      <div class="add-stock-status-banner" id="addStockStatusBanner"></div>
+
+      <!-- Internet Search Row -->
+      <div class="internet-search-box">
+        <input type="text" id="internetSearchInput" class="internet-search-input"
+          placeholder="e.g. Tata Power, SUZLON, Reliance..."
+          onkeydown="if(event.key==='Enter') searchInternetSymbols()">
+        <button class="internet-search-btn" onclick="searchInternetSymbols()">&#128269; Search</button>
+      </div>
+      <div class="search-results-list" id="internetSearchResults"></div>
+
+      <!-- Manual Add Section -->
+      <div class="manual-add-section">
+        <div class="manual-add-title">&#10133; Add Symbol Manually</div>
+        <div class="manual-add-row">
+          <input type="text" id="manualSymbol" class="manual-add-input"
+            placeholder="Symbol (e.g. TATAPOWER)" style="text-transform:uppercase">
+          <input type="text" id="manualName" class="manual-add-input" placeholder="Company Name (opt.)">
+          <input type="text" id="manualSector" class="manual-add-input" placeholder="Sector (opt.)">
+          <button class="btn-manual-add" onclick="handleManualAddStock()">&#10133; Add</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Drawer with Candlestick Chart & Details -->
+  <div class="modal-overlay" id="modalOverlay" onclick="handleOverlayClick(event)">
     <div class="modal-card" id="modalCard">
       <span class="modal-close" onclick="closeModal()">&times;</span>
       <div id="modalContent"></div>
@@ -300,10 +1309,18 @@
   </div>
 
   <script>
+    let activeStockData = null;
+    let activeChartData = null;
+    let activeChartDays = 90;
+
+    function handleOverlayClick(e) {
+      if (e.target.id === 'modalOverlay') closeModal();
+    }
+
     async function fetchStatus() {
       try {
         const res = await fetch('/api/status');
-        const data = await res.json();
+        const data = safeJsonParse(await res.text());
         
         document.getElementById('modelEngine').innerText = `Ollama (${data.model})`;
         if (data.queue_status) {
@@ -332,39 +1349,470 @@
       } catch (e) { console.error("Status fetch error", e); }
     }
 
+    function renderSparklineSvg(sparkline, lastPrice) {
+      if (!sparkline || sparkline.length < 2) return '';
+      const min = Math.min(...sparkline);
+      const max = Math.max(...sparkline);
+      const range = (max - min) || 1;
+      const w = 320;
+      const h = 48;
+      
+      const points = sparkline.map((val, idx) => {
+        const x = (idx / (sparkline.length - 1)) * w;
+        const y = h - ((val - min) / range) * (h - 10) - 5;
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      }).join(' ');
+
+      const firstY = h - ((sparkline[0] - min) / range) * (h - 10) - 5;
+      const lastY = h - ((sparkline[sparkline.length - 1] - min) / range) * (h - 10) - 5;
+      const isUp = sparkline[sparkline.length - 1] >= sparkline[0];
+      const strokeColor = isUp ? '#10b981' : '#ef4444';
+      const fillColor = isUp ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)';
+
+      return `
+        <div class="sparkline-wrapper">
+          <div class="sparkline-meta">
+            <span>25-Day Price Trend & Bollinger Range</span>
+            <span style="color:${strokeColor}; font-weight:600;">${isUp ? '▲' : '▼'} Rs. ${lastPrice || sparkline[sparkline.length-1]}</span>
+          </div>
+          <svg class="sparkline-svg" viewBox="0 0 ${w} ${h}">
+            <polygon points="0,${h} 0,${firstY.toFixed(1)} ${points} ${w},${lastY.toFixed(1)} ${w},${h}" fill="${fillColor}" />
+            <polyline points="${points}" fill="none" stroke="${strokeColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </div>
+      `;
+    }
+
+    function renderPatternBadges(patterns) {
+      if (!patterns || patterns.length === 0) {
+        return `<div class="pattern-badges-row"><span class="pattern-pill badge-pattern-neutral">Range Consolidation</span></div>`;
+      }
+      return `
+        <div class="pattern-badges-row">
+          ${patterns.slice(0, 3).map(p => {
+            let cls = 'badge-pattern-neutral';
+            let icon = '📐';
+            const name = p.name || '';
+            const dir = p.direction || 'Neutral';
+            if (name.includes('Saucer') || name.includes('Rounding')) {
+              cls = 'badge-pattern-saucer'; icon = '🥣';
+            } else if (name.includes('Cup and Handle')) {
+              cls = 'badge-pattern-bull'; icon = '☕';
+            } else if (name.includes('TTM') || name.includes('Squeeze')) {
+              cls = 'badge-pattern-squeeze'; icon = '⚡';
+            } else if (name.includes('Wyckoff')) {
+              cls = dir === 'Bullish' ? 'badge-pattern-bull' : 'badge-pattern-bear'; icon = '⚓';
+            } else if (name.includes('Flag')) {
+              cls = dir === 'Bullish' ? 'badge-pattern-bull' : 'badge-pattern-bear'; icon = '🚩';
+            } else if (name.includes('Harmonic') || name.includes('Gartley') || name.includes('Bat')) {
+              cls = dir === 'Bullish' ? 'badge-pattern-bull' : 'badge-pattern-bear'; icon = '📐';
+            } else if (name.includes('Divergence')) {
+              cls = dir === 'Bullish' ? 'badge-pattern-bull' : 'badge-pattern-bear'; icon = '🔀';
+            } else if (name.includes('Head and Shoulders') || name.includes('Head & Shoulders')) {
+              cls = dir === 'Bullish' ? 'badge-pattern-bull' : 'badge-pattern-bear';
+              icon = dir === 'Bullish' ? '👤⤴' : '👤⤵';
+            } else if (name.includes('Bollinger')) {
+              cls = 'badge-pattern-bollinger'; icon = '📊';
+            } else if (name.includes('Double Bottom') || name.includes('Double Top')) {
+              cls = dir === 'Bullish' ? 'badge-pattern-bull' : 'badge-pattern-bear'; icon = '〰️';
+            } else if (name.includes('Star') || name.includes('Engulfing')) {
+              cls = dir === 'Bullish' ? 'badge-pattern-bull' : 'badge-pattern-bear'; icon = '🕯️';
+            }
+            const scoreBadge = p.quality_score ? ` <span style="opacity:0.75; font-size:0.65rem;">${p.quality_score}</span>` : '';
+            return `<span class="pattern-pill ${cls}" title="${p.description || p.name}">${icon} ${p.name}${scoreBadge}</span>`;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    function renderEventBadge(events) {
+      if (!events || (!events.earnings_date && !events.dividend_ex_date)) return '';
+      const earnings = events.earnings_date ? `📅 Q2 Results: ${events.earnings_date}` : '';
+      const dividend = (events.dividend_amount && events.dividend_amount !== 'N/A') ? `💰 Div: ${events.dividend_amount}` : '';
+      return `
+        <div class="event-badge-row">
+          ${earnings ? `<span class="event-pill event-earnings" title="${events.earnings_quarter || ''}">${earnings}</span>` : ''}
+          ${dividend ? `<span class="event-pill event-div" title="Ex-Date: ${events.dividend_ex_date}">${dividend}</span>` : ''}
+        </div>
+      `;
+    }
+
+    // Sidebar & Navigation State
+    let allStocksData = [];
+    let currentSidebarFilter = 'ALL';
+    let currentSidebarSearch = '';
+    let activeNavSymbol = null;
+
+    function getPatternMiniIcon(patterns) {
+      if (!patterns || patterns.length === 0) return '';
+      const p = patterns[0];
+      const name = p.name || '';
+      const dir = p.direction || 'Neutral';
+      if (name.includes('Saucer') || name.includes('Rounding')) return '🥣';
+      if (name.includes('Cup and Handle')) return '☕';
+      if (name.includes('TTM') || name.includes('Squeeze')) return '⚡';
+      if (name.includes('Wyckoff')) return '⚓';
+      if (name.includes('Flag')) return '🚩';
+      if (name.includes('Harmonic') || name.includes('Gartley') || name.includes('Bat')) return '📐';
+      if (name.includes('Divergence')) return '🔀';
+      if (name.includes('Head and Shoulders') || name.includes('Head & Shoulders')) return dir === 'Bullish' ? '👤⤴' : '👤⤵';
+      if (name.includes('Bollinger')) return '📊';
+      if (name.includes('Double Bottom') || name.includes('Double Top')) return '〰️';
+      if (name.includes('Star') || name.includes('Engulfing')) return '🕯️';
+      return '📐';
+    }
+
+    function toggleSidebar(forcedState) {
+      const sidebar = document.getElementById('stocksSidebar');
+      const layout = document.getElementById('dashboardLayout');
+      const overlay = document.getElementById('sidebarOverlay');
+      if (!sidebar) return;
+
+      const isMobile = window.innerWidth <= 1024;
+
+      if (isMobile) {
+        const isOpen = forcedState !== undefined ? forcedState : !sidebar.classList.contains('mobile-open');
+        if (isOpen) {
+          sidebar.classList.add('mobile-open');
+          if (overlay) overlay.classList.add('active');
+        } else {
+          sidebar.classList.remove('mobile-open');
+          if (overlay) overlay.classList.remove('active');
+        }
+      } else {
+        const isCollapsed = forcedState !== undefined ? !forcedState : !sidebar.classList.contains('collapsed');
+        if (isCollapsed) {
+          sidebar.classList.add('collapsed');
+          if (layout) layout.classList.add('sidebar-collapsed');
+          localStorage.setItem('nse_sidebar_state', 'collapsed');
+        } else {
+          sidebar.classList.remove('collapsed');
+          if (layout) layout.classList.remove('sidebar-collapsed');
+          localStorage.setItem('nse_sidebar_state', 'open');
+        }
+      }
+    }
+
+    function initSidebarState() {
+      if (window.innerWidth > 1024) {
+        const saved = localStorage.getItem('nse_sidebar_state');
+        if (saved === 'collapsed') {
+          document.getElementById('stocksSidebar')?.classList.add('collapsed');
+          document.getElementById('dashboardLayout')?.classList.add('sidebar-collapsed');
+        }
+      }
+    }
+
+    function onSidebarSearchInput(val) {
+      currentSidebarSearch = (val || '').trim().toLowerCase();
+      const clearBtn = document.getElementById('sidebarSearchClear');
+      if (clearBtn) clearBtn.style.display = currentSidebarSearch ? 'block' : 'none';
+      renderSidebarItems();
+    }
+
+    function clearSidebarSearch() {
+      const input = document.getElementById('sidebarSearch');
+      if (input) input.value = '';
+      currentSidebarSearch = '';
+      const clearBtn = document.getElementById('sidebarSearchClear');
+      if (clearBtn) clearBtn.style.display = 'none';
+      renderSidebarItems();
+    }
+
+    function setSidebarFilter(filter) {
+      currentSidebarFilter = filter;
+      document.querySelectorAll('.sidebar-filter-chip').forEach(c => {
+        c.classList.toggle('active', c.getAttribute('data-filter') === filter);
+      });
+      renderSidebarItems();
+    }
+
+    function navigateToStock(symbol, event) {
+      activeNavSymbol = symbol;
+      document.querySelectorAll('.sidebar-stock-item').forEach(el => {
+        el.classList.toggle('active', el.id === `side-item-${symbol}`);
+      });
+
+      const card = document.getElementById(`card-${symbol}`);
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        card.classList.remove('card-highlight-pulse');
+        void card.offsetWidth; // Force CSS reflow to re-trigger pulse
+        card.classList.add('card-highlight-pulse');
+      }
+
+      // Auto-close mobile drawer if on small screen
+      if (window.innerWidth <= 1024) {
+        toggleSidebar(false);
+      }
+    }
+
+    function openStockModalDirect(symbol, event) {
+      if (event) event.stopPropagation();
+      const stock = allStocksData.find(s => s.symbol === symbol);
+      if (stock) openModal(stock);
+    }
+
+    // Sidebar view mode: 'flat' or 'sector'
+    let currentSidebarView = 'flat';
+    // Track which sector groups are manually collapsed
+    const collapsedSectors = new Set();
+
+    function setSidebarView(mode) {
+      currentSidebarView = mode;
+      document.getElementById('sidebarViewFlat')?.classList.toggle('active', mode === 'flat');
+      document.getElementById('sidebarViewSector')?.classList.toggle('active', mode === 'sector');
+      renderSidebarItems();
+    }
+
+    function toggleSectorGroup(sector) {
+      const safeId = sector.replace(/[^a-zA-Z0-9]/g, '_');
+      if (collapsedSectors.has(sector)) {
+        collapsedSectors.delete(sector);
+      } else {
+        collapsedSectors.add(sector);
+      }
+      const itemsEl = document.getElementById('sector-items-' + safeId);
+      const chevronEl = document.getElementById('sector-chevron-' + safeId);
+      if (itemsEl) itemsEl.classList.toggle('collapsed', collapsedSectors.has(sector));
+      if (chevronEl) chevronEl.classList.toggle('open', !collapsedSectors.has(sector));
+    }
+
+    function buildStockItemHtml(s) {
+      const synth = s.synth_output ? s.synth_output.structured_signal || {} : {};
+      const tech = s.tech_output ? s.tech_output.raw_indicators || {} : {};
+      let verdict = synth.action_verdict;
+      if (!verdict) {
+        verdict = s.queue_status === 'in_progress' ? 'ANALYZING' : s.queue_status === 'pending' ? 'QUEUED' : 'PENDING';
+      }
+      let verdictClass = 'verdict-hold';
+      if (verdict.includes('BUY') || verdict.includes('ACCUMULATE')) verdictClass = 'verdict-buy';
+      else if (verdict.includes('SELL')) verdictClass = 'verdict-sell';
+      else if (verdict === 'ANALYZING') verdictClass = 'verdict-analyzing';
+      else if (verdict === 'QUEUED') verdictClass = 'verdict-queued';
+
+      const lastPrice = tech.last_price || (s.sparkline && s.sparkline.length > 0 ? s.sparkline[s.sparkline.length - 1] : null);
+      const priceStr = lastPrice ? `Rs. ${Number(lastPrice).toLocaleString('en-IN')}` : 'N/A';
+      const patternIcon = getPatternMiniIcon(s.patterns);
+      const firstPatternName = (s.patterns && s.patterns[0]) ? s.patterns[0].name : '';
+      const isActive = activeNavSymbol === s.symbol;
+
+      return `
+        <div class="sidebar-stock-item ${isActive ? 'active' : ''}" id="side-item-${s.symbol}" onclick="navigateToStock('${s.symbol}', event)">
+          <div class="sidebar-item-top">
+            <span class="sidebar-item-symbol">
+              ${patternIcon ? `<span title="${firstPatternName}">${patternIcon}</span>` : ''}
+              ${s.symbol}
+            </span>
+            <span class="sidebar-item-pill ${verdictClass}">${verdict}</span>
+          </div>
+          <div class="sidebar-item-bottom">
+            <span class="sidebar-item-price">${priceStr}</span>
+            <span class="sidebar-item-sector" title="${s.sector || s.name}">${s.sector || s.name}</span>
+          </div>
+          <button class="sidebar-open-btn" onclick="openStockModalDirect('${s.symbol}', event)" title="Open Full Interactive Chart">&#8599; View</button>
+        </div>
+      `;
+    }
+
+    function renderSidebarItems() {
+      const listEl = document.getElementById('sidebarList');
+      if (!listEl) return;
+
+      let filtered = allStocksData.filter(s => {
+        const synth = s.synth_output ? s.synth_output.structured_signal || {} : {};
+        let verdict = (synth.action_verdict || '').toUpperCase();
+        if (!verdict) {
+          verdict = s.queue_status === 'in_progress' ? 'ANALYZING' : s.queue_status === 'pending' ? 'QUEUED' : 'PENDING';
+        }
+        if (currentSidebarFilter === 'BUY' && !verdict.includes('BUY') && !verdict.includes('ACCUMULATE')) return false;
+        if (currentSidebarFilter === 'HOLD' && !verdict.includes('HOLD')) return false;
+        if (currentSidebarFilter === 'SELL' && !verdict.includes('SELL')) return false;
+        if (currentSidebarFilter === 'ACTIVE' && verdict !== 'ANALYZING' && verdict !== 'QUEUED') return false;
+        if (currentSidebarSearch) {
+          const matchSym = (s.symbol || '').toLowerCase().includes(currentSidebarSearch);
+          const matchName = (s.name || '').toLowerCase().includes(currentSidebarSearch);
+          const matchSec = (s.sector || '').toLowerCase().includes(currentSidebarSearch);
+          const matchVer = verdict.toLowerCase().includes(currentSidebarSearch);
+          if (!matchSym && !matchName && !matchSec && !matchVer) return false;
+        }
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        listEl.innerHTML = `
+          <div class="sidebar-empty-state">
+            <p>&#128269; No stocks match criteria</p>
+            <p style="font-size:0.7rem; margin-top:4px;">Try clearing search or filters</p>
+          </div>`;
+        return;
+      }
+
+      if (currentSidebarView === 'sector') {
+        // Group by sector
+        const groups = {};
+        filtered.forEach(s => {
+          const sec = s.sector || 'Uncategorized';
+          if (!groups[sec]) groups[sec] = [];
+          groups[sec].push(s);
+        });
+        const sectorIcons = {
+          'Banking': '&#127981;', 'Financial': '&#128176;', 'IT': '&#128187;',
+          'Technology': '&#128187;', 'Energy': '&#9889;', 'Power': '&#9889;',
+          'Pharma': '&#128138;', 'Healthcare': '&#128138;', 'Auto': '&#128664;',
+          'FMCG': '&#127818;', 'Metal': '&#9878;', 'Cement': '&#127968;',
+          'Infra': '&#127959;', 'Realty': '&#127959;', 'Telecom': '&#128225;',
+          'Chemical': '&#9881;', 'Defence': '&#128737;', 'Oil': '&#128167;',
+          'Gas': '&#128167;', 'Textile': '&#129507;', 'Consumer': '&#128717;',
+          'Uncategorized': '&#128203;'
+        };
+        const getSectorIcon = (sec) => {
+          for (const [k, v] of Object.entries(sectorIcons)) {
+            if (sec.toLowerCase().includes(k.toLowerCase())) return v;
+          }
+          return '&#128203;';
+        };
+        const sortedSectors = Object.keys(groups).sort();
+        listEl.innerHTML = sortedSectors.map(sector => {
+          const stocks = groups[sector];
+          const isCollapsed = collapsedSectors.has(sector);
+          const safeId = sector.replace(/[^a-zA-Z0-9]/g, '_');
+          return `
+            <div class="sidebar-sector-group">
+              <div class="sidebar-sector-header" onclick="toggleSectorGroup('${sector.replace(/'/g, "\\'")}')">
+                <span class="sidebar-sector-label">
+                  <span>${getSectorIcon(sector)}</span>
+                  ${sector}
+                </span>
+                <span class="sidebar-sector-right">
+                  <span class="sidebar-sector-count">${stocks.length}</span>
+                  <span class="sidebar-sector-chevron ${isCollapsed ? '' : 'open'}" id="sector-chevron-${safeId}">&#9654;</span>
+                </span>
+              </div>
+              <div class="sidebar-sector-items ${isCollapsed ? 'collapsed' : ''}" id="sector-items-${safeId}">
+                ${stocks.map(s => buildStockItemHtml(s)).join('')}
+              </div>
+            </div>
+          `;
+        }).join('');
+      } else {
+        // Flat view
+        listEl.innerHTML = filtered.map(s => buildStockItemHtml(s)).join('');
+      }
+    }
+
+    // Safe JSON parser: replaces bare NaN/Infinity with null before parsing.
+    // Needed because Python's json.dumps can emit NaN (invalid JSON) for float('nan').
+    function safeJsonParse(text) {
+      // Replace bare NaN, Infinity, -Infinity tokens (not inside strings) with null
+      const sanitized = text.replace(/:\s*(-?Infinity|NaN)\s*([,}\]])/g, ': null$2');
+      return JSON.parse(sanitized);
+    }
+
     async function fetchStockCards() {
       try {
         const res = await fetch('/api/stocks');
-        const stocks = await res.json();
+        const text = await res.text();
+        const stocks = safeJsonParse(text);
         
+        allStocksData = stocks;
+
+        // Update counts
+        const total = stocks.length;
+        let buyCount = 0, holdCount = 0, sellCount = 0, activeCount = 0;
+        stocks.forEach(s => {
+          const v = (s.synth_output?.structured_signal?.action_verdict || '').toUpperCase();
+          if (v.includes('BUY') || v.includes('ACCUMULATE')) buyCount++;
+          else if (v.includes('SELL')) sellCount++;
+          else if (v.includes('HOLD')) holdCount++;
+          else if (s.queue_status === 'in_progress' || s.queue_status === 'pending') activeCount++;
+        });
+
+        const headerCountEl = document.getElementById('headerStockCount');
+        if (headerCountEl) headerCountEl.innerText = total;
+        const sidebarCountEl = document.getElementById('sidebarStockCount');
+        if (sidebarCountEl) sidebarCountEl.innerText = total;
+
+        const countAllEl = document.getElementById('countAll');
+        if (countAllEl) countAllEl.innerText = total;
+        const countBuyEl = document.getElementById('countBuy');
+        if (countBuyEl) countBuyEl.innerText = buyCount;
+        const countHoldEl = document.getElementById('countHold');
+        if (countHoldEl) countHoldEl.innerText = holdCount;
+        const countSellEl = document.getElementById('countSell');
+        if (countSellEl) countSellEl.innerText = sellCount;
+        const countActiveEl = document.getElementById('countActive');
+        if (countActiveEl) countActiveEl.innerText = activeCount;
+
+        renderSidebarItems();
+
         const grid = document.getElementById('stockGrid');
         grid.innerHTML = stocks.map(s => {
-          const synth = s.synth_output ? s.synth_output.structured_signal : {};
-          const tech = s.tech_output ? s.tech_output.raw_indicators : {};
-          const risk = s.risk_output ? s.risk_output.raw_risk : {};
+          const synth = s.synth_output ? s.synth_output.structured_signal || {} : {};
+          const tech = s.tech_output ? s.tech_output.raw_indicators || {} : {};
+          const risk = s.risk_output ? s.risk_output.raw_risk || {} : {};
 
-          const verdict = synth.action_verdict || "ANALYZING";
-          const confidence = synth.confidence_rating || "MEDIUM (65%)";
-          const confPct = synth.confidence_percentage || 65;
+          let verdict = synth.action_verdict;
+          let isAnalyzing = false;
+          if (!verdict) {
+            if (s.queue_status === 'in_progress') {
+              verdict = "ANALYZING";
+              isAnalyzing = true;
+            } else if (s.queue_status === 'pending') {
+              verdict = "QUEUED";
+            } else {
+              verdict = "PENDING";
+            }
+          }
+
+          let verdictClass = 'verdict-hold';
+          if (verdict.includes('BUY') || verdict.includes('ACCUMULATE')) {
+            verdictClass = 'verdict-buy';
+          } else if (verdict.includes('SELL')) {
+            verdictClass = 'verdict-sell';
+          } else if (verdict === 'ANALYZING') {
+            verdictClass = 'verdict-analyzing';
+          } else if (verdict === 'QUEUED') {
+            verdictClass = 'verdict-queued';
+          }
+
+          const confidence = synth.confidence_rating || (isAnalyzing ? "Processing..." : s.queue_status === 'pending' ? "Queued" : "Pending");
+          const confPct = synth.confidence_percentage || (isAnalyzing ? 50 : 20);
           const entry = synth.when_to_buy_entry || (tech.last_price ? `Rs. ${tech.last_price}` : "N/A");
           const target = synth.when_to_sell_target || (risk.suggested_target_price ? `Rs. ${risk.suggested_target_price}` : "N/A");
           const stopLoss = synth.stop_loss || (risk.suggested_stop_loss ? `Rs. ${risk.suggested_stop_loss}` : "N/A");
           const horizon = synth.holding_horizon || "Medium-Term (1-3 Months)";
 
-          const verdictClass = verdict.includes('BUY') || verdict.includes('ACCUMULATE') ? 'verdict-buy' : verdict.includes('SELL') ? 'verdict-sell' : 'verdict-hold';
+          let snippet = synth.key_rationale || s.synth_output?.final_report;
+          if (!snippet) {
+            if (isAnalyzing) {
+              snippet = '<i>⚡ Multi-agent analysis running live in background...</i>';
+            } else if (s.queue_status === 'pending') {
+              snippet = '<i>⏳ Queued for upcoming multi-agent analysis...</i>';
+            } else {
+              snippet = '<i>Pending analysis. Click to view interactive chart.</i>';
+            }
+          }
+
+          const staleNotice = s.is_stale ? `<span style="font-size:0.7rem; color:var(--text-muted); margin-left:6px;">(Previous Run)</span>` : '';
 
           return `
-            <div class="stock-card" onclick='openModal(${JSON.stringify(s).replace(/'/g, "&apos;")})'>
+            <div class="stock-card" id="card-${s.symbol}" onclick='openModal(${JSON.stringify(s).replace(/'/g, "&apos;")})'>
               
               <div class="action-row">
                 <div class="symbol-box">
-                  <h3 style="font-family:'Outfit'; font-size:1.3rem;">${s.symbol}</h3>
+                  <h3 style="font-family:'Outfit'; font-size:1.3rem;">${s.symbol}${staleNotice}</h3>
                   <p style="font-size:0.78rem; color:var(--text-muted);">${s.name}</p>
                 </div>
                 <div class="verdict-badge ${verdictClass}">${verdict}</div>
               </div>
 
-              <div class="confidence-box" style="margin-bottom:10px;">
+              ${renderPatternBadges(s.patterns)}
+              ${renderEventBadge(s.events)}
+
+              ${renderSparklineSvg(s.sparkline, tech.last_price)}
+
+              <div class="confidence-box" style="margin-bottom:8px;">
                 <span>Confidence: <b>${confidence}</b></span>
                 <div class="confidence-bar">
                   <div class="confidence-fill" style="width: ${confPct}%"></div>
@@ -391,7 +1839,12 @@
               </div>
 
               <div class="report-snippet">
-                ${synth.key_rationale || s.synth_output?.final_report || '<i>Multi-agent analysis calculating prediction...</i>'}
+                ${snippet}
+              </div>
+
+              <div class="card-footer-cta">
+                <span>📊 Interactive Chart & Patterns</span>
+                <span>Open View ↗</span>
               </div>
 
             </div>
@@ -400,33 +1853,335 @@
       } catch (e) { console.error("Stock fetch error", e); }
     }
 
-    function openModal(s) {
+    async function openModal(s) {
+      activeStockData = s;
       const synth = s.synth_output ? s.synth_output.structured_signal || {} : {};
       const report = s.synth_output ? s.synth_output.final_report : "Analysis pending...";
-      
-      const content = `
-        <h2 style="font-family:'Outfit'; font-size:1.8rem; margin-bottom:4px;">${s.symbol} - ${s.name}</h2>
-        <p style="color:var(--text-muted); margin-bottom:16px;">Sector: ${s.sector}</p>
+      const patterns = s.patterns || [];
+      const events = s.events || {};
 
-        <div style="display:flex; gap:12px; margin-bottom:20px;">
-          <div class="verdict-badge ${synth.action_verdict?.includes('BUY') ? 'verdict-buy' : 'verdict-hold'}">
-            SIGNAL: ${synth.action_verdict || 'ANALYZING'}
+      let patternDetailsHtml = patterns.length > 0 ? patterns.map(p => `
+        <div style="margin-bottom:10px; background:rgba(0,0,0,0.3); padding:10px 12px; border-radius:8px; border-left:3px solid ${p.direction === 'Bullish' ? 'var(--accent-green)' : p.direction === 'Bearish' ? 'var(--accent-rose)' : 'var(--accent-blue)'};">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; flex-wrap:wrap; gap:6px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <b style="color:var(--accent-blue); font-size:0.9rem;">${p.name}</b>
+              ${p.quality_score ? `<span style="background:rgba(56,189,248,0.15); color:var(--accent-blue); padding:1px 6px; border-radius:10px; font-size:0.72rem; font-weight:600;">Score: ${p.quality_score}/100</span>` : ''}
+              ${p.status ? `<span style="background:rgba(255,255,255,0.08); color:#e2e8f0; padding:1px 6px; border-radius:10px; font-size:0.72rem;">${p.status}</span>` : ''}
+            </div>
+            <span class="pill ${p.direction === 'Bullish' ? 'pill-bullish' : p.direction === 'Bearish' ? 'pill-bearish' : 'pill-neutral'}">${p.type}</span>
           </div>
-          <div class="status-badge">Confidence: ${synth.confidence_rating || 'N/A'}</div>
-          <div class="status-badge">Horizon: ${synth.holding_horizon || 'N/A'}</div>
+          <p style="font-size:0.83rem; color:#cbd5e1; line-height:1.4; margin-bottom:6px;">${p.description}</p>
+          ${(p.entry_trigger || p.target_price || p.stop_loss) ? `
+          <div style="display:flex; gap:14px; font-size:0.78rem; color:#94a3b8; background:rgba(255,255,255,0.03); padding:4px 8px; border-radius:4px; flex-wrap:wrap;">
+            ${p.entry_trigger ? `<span>Entry/Pivot: <b style="color:#f1f5f9;">Rs.${p.entry_trigger}</b></span>` : ''}
+            ${p.target_price ? `<span>Target: <b style="color:var(--accent-green);">Rs.${p.target_price}</b></span>` : ''}
+            ${p.stop_loss ? `<span>Stop Loss: <b style="color:var(--accent-rose);">Rs.${p.stop_loss}</b></span>` : ''}
+            ${p.risk_reward_ratio ? `<span>R:R: <b style="color:#38bdf8;">${p.risk_reward_ratio}</b></span>` : ''}
+          </div>` : ''}
+        </div>
+      `).join('') : '<p style="color:var(--text-muted); font-size:0.84rem;">No major reversal patterns confirmed. Consolidating within normal statistical deviation.</p>';
+
+      let eventsHtml = `
+        <div style="font-size:0.85rem; line-height:1.7;">
+          <div><b>📅 Next Results:</b> ${events.earnings_date || 'TBD'} <span style="color:var(--text-muted);">(${events.earnings_quarter || ''})</span></div>
+          <div><b>💰 Dividend Ex-Date:</b> ${events.dividend_ex_date || 'N/A'} | <b>Amount:</b> ${events.dividend_amount || 'N/A'}</div>
+          <div><b>📢 Corporate Action:</b> ${events.corporate_action || 'Board review & standard quarterly disclosure'}</div>
+          <div><b>⚡ Catalyst Impact:</b> <span style="color:var(--accent-amber); font-weight:600;">${events.impact || 'Normal'}</span></div>
+        </div>
+      `;
+
+      const content = `
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+          <div>
+            <h2 style="font-family:'Outfit'; font-size:1.8rem; margin-bottom:4px;">${s.symbol} - ${s.name}</h2>
+            <p style="color:var(--text-muted); font-size:0.88rem;">Sector: <b>${s.sector}</b></p>
+          </div>
+          <div style="display:flex; gap:10px; align-items:center;">
+            <div class="verdict-badge ${synth.action_verdict?.includes('BUY') ? 'verdict-buy' : 'verdict-hold'}">
+              SIGNAL: ${synth.action_verdict || 'ANALYZING'}
+            </div>
+            <button class="btn-trigger" onclick="triggerSingleAnalysis('${s.symbol}')">⚡ Re-Analyze Stock</button>
+          </div>
         </div>
 
-        <button class="btn-trigger" style="margin-bottom:20px;" onclick="triggerSingleAnalysis('${s.symbol}')">⚡ Force Re-Analyze Stock</button>
+        <!-- Interactive Candlestick & Bollinger Chart Box -->
+        <div class="modal-chart-box">
+          <div class="chart-controls">
+            <div class="chart-legend">
+              <span class="legend-item"><span class="legend-color" style="background:var(--accent-blue);"></span> Bollinger Upper/Lower</span>
+              <span class="legend-item"><span class="legend-color" style="background:#f59e0b;"></span> SMA 50</span>
+              <span class="legend-item"><span class="legend-color" style="background:#10b981;"></span> Bullish Candle</span>
+              <span class="legend-item"><span class="legend-color" style="background:#ef4444;"></span> Bearish Candle</span>
+            </div>
+            <div class="chart-time-tabs">
+              <button class="tab-btn ${activeChartDays === 30 ? 'active' : ''}" onclick="changeChartDays(30)">30D</button>
+              <button class="tab-btn ${activeChartDays === 60 ? 'active' : ''}" onclick="changeChartDays(60)">60D</button>
+              <button class="tab-btn ${activeChartDays === 90 ? 'active' : ''}" onclick="changeChartDays(90)">90D</button>
+            </div>
+          </div>
+          <canvas id="modalChartCanvas"></canvas>
+          <div class="chart-tooltip-box" id="chartTooltip">Hover cursor over chart to inspect candle OHLC & Bollinger Bands</div>
+        </div>
 
-        <div style="background:rgba(0,0,0,0.3); padding:18px; border-radius:12px; font-size:0.95rem; line-height:1.6; white-space:pre-wrap;">
+        <!-- Technical Patterns & Events Details Grid -->
+        <div class="modal-details-grid">
+          <div class="detail-card">
+            <div class="detail-card-title">
+              <span>📐</span> Detected Technical Patterns & Indicator Formations
+            </div>
+            ${patternDetailsHtml}
+          </div>
+          <div class="detail-card">
+            <div class="detail-card-title">
+              <span>📅</span> Upcoming Corporate Catalysts & Event Risks
+            </div>
+            ${eventsHtml}
+          </div>
+        </div>
+
+        <!-- Master Synthesizer AI Report -->
+        <div style="background:rgba(0,0,0,0.3); padding:20px; border-radius:12px; font-size:0.95rem; line-height:1.6; white-space:pre-wrap; border:1px solid var(--border-card);">
 ${report}
         </div>
       `;
       document.getElementById('modalContent').innerHTML = content;
       document.getElementById('modalOverlay').style.display = 'flex';
+
+      // Load and render interactive chart
+      loadAndRenderChart(s.symbol, activeChartDays);
     }
 
-    function closeModal() { document.getElementById('modalOverlay').style.display = 'none'; }
+    async function changeChartDays(days) {
+      activeChartDays = days;
+      if (activeStockData) {
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+          btn.classList.toggle('active', btn.innerText === `${days}D`);
+        });
+        await loadAndRenderChart(activeStockData.symbol, days);
+      }
+    }
+
+    async function loadAndRenderChart(symbol, days) {
+      try {
+        const canvas = document.getElementById('modalChartCanvas');
+        if (canvas) {
+          const ctx = canvas.getContext('2d');
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          // Show loading placeholder
+          canvas.style.background = 'rgba(255,255,255,0.02)';
+        }
+        const res = await fetch(`/api/history?symbol=${symbol}&days=${days}`);
+        const data = safeJsonParse(await res.text());
+        activeChartData = data;
+        // Use double-rAF so the browser has completed layout before we size/draw the canvas
+        requestAnimationFrame(() => requestAnimationFrame(() => drawCandleChart(data)));
+      } catch (e) {
+        console.error("Failed to load chart data", e);
+        const canvas = document.getElementById('modalChartCanvas');
+        if (canvas) {
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#ef4444';
+          ctx.font = '14px Inter';
+          ctx.fillText('Chart data unavailable', 20, 60);
+        }
+      }
+    }
+
+    function drawCandleChart(data) {
+      const canvas = document.getElementById('modalChartCanvas');
+      if (!canvas || !data || !data.candles || data.candles.length === 0) return;
+
+      const dpr = window.devicePixelRatio || 1;
+      // Use the parent container width; canvas may not have been laid out yet
+      const container = canvas.parentElement || canvas;
+      const width = (container.clientWidth || canvas.offsetWidth || 800);
+      const height = 340;
+      // Set both CSS size and backing buffer size
+      canvas.style.width = width + 'px';
+      canvas.style.height = height + 'px';
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+
+      const candles = data.candles;
+      const n = candles.length;
+
+      // Find min and max price across low, high, bb_upper, bb_lower
+      let minP = Infinity, maxP = -Infinity;
+      candles.forEach(c => {
+        if (c.low < minP) minP = c.low;
+        if (c.bb_lower && c.bb_lower < minP) minP = c.bb_lower;
+        if (c.high > maxP) maxP = c.high;
+        if (c.bb_upper && c.bb_upper > maxP) maxP = c.bb_upper;
+      });
+
+      const pad = (maxP - minP) * 0.08 || 5;
+      minP -= pad;
+      maxP += pad;
+      const rangeP = maxP - minP;
+
+      const plotW = width - 65;
+      const plotH = height - 30;
+      const padTop = 15;
+      const padLeft = 10;
+
+      function priceToY(p) {
+        return padTop + plotH - ((p - minP) / rangeP) * plotH;
+      }
+
+      ctx.clearRect(0, 0, width, height);
+
+      // 1. Draw Grid Lines
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+      ctx.lineWidth = 1;
+      const gridSteps = 5;
+      for (let i = 0; i <= gridSteps; i++) {
+        const pVal = minP + (rangeP / gridSteps) * i;
+        const y = priceToY(pVal);
+        ctx.beginPath();
+        ctx.moveTo(padLeft, y);
+        ctx.lineTo(padLeft + plotW, y);
+        ctx.stroke();
+
+        ctx.fillStyle = '#64748b';
+        ctx.font = '11px JetBrains Mono';
+        ctx.textAlign = 'left';
+        ctx.fillText(pVal.toFixed(1), padLeft + plotW + 6, y + 4);
+      }
+
+      // 2. Draw Bollinger Band Envelope Shading
+      ctx.beginPath();
+      let started = false;
+      for (let i = 0; i < n; i++) {
+        const c = candles[i];
+        if (c.bb_upper != null) {
+          const x = padLeft + (i / (n - 1)) * plotW;
+          const y = priceToY(c.bb_upper);
+          if (!started) { ctx.moveTo(x, y); started = true; }
+          else { ctx.lineTo(x, y); }
+        }
+      }
+      for (let i = n - 1; i >= 0; i--) {
+        const c = candles[i];
+        if (c.bb_lower != null) {
+          const x = padLeft + (i / (n - 1)) * plotW;
+          const y = priceToY(c.bb_lower);
+          ctx.lineTo(x, y);
+        }
+      }
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.08)';
+      ctx.fill();
+
+      // 3. Draw Bollinger Upper & Lower Lines
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.6)';
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) {
+        if (candles[i].bb_upper != null) {
+          const x = padLeft + (i / (n - 1)) * plotW;
+          const y = priceToY(candles[i].bb_upper);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+      }
+      ctx.stroke();
+
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) {
+        if (candles[i].bb_lower != null) {
+          const x = padLeft + (i / (n - 1)) * plotW;
+          const y = priceToY(candles[i].bb_lower);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+      }
+      ctx.stroke();
+
+      // Middle Band (SMA 20)
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) {
+        if (candles[i].bb_middle != null) {
+          const x = padLeft + (i / (n - 1)) * plotW;
+          const y = priceToY(candles[i].bb_middle);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // 4. Draw SMA 50 Line
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#f59e0b';
+      ctx.beginPath();
+      let startedSma = false;
+      for (let i = 0; i < n; i++) {
+        if (candles[i].sma_50 != null) {
+          const x = padLeft + (i / (n - 1)) * plotW;
+          const y = priceToY(candles[i].sma_50);
+          if (!startedSma) { ctx.moveTo(x, y); startedSma = true; }
+          else { ctx.lineTo(x, y); }
+        }
+      }
+      ctx.stroke();
+
+      // 5. Draw Candlesticks
+      const candleWidth = Math.max(3, (plotW / n) * 0.65);
+      for (let i = 0; i < n; i++) {
+        const c = candles[i];
+        const x = padLeft + (i / (n - 1)) * plotW;
+        const openY = priceToY(c.open);
+        const closeY = priceToY(c.close);
+        const highY = priceToY(c.high);
+        const lowY = priceToY(c.low);
+
+        const isUp = c.close >= c.open;
+        const color = isUp ? '#10b981' : '#ef4444';
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+
+        // Wick
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(x, highY);
+        ctx.lineTo(x, lowY);
+        ctx.stroke();
+
+        // Body
+        const topY = Math.min(openY, closeY);
+        const bodyH = Math.max(2, Math.abs(openY - closeY));
+        ctx.fillRect(x - candleWidth / 2, topY, candleWidth, bodyH);
+      }
+
+      // Mouse interactive crosshair
+      canvas.onmousemove = (e) => {
+        const mouseRect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - mouseRect.left;
+        const idx = Math.min(n - 1, Math.max(0, Math.round(((mouseX - padLeft) / plotW) * (n - 1))));
+        const c = candles[idx];
+
+        if (c) {
+          document.getElementById('chartTooltip').innerHTML = `
+            <b>[${c.date}]</b> &nbsp; 
+            O: <span style="color:#fff">${c.open}</span> &nbsp;
+            H: <span style="color:#10b981">${c.high}</span> &nbsp;
+            L: <span style="color:#ef4444">${c.low}</span> &nbsp;
+            C: <span style="color:#38bdf8; font-weight:700">${c.close}</span> &nbsp;
+            BB Upper: <span style="color:#38bdf8">${c.bb_upper || 'N/A'}</span> &nbsp;
+            BB Lower: <span style="color:#38bdf8">${c.bb_lower || 'N/A'}</span> &nbsp;
+            RSI: <span style="color:#f59e0b">${c.rsi || 'N/A'}</span>
+          `;
+        }
+      };
+    }
+
+    function closeModal() {
+      document.getElementById('modalOverlay').style.display = 'none';
+      activeStockData = null;
+      activeChartData = null;
+    }
 
     async function triggerSingleAnalysis(symbol) {
       await fetch('/api/trigger', {
@@ -434,12 +2189,508 @@ ${report}
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ symbol })
       });
-      alert(`Triggered analysis for ${symbol}. Realtime screen will update automatically!`);
+      alert(`Triggered multi-agent analysis for ${symbol}. Screen will update live!`);
       closeModal();
+    }
+
+
+    // ===================================================
+    // Add Stock Modal – Search Internet & Add Symbol
+    // ===================================================
+
+    function openAddStockModal() {
+      const overlay = document.getElementById('addStockModalOverlay');
+      if (!overlay) return;
+      overlay.classList.add('open');
+      document.getElementById('internetSearchInput')?.focus();
+      document.getElementById('addStockStatusBanner').className = 'add-stock-status-banner';
+      document.getElementById('internetSearchResults').innerHTML = '';
+    }
+
+    function closeAddStockModal() {
+      document.getElementById('addStockModalOverlay')?.classList.remove('open');
+    }
+
+    function handleAddModalOverlayClick(e) {
+      if (e.target.id === 'addStockModalOverlay') closeAddStockModal();
+    }
+
+    function showAddStockStatus(msg, type) {
+      const banner = document.getElementById('addStockStatusBanner');
+      if (!banner) return;
+      banner.textContent = msg;
+      banner.className = 'add-stock-status-banner ' + type;
+      if (type === 'success') {
+        setTimeout(() => { banner.className = 'add-stock-status-banner'; }, 4000);
+      }
+    }
+
+    async function searchInternetSymbols() {
+      const q = (document.getElementById('internetSearchInput')?.value || '').trim();
+      if (!q) return;
+      const resultsEl = document.getElementById('internetSearchResults');
+      resultsEl.innerHTML = '<div class="search-loading">&#128269; Searching NSE/BSE symbols...</div>';
+
+      try {
+        const res = await fetch(`/api/search-symbol?q=${encodeURIComponent(q)}`);
+        const data = await res.json();
+        if (!data.results || data.results.length === 0) {
+          resultsEl.innerHTML = '<div class="search-no-results">&#128274; No results found. Try direct symbol (e.g. SUZLON) or use Manual Add below.</div>';
+          return;
+        }
+        resultsEl.innerHTML = data.results.map(r => {
+          const sym = r.symbol || '';
+          const name = r.name || sym;
+          const sector = r.sector || 'N/A';
+          const exchange = r.exchange || 'NSE';
+          const added = r.is_added || false;
+          const actionBtn = added
+            ? `<button class="btn-remove-stock-search" onclick="handleRemoveStock('${sym}')">&#10005; Remove</button>`
+            : `<button class="btn-add-stock" onclick="handleAddStock('${sym}','${name.replace(/'/g,"\'")}','${sector.replace(/'/g,"\'")}','${exchange}')">&#10133; Add</button>`;
+          return `
+            <div class="search-result-card" id="search-card-${sym}">
+              <div class="search-result-info">
+                <div class="search-result-symbol">${sym}</div>
+                <div class="search-result-name">${name}</div>
+                <div class="search-result-meta">${exchange} &bull; ${sector}</div>
+              </div>
+              ${actionBtn}
+            </div>`;
+        }).join('');
+      } catch(e) {
+        resultsEl.innerHTML = '<div class="search-no-results">&#10060; Search failed. Try manual add below.</div>';
+      }
+    }
+
+    async function handleAddStock(symbol, name, sector, exchange) {
+      try {
+        const res = await fetch('/api/add-symbol', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbol, name, sector, exchange })
+        });
+        const data = await res.json();
+        if (data.success || data.status === 'added') {
+          showAddStockStatus('\u2713 ' + symbol + ' added to watchlist!', 'success');
+          // Update search result card button
+          const card = document.getElementById('search-card-' + symbol);
+          if (card) {
+            const btn = card.querySelector('button');
+            if (btn) {
+              btn.className = 'btn-remove-stock-search';
+              btn.innerHTML = '&#10005; Remove';
+              btn.onclick = () => handleRemoveStock(symbol);
+            }
+          }
+          // Refresh sidebar
+          setTimeout(fetchStockCards, 500);
+        } else {
+          showAddStockStatus('\u26a0 ' + (data.message || 'Failed to add symbol'), 'error');
+        }
+      } catch(e) {
+        showAddStockStatus('\u274c Error adding symbol: ' + e.message, 'error');
+      }
+    }
+
+    async function handleRemoveStock(symbol) {
+      if (!confirm('Remove ' + symbol + ' from watchlist?')) return;
+      try {
+        const res = await fetch('/api/remove-symbol', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbol })
+        });
+        const data = await res.json();
+        if (data.success || data.status === 'removed') {
+          showAddStockStatus('\u2713 ' + symbol + ' removed from watchlist', 'success');
+          const card = document.getElementById('search-card-' + symbol);
+          if (card) {
+            const btn = card.querySelector('button');
+            if (btn) {
+              btn.className = 'btn-add-stock';
+              btn.innerHTML = '&#10133; Add';
+              btn.onclick = function() {};  // placeholder; re-search to get fresh data
+            }
+          }
+          setTimeout(fetchStockCards, 500);
+        } else {
+          showAddStockStatus('\u26a0 ' + (data.message || 'Failed to remove'), 'error');
+        }
+      } catch(e) {
+        showAddStockStatus('\u274c Error: ' + e.message, 'error');
+      }
+    }
+
+    async function handleManualAddStock() {
+      const sym = (document.getElementById('manualSymbol')?.value || '').trim().toUpperCase();
+      const name = (document.getElementById('manualName')?.value || '').trim() || sym;
+      const sector = (document.getElementById('manualSector')?.value || '').trim() || 'Unknown';
+      if (!sym) {
+        showAddStockStatus('\u26a0 Please enter a stock symbol (e.g. TATAPOWER)', 'error');
+        return;
+      }
+      await handleAddStock(sym, name, sector, 'NSE');
+      document.getElementById('manualSymbol').value = '';
+      document.getElementById('manualName').value = '';
+      document.getElementById('manualSector').value = '';
+    }
+
+    // Close modal on Escape key
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') closeAddStockModal();
+    });
+
+
+    // ===================================================
+    // Add Stock Modal - Search Internet & Add Symbol
+    // ===================================================
+
+    function openAddStockModal() {
+      const overlay = document.getElementById('addStockModalOverlay');
+      if (!overlay) return;
+      overlay.classList.add('open');
+      document.getElementById('internetSearchInput')?.focus();
+      document.getElementById('addStockStatusBanner').className = 'add-stock-status-banner';
+      document.getElementById('internetSearchResults').innerHTML = '';
+    }
+
+    function closeAddStockModal() {
+      document.getElementById('addStockModalOverlay')?.classList.remove('open');
+    }
+
+    function handleAddModalOverlayClick(e) {
+      if (e.target.id === 'addStockModalOverlay') closeAddStockModal();
+    }
+
+    function showAddStockStatus(msg, type) {
+      const banner = document.getElementById('addStockStatusBanner');
+      if (!banner) return;
+      banner.textContent = msg;
+      banner.className = 'add-stock-status-banner ' + type;
+      if (type === 'success') {
+        setTimeout(() => { banner.className = 'add-stock-status-banner'; }, 4000);
+      }
+    }
+
+    async function searchInternetSymbols() {
+      const q = (document.getElementById('internetSearchInput')?.value || '').trim();
+      if (!q) return;
+      const resultsEl = document.getElementById('internetSearchResults');
+      resultsEl.innerHTML = '<div class="search-loading">&#128269; Searching NSE/BSE symbols...</div>';
+      try {
+        const res = await fetch('/api/search-symbol?q=' + encodeURIComponent(q));
+        const data = await res.json();
+        if (!data.results || data.results.length === 0) {
+          resultsEl.innerHTML = '<div class="search-no-results">&#128274; No results. Try a direct symbol (e.g. SUZLON) or use Manual Add below.</div>';
+          return;
+        }
+        resultsEl.innerHTML = data.results.map(r => {
+          const sym = r.symbol || '';
+          const name = (r.name || sym).replace(/'/g, '&#39;');
+          const sector = (r.sector || 'Unknown').replace(/'/g, '&#39;');
+          const exchange = r.exchange || 'NSE';
+          const added = r.is_added || false;
+          const actionBtn = added
+            ? `<button class="btn-remove-stock-search" onclick="handleRemoveStock('${sym}')">&#10005; Remove</button>`
+            : `<button class="btn-add-stock" onclick="handleAddStock('${sym}','${name}','${sector}','${exchange}')">&#10133; Add</button>`;
+          return `
+            <div class="search-result-card" id="search-card-${sym}">
+              <div class="search-result-info">
+                <div class="search-result-symbol">${sym}</div>
+                <div class="search-result-name">${name}</div>
+                <div class="search-result-meta">${exchange} &bull; ${sector}</div>
+              </div>
+              ${actionBtn}
+            </div>`;
+        }).join('');
+      } catch(e) {
+        resultsEl.innerHTML = '<div class="search-no-results">&#10060; Search failed. Try manual add below.</div>';
+      }
+    }
+
+    async function handleAddStock(symbol, name, sector, exchange) {
+      try {
+        const res = await fetch('/api/add-symbol', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbol, name, sector, exchange })
+        });
+        const data = await res.json();
+        if (data.success || data.status === 'added') {
+          showAddStockStatus('✓ ' + symbol + ' added to watchlist!', 'success');
+          const card = document.getElementById('search-card-' + symbol);
+          if (card) {
+            const btn = card.querySelector('button');
+            if (btn) {
+              btn.className = 'btn-remove-stock-search';
+              btn.innerHTML = '&#10005; Remove';
+              btn.onclick = () => handleRemoveStock(symbol);
+            }
+          }
+          setTimeout(fetchStockCards, 600);
+        } else {
+          showAddStockStatus('⚠ ' + (data.message || 'Failed to add symbol'), 'error');
+        }
+      } catch(e) {
+        showAddStockStatus('❌ Error: ' + e.message, 'error');
+      }
+    }
+
+    async function handleRemoveStock(symbol) {
+      if (!confirm('Remove ' + symbol + ' from watchlist?')) return;
+      try {
+        const res = await fetch('/api/remove-symbol', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbol })
+        });
+        const data = await res.json();
+        if (data.success || data.status === 'removed') {
+          showAddStockStatus('✓ ' + symbol + ' removed from watchlist', 'success');
+          const card = document.getElementById('search-card-' + symbol);
+          if (card) {
+            const btn = card.querySelector('button');
+            if (btn) {
+              btn.className = 'btn-add-stock';
+              btn.innerHTML = '&#10133; Add';
+            }
+          }
+          setTimeout(fetchStockCards, 600);
+        } else {
+          showAddStockStatus('⚠ ' + (data.message || 'Failed to remove'), 'error');
+        }
+      } catch(e) {
+        showAddStockStatus('❌ Error: ' + e.message, 'error');
+      }
+    }
+
+    async function handleManualAddStock() {
+      const sym = (document.getElementById('manualSymbol')?.value || '').trim().toUpperCase();
+      const name = (document.getElementById('manualName')?.value || '').trim() || sym;
+      const sector = (document.getElementById('manualSector')?.value || '').trim() || 'Unknown';
+      if (!sym) {
+        showAddStockStatus('⚠ Please enter a stock symbol (e.g. TATAPOWER)', 'error');
+        return;
+      }
+      await handleAddStock(sym, name, sector, 'NSE');
+      document.getElementById('manualSymbol').value = '';
+      document.getElementById('manualName').value = '';
+      document.getElementById('manualSector').value = '';
+    }
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') closeAddStockModal();
+    });
+
+
+    // ===================================================
+    // Export Recommendations as Self-Contained HTML
+    // ===================================================
+    function exportAsHTML() {
+      if (!allStocksData || allStocksData.length === 0) {
+        alert('No stock data loaded yet. Please wait for data to load.');
+        return;
+      }
+
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
+      const timeStr = now.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
+      const filename = `NSE_Report_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}.html`;
+
+      // Build stock rows grouped by verdict
+      const buy   = allStocksData.filter(s => { const v=(s.synth_output?.structured_signal?.action_verdict||'').toUpperCase(); return v.includes('BUY')||v.includes('ACCUMULATE'); });
+      const hold  = allStocksData.filter(s => { const v=(s.synth_output?.structured_signal?.action_verdict||'').toUpperCase(); return v.includes('HOLD'); });
+      const sell  = allStocksData.filter(s => { const v=(s.synth_output?.structured_signal?.action_verdict||'').toUpperCase(); return v.includes('SELL'); });
+      const other = allStocksData.filter(s => { const v=(s.synth_output?.structured_signal?.action_verdict||'').toUpperCase(); return !v.includes('BUY')&&!v.includes('ACCUMULATE')&&!v.includes('HOLD')&&!v.includes('SELL'); });
+
+      function verdictColor(v) {
+        v = (v||'').toUpperCase();
+        if (v.includes('BUY')||v.includes('ACCUMULATE')) return '#10b981';
+        if (v.includes('SELL')) return '#ef4444';
+        if (v.includes('HOLD')) return '#f59e0b';
+        return '#9ca3af';
+      }
+
+      function sparkSvg(sparkline) {
+        if (!sparkline || sparkline.length < 2) return '';
+        const min = Math.min(...sparkline), max = Math.max(...sparkline);
+        const range = (max - min) || 1;
+        const w = 180, h = 36;
+        const pts = sparkline.map((v,i) => {
+          const x = (i/(sparkline.length-1))*w;
+          const y = h - ((v-min)/range)*(h-6)-3;
+          return `${x.toFixed(1)},${y.toFixed(1)}`;
+        }).join(' ');
+        const isUp = sparkline[sparkline.length-1] >= sparkline[0];
+        const col = isUp ? '#10b981' : '#ef4444';
+        const fill = isUp ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)';
+        const f0y = h-((sparkline[0]-min)/range)*(h-6)-3;
+        const fly = h-((sparkline[sparkline.length-1]-min)/range)*(h-6)-3;
+        return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:block"><polygon points="0,${h} 0,${f0y.toFixed(1)} ${pts} ${w},${fly.toFixed(1)} ${w},${h}" fill="${fill}"/><polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+      }
+
+      function patternBadges(patterns) {
+        if (!patterns || patterns.length === 0) return '<span style="color:#9ca3af;font-size:0.75rem">Range Consolidation</span>';
+        const icons = { 'Saucer':'&#x1F963;','Cup':'&#9749;','TTM':'&#9889;','Wyckoff':'&#9875;','Flag':'&#x1F6A9;','Harmonic':'&#x1F4D0;','Divergence':'&#x1F500;','Head':'&#x1F464;','Bollinger':'&#x1F4CA;','Double':'&#x3030;','Star':'&#x1F56F;','Engulfing':'&#x1F56F;' };
+        const getIcon = n => { for (const [k,v] of Object.entries(icons)) if (n.includes(k)) return v; return '&#x1F4D0;'; };
+        return patterns.slice(0,3).map(p => {
+          const col = p.direction==='Bullish'?'#10b981':p.direction==='Bearish'?'#ef4444':'#38bdf8';
+          return `<span style="display:inline-block;margin:2px 3px 2px 0;padding:2px 7px;background:${col}1a;border:1px solid ${col}55;border-radius:10px;font-size:0.7rem;color:${col}">${getIcon(p.name)} ${p.name}${p.quality_score?` <span style="opacity:0.7">${p.quality_score}</span>`:''}</span>`;
+        }).join('');
+      }
+
+      function stockCard(s) {
+        const synth = s.synth_output?.structured_signal || {};
+        const tech  = s.tech_output?.raw_indicators || {};
+        const verdict = synth.action_verdict || (s.queue_status==='in_progress'?'ANALYZING':s.queue_status==='pending'?'QUEUED':'PENDING');
+        const vc = verdictColor(verdict);
+        const conf = synth.confidence_rating || 'Pending';
+        const confPct = synth.confidence_percentage || 20;
+        const entry = synth.when_to_buy_entry || (tech.last_price?`Rs. ${tech.last_price}`:'N/A');
+        const target = synth.when_to_sell_target || 'N/A';
+        const sl = synth.stop_loss || 'N/A';
+        const horizon = synth.holding_horizon || 'Medium-Term';
+        const rationale = (synth.key_rationale||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        const price = tech.last_price || (s.sparkline?.length>0?s.sparkline[s.sparkline.length-1]:null);
+        const priceStr = price ? `Rs. ${Number(price).toLocaleString('en-IN')}` : 'N/A';
+
+        return `
+        <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.09);border-left:3px solid ${vc};border-radius:12px;padding:16px 18px;margin-bottom:12px;page-break-inside:avoid">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+            <div>
+              <span style="font-family:'Outfit',sans-serif;font-size:1.15rem;font-weight:700;color:#fff">${s.symbol}</span>
+              <span style="font-size:0.75rem;color:#9ca3af;margin-left:8px">${s.name||''}</span>
+              <span style="font-size:0.72rem;color:#64748b;margin-left:6px;background:rgba(255,255,255,0.05);padding:1px 7px;border-radius:8px">${s.sector||''}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:0.9rem;color:#e2e8f0;font-weight:600">${priceStr}</span>
+              <span style="background:${vc}22;border:1px solid ${vc}66;color:${vc};padding:3px 10px;border-radius:8px;font-weight:700;font-size:0.82rem">${verdict}</span>
+            </div>
+          </div>
+          <div style="margin-bottom:8px">${patternBadges(s.patterns)}</div>
+          <div style="margin-bottom:10px">${sparkSvg(s.sparkline)}</div>
+          <div style="margin-bottom:8px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+              <span style="font-size:0.72rem;color:#9ca3af">Confidence: <b style="color:#f1f5f9">${conf}</b></span>
+            </div>
+            <div style="height:4px;background:rgba(255,255,255,0.08);border-radius:4px;overflow:hidden">
+              <div style="height:100%;width:${confPct}%;background:${vc};border-radius:4px"></div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:10px">
+            <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:8px 10px">
+              <div style="font-size:0.65rem;color:#64748b;font-weight:600;text-transform:uppercase;margin-bottom:3px">&#x1F6D2; Entry Range</div>
+              <div style="font-size:0.82rem;color:#f1f5f9;font-weight:600">${entry}</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:8px 10px">
+              <div style="font-size:0.65rem;color:#64748b;font-weight:600;text-transform:uppercase;margin-bottom:3px">&#x1F3AF; Target Price</div>
+              <div style="font-size:0.82rem;color:#10b981;font-weight:600">${target}</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:8px 10px">
+              <div style="font-size:0.65rem;color:#64748b;font-weight:600;text-transform:uppercase;margin-bottom:3px">&#x1F6E1; Stop Loss</div>
+              <div style="font-size:0.82rem;color:#ef4444;font-weight:600">${sl}</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:8px 10px">
+              <div style="font-size:0.65rem;color:#64748b;font-weight:600;text-transform:uppercase;margin-bottom:3px">&#x23F3; Horizon</div>
+              <div style="font-size:0.82rem;color:#f1f5f9;font-weight:600">${horizon}</div>
+            </div>
+          </div>
+          ${rationale ? `<div style="font-size:0.8rem;color:#94a3b8;line-height:1.5;border-top:1px solid rgba(255,255,255,0.06);padding-top:8px">${rationale}</div>` : ''}
+        </div>`;
+      }
+
+      function section(title, color, stocks) {
+        if (stocks.length === 0) return '';
+        return `
+        <div style="margin-bottom:28px">
+          <h2 style="font-family:'Outfit',sans-serif;font-size:1.05rem;font-weight:700;color:${color};margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid ${color}33;display:flex;align-items:center;gap:8px">
+            <span style="background:${color}22;border:1px solid ${color}55;padding:3px 10px;border-radius:8px">${title}</span>
+            <span style="font-size:0.8rem;opacity:0.7">${stocks.length} stock${stocks.length>1?'s':''}</span>
+          </h2>
+          ${stocks.map(s => stockCard(s)).join('')}
+        </div>`;
+      }
+
+      // Summary stats
+      const totalStocks = allStocksData.length;
+      const withAnalysis = allStocksData.filter(s => s.synth_output?.structured_signal?.action_verdict).length;
+
+      const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NSE Stock Report - ${dateStr}</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#090d16;color:#f3f4f6;font-family:'Inter',sans-serif;min-height:100vh;padding:0}
+@media print{body{background:#090d16!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+</head>
+<body>
+<div style="max-width:900px;margin:0 auto;padding:32px 20px">
+
+  <!-- Header -->
+  <div style="background:linear-gradient(135deg,rgba(56,189,248,0.12),rgba(139,92,246,0.08));border:1px solid rgba(56,189,248,0.25);border-radius:16px;padding:24px 28px;margin-bottom:28px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+      <div>
+        <div style="font-family:'Outfit',sans-serif;font-size:1.6rem;font-weight:800;color:#fff;margin-bottom:4px">
+          &#x1F4CA; NSE Multi-Agent Stock Report
+        </div>
+        <div style="font-size:0.82rem;color:#9ca3af">Generated: ${dateStr} at ${timeStr} IST &nbsp;|&nbsp; ${totalStocks} symbols tracked &nbsp;|&nbsp; ${withAnalysis} analysed</div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div style="background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.4);border-radius:8px;padding:6px 14px;text-align:center">
+          <div style="font-size:1.3rem;font-weight:800;color:#10b981;font-family:'Outfit',sans-serif">${buy.length}</div>
+          <div style="font-size:0.68rem;color:#9ca3af;text-transform:uppercase;font-weight:600">Buy</div>
+        </div>
+        <div style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);border-radius:8px;padding:6px 14px;text-align:center">
+          <div style="font-size:1.3rem;font-weight:800;color:#f59e0b;font-family:'Outfit',sans-serif">${hold.length}</div>
+          <div style="font-size:0.68rem;color:#9ca3af;text-transform:uppercase;font-weight:600">Hold</div>
+        </div>
+        <div style="background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);border-radius:8px;padding:6px 14px;text-align:center">
+          <div style="font-size:1.3rem;font-weight:800;color:#ef4444;font-family:'Outfit',sans-serif">${sell.length}</div>
+          <div style="font-size:0.68rem;color:#9ca3af;text-transform:uppercase;font-weight:600">Sell</div>
+        </div>
+        <div style="background:rgba(148,163,184,0.1);border:1px solid rgba(148,163,184,0.3);border-radius:8px;padding:6px 14px;text-align:center">
+          <div style="font-size:1.3rem;font-weight:800;color:#9ca3af;font-family:'Outfit',sans-serif">${other.length}</div>
+          <div style="font-size:0.68rem;color:#9ca3af;text-transform:uppercase;font-weight:600">Pending</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sections -->
+  ${section('&#x1F7E2; BUY / ACCUMULATE', '#10b981', buy)}
+  ${section('&#x1F7E1; HOLD / WATCH', '#f59e0b', hold)}
+  ${section('&#x1F534; SELL / AVOID', '#ef4444', sell)}
+  ${section('&#x26AA; PENDING ANALYSIS', '#9ca3af', other)}
+
+  <!-- Footer -->
+  <div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.08);text-align:center;font-size:0.74rem;color:#4b5563">
+    NSE Multi-Agent Stock Predictor &nbsp;&bull;&nbsp; Technical Intelligence Report &nbsp;&bull;&nbsp; ${dateStr}<br>
+    <span style="color:#374151">For informational purposes only. Not financial advice. Consult a SEBI-registered advisor.</span>
+  </div>
+
+</div>
+</body>
+</html>`;
+
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
     }
 
     function fetchAllData() { fetchStatus(); fetchStockCards(); }
 
+    initSidebarState();
     fetchAllData();
     setInterval(fetchAllData, 3000);
   </script>

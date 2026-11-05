@@ -83,9 +83,9 @@ class MultiAgentWorkflow:
         self.tech_agent = TechnicalAnalysisAgent(tech_engine=tech_engine)
         self.news_agent = NewsSentimentAgent(news_engine=news_engine)
         self.macro_agent = GlobalMacroAgent(macro_engine=macro_engine)
-        self.fund_agent = FundamentalAgent()
+        self.fund_agent = FundamentalAgent(cache_manager=self.cache_manager)
         self.risk_agent = RiskAgent(risk_engine=risk_engine)
-        self.synth_agent = MasterPredictionSynthesizerAgent()
+        self.synth_agent = MasterPredictionSynthesizerAgent(cache_manager=self.cache_manager)
 
     def run_analysis(self, symbol: str, company_name: str = "", sector: str = "", force_refresh: bool = False) -> Dict[str, Any]:
         """

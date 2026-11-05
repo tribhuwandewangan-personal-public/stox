@@ -28,9 +28,11 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 GEMINI_MODEL = "gemini-1.5-flash"
 
 # Verbose & Execution Settings
-VERBOSE_LOGGING = os.getenv("VERBOSE_LOGGING", "true").lower() in ("true", "1", "yes")
+VERBOSE_LOGGING = os.getenv("VERBOSE_LOGGING", "false").lower() in ("true", "1", "yes")
+FAST_MODE = os.getenv("FAST_MODE", "true").lower() in ("true", "1", "yes")   # Default ON: zero-LLM quantitative mode for 34 symbols in <60s
+OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "25"))
 MAX_PARALLEL_WORKERS = int(os.getenv("MAX_PARALLEL_WORKERS", "6"))
-MAX_SYMBOL_WORKERS = int(os.getenv("MAX_SYMBOL_WORKERS", "2"))
+MAX_SYMBOL_WORKERS = int(os.getenv("MAX_SYMBOL_WORKERS", "4"))
 
 # Target Symbols Config File
 SYMBOLS_FILE_PATH = os.path.join(os.path.dirname(__file__), "symbols.json")
@@ -39,20 +41,23 @@ REPORTS_DIR = os.path.join(os.path.dirname(__file__), "reports")
 HISTORICAL_EXCEL_PATH = os.path.join(REPORTS_DIR, "NSE_Historical_Data.xlsx")
 
 
-def get_llm(model_name: Optional[str] = None, temperature: float = 0.2):
+def get_llm(model_name: Optional[str] = None, temperature: float = 0.2, max_tokens: int = 350, timeout: Optional[int] = None):
     """
     Instantiates and returns the configured LLM.
-    Defaults to local Ollama qwen2.5:7b.
+    Defaults to local Ollama qwen2.5:7b with compact token cap and safety timeout.
     Falls back to ChatGoogleGenerativeAI if Ollama fails or GEMINI_API_KEY is preferred.
     """
     target_model = model_name or OLLAMA_MODEL
+    req_timeout = timeout or OLLAMA_TIMEOUT
 
     try:
         from langchain_ollama import ChatOllama
         return ChatOllama(
             base_url=OLLAMA_BASE_URL,
             model=target_model,
-            temperature=temperature
+            temperature=temperature,
+            num_predict=max_tokens,
+            timeout=req_timeout
         )
     except Exception as e:
         print(f"[Config Warning] Local Ollama ({target_model}) initialization notice: {e}")
@@ -62,6 +67,7 @@ def get_llm(model_name: Optional[str] = None, temperature: float = 0.2):
             return ChatGoogleGenerativeAI(
                 model=GEMINI_MODEL,
                 google_api_key=GEMINI_API_KEY,
-                temperature=temperature
+                temperature=temperature,
+                max_output_tokens=max_tokens
             )
         raise e

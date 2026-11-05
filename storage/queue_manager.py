@@ -60,8 +60,40 @@ class ValkeyQueueManager:
             cursor.execute("UPDATE persistent_stock_queue SET status = 'pending' WHERE status = 'in_progress'")
             conn.commit()
 
+    def reset_queue(self, symbols_list: Optional[List[Dict[str, Any]]] = None):
+        """Resets the queue so target symbols are pending again for a new run."""
+        if self.use_valkey and self.client:
+            try:
+                self.client.delete("nse_stock_queue")
+                self.client.delete("nse_completed_symbols")
+                if symbols_list:
+                    for item in symbols_list:
+                        self.client.rpush("nse_stock_queue", json.dumps(item))
+            except Exception as e:
+                print(f"⚠️ [Valkey Reset Notice]: {e}")
+
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            if symbols_list:
+                for item in symbols_list:
+                    symbol = item.get("symbol", "").upper()
+                    company_name = item.get("name", "")
+                    sector = item.get("sector", "")
+                    cursor.execute("""
+                        INSERT INTO persistent_stock_queue (symbol, company_name, sector, status)
+                        VALUES (?, ?, ?, 'pending')
+                        ON CONFLICT(symbol) DO UPDATE SET status = 'pending', company_name = excluded.company_name, sector = excluded.sector
+                    """, (symbol, company_name, sector))
+            else:
+                cursor.execute("UPDATE persistent_stock_queue SET status = 'pending'")
+            conn.commit()
+
     def enqueue_symbols(self, symbols_list: List[Dict[str, Any]], force: bool = False):
         """Pushes target symbols into queue, skipping already completed items unless forced."""
+        if force:
+            self.reset_queue(symbols_list)
+            return
+
         if self.use_valkey and self.client:
             try:
                 for item in symbols_list:
@@ -84,37 +116,44 @@ class ValkeyQueueManager:
                 company_name = item.get("name", "")
                 sector = item.get("sector", "")
                 
-                if force:
-                    cursor.execute("""
-                        INSERT OR REPLACE INTO persistent_stock_queue (symbol, company_name, sector, status)
-                        VALUES (?, ?, ?, 'pending')
-                    """, (symbol, company_name, sector))
-                else:
-                    cursor.execute("""
-                        INSERT OR IGNORE INTO persistent_stock_queue (symbol, company_name, sector, status)
-                        VALUES (?, ?, ?, 'pending')
-                    """, (symbol, company_name, sector))
+                cursor.execute("""
+                    INSERT OR IGNORE INTO persistent_stock_queue (symbol, company_name, sector, status)
+                    VALUES (?, ?, ?, 'pending')
+                """, (symbol, company_name, sector))
             conn.commit()
 
-    def dequeue_symbol(self) -> Optional[Dict[str, Any]]:
-        """Pops the next pending stock symbol task from queue."""
+    def dequeue_symbol(self, symbols_filter: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+        """Pops the next pending stock symbol task from queue (optionally filtered by symbol names)."""
         if self.use_valkey and self.client:
             try:
                 raw_item = self.client.lpop("nse_stock_queue")
                 if raw_item:
                     item_str = raw_item.decode("utf-8") if isinstance(raw_item, bytes) else raw_item
-                    return json.loads(item_str)
+                    item_data = json.loads(item_str)
+                    if symbols_filter and item_data.get("symbol", "").upper() not in [s.upper() for s in symbols_filter]:
+                        # Put back at end if not in filter
+                        self.client.rpush("nse_stock_queue", item_str)
+                    else:
+                        return item_data
             except Exception:
                 pass
 
         # SQLite Fallback Dequeue
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute("""
-                SELECT id, symbol, company_name, sector FROM persistent_stock_queue
-                WHERE status = 'pending'
-                ORDER BY id ASC LIMIT 1
-            """)
+            if symbols_filter:
+                placeholders = ",".join("?" * len(symbols_filter))
+                cursor.execute(f"""
+                    SELECT id, symbol, company_name, sector FROM persistent_stock_queue
+                    WHERE status = 'pending' AND UPPER(symbol) IN ({placeholders})
+                    ORDER BY id ASC LIMIT 1
+                """, [s.upper() for s in symbols_filter])
+            else:
+                cursor.execute("""
+                    SELECT id, symbol, company_name, sector FROM persistent_stock_queue
+                    WHERE status = 'pending'
+                    ORDER BY id ASC LIMIT 1
+                """)
             row = cursor.fetchone()
             if row:
                 task_id, symbol, company_name, sector = row
@@ -136,6 +175,16 @@ class ValkeyQueueManager:
             cursor = conn.cursor()
             cursor.execute("UPDATE persistent_stock_queue SET status = 'completed' WHERE symbol = ?", (symbol,))
             conn.commit()
+
+    def get_symbol_statuses(self) -> Dict[str, str]:
+        """Returns a mapping of symbol -> queue status ('pending', 'in_progress', 'completed')."""
+        statuses = {}
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT symbol, status FROM persistent_stock_queue")
+            for sym, stat in cursor.fetchall():
+                statuses[sym.upper()] = stat
+        return statuses
 
     def get_queue_status(self) -> Dict[str, Any]:
         """Returns statistics on pending and completed queue items."""
