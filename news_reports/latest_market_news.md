@@ -1,5 +1,5 @@
-# 🌐 General Market News & Macro Trend Report — 2026-11-05
-**Generated**: 2026-11-05 18:37:59 IST | **Classification**: Common / Macro News
+# 🌐 General Market News & Macro Trend Report — 2026-11-07
+**Generated**: 2026-11-07 20:44:34 IST | **Classification**: Common / Macro News
 
 > **Summary**: Key global and domestic macro drivers affecting Indian stock market movements (Crude Oil, Rupee/USD exchange rate, FII/DII institutional flows, inflation, and breaking news catalysts).
 
@@ -9,20 +9,20 @@
 
 | Indicator | Value | Daily Change | Key Impact on Indian Equities |
 | :--- | :---: | :---: | :--- |
-| **🛢️ Brent Crude Oil** | `$96.93` | `+2.44%` | 🔴 Headwind: Elevates import bill & inflation |
-| **🛢️ WTI Crude Oil** | `$89.6` | `+1.68%` | US energy benchmark; impacts global transport costs |
-| **💵 USD / INR (Rupee)** | `₹94.47` | `-0.29%` | 🟢 Stable rupee bolsters FII confidence & currency stability |
-| **💵 US Dollar Index (DXY)** | `101.57 pts` | `+0.06%` | Stronger dollar drives capital outflows from Emerging Markets |
-| **📈 US 10Y Bond Yield** | `4.89%` | `-1.17%` | Elevated US yields trigger FII equity sales into US debt |
-| **🇺🇸 S&P 500 Index** | `7688.62 pts` | `+1.58%` | Global risk appetite bellwether |
-| **💻 Nasdaq Composite** | `25736.51 pts` | `+1.44%` | Key lead indicator for Indian IT sector stocks |
-| **🪙 Gold Futures** | `$4131.3` | `+1.43%` | Safe-haven demand proxy amidst geopolitical stress |
+| **🛢️ Brent Crude Oil** | `$98.32` | `+0.03%` | 🔴 Headwind: Elevates import bill & inflation |
+| **🛢️ WTI Crude Oil** | `$90.83` | `+0.34%` | US energy benchmark; impacts global transport costs |
+| **💵 USD / INR (Rupee)** | `₹93.91` | `-0.58%` | 🟢 Stable rupee bolsters FII confidence & currency stability |
+| **💵 US Dollar Index (DXY)** | `102.3 pts` | `+0.74%` | Stronger dollar drives capital outflows from Emerging Markets |
+| **📈 US 10Y Bond Yield** | `4.86%` | `+0.45%` | Elevated US yields trigger FII equity sales into US debt |
+| **🇺🇸 S&P 500 Index** | `7376.86 pts` | `+0.31%` | Global risk appetite bellwether |
+| **💻 Nasdaq Composite** | `24579.43 pts` | `+1.09%` | Key lead indicator for Indian IT sector stocks |
+| **🪙 Gold Futures** | `$4074.9` | `-0.94%` | Safe-haven demand proxy amidst geopolitical stress |
 
 ---
 
 ## 🛢️ 1. Crude Oil Trend & Economic Impact
-**Current Brent Price**: `$96.93 / bbl` (+2.44%)  
-**Current WTI Price**: `$89.6 / bbl` (+1.68%)
+**Current Brent Price**: `$98.32 / bbl` (+0.03%)  
+**Current WTI Price**: `$90.83 / bbl` (+0.34%)
 
 ### Sectoral Transmission Channels:
 - **Oil Marketing Companies (IOC, BPCL, HPCL)**: Higher crude squeezes retail fuel gross marketing margins.
@@ -31,21 +31,21 @@
 - **Upstream Producers (ONGC, Oil India)**: Direct beneficiaries of higher realization per barrel.
 
 ### Latest Crude Oil Market Headlines:
-- **[www.pib.gov.in]** [IEW 2026: OPEC Outlook Projects India as the Largest Driver of Global Energy Demand Growth](https://news.google.com/rss/articles/CBMiekFVX3lxTE9WdTF2ZGdPVzladkF3bEJac0JuQjV6X295NHdvMGQ4ek1qY2c1ZVJNMUcxS3BFYmN5T0RUVFhNT3ZxX0pnV3ZQaG9QYUVwak1GYWNoNWVlU1JOaTRIYmIxTmtraE9pay16OFE4MUo4VEVBRlIxdmQ1ME5B?oc=5) *(Wed, 28 Jan 2026 08:00:00)* — 🟢 Bullish
+- **[www.pib.gov.in]** [IEW 2026: OPEC Outlook Projects India as the Largest Driver of Global Energy Demand Growth](https://news.google.com/rss/articles/CBMiekFVX3lxTFAybk5ENS1ZY2ZMSG56MzZUaXV6RHRTdXF5TXIwOUcyMHVEcnV2eWhHZUpPazc2V1dKdHVTNzh6OVpPQjlNeFhjMndRQmpIZHZxbGFuQldNcVYxTnZ0bF9KU1ZNVXRpZE1WZFVGeDJUZmFrWmg0R1RpUXlR?oc=5) *(Wed, 28 Jan 2026 08:00:00)* — 🟢 Bullish
   > IEW 2026: OPEC Outlook Projects India as the Largest Driver of Global Energy Demand Growth www.pib.gov.in...
 - **[World Economic Forum]** [This timeline shows how the price of oil responds to global events](https://news.google.com/rss/articles/CBMilwFBVV95cUxPUjZncVVJcG5tSnVjNXc3R2N3d3VtSzQ3Um5veFlhMWp4MjFuOVgxU0x4ajlyVlRTSUtaTExHb3hBaEZvRFdoaEJOaFlMY3hxZHc3RTRPaE9ySEkwd3BWZDVIdkluYVBvNmxPUXdFSEZ0RkpPWUhOMFdMeXc2LTV2bnNwUC12VHNyTjlKQ0hlV0Fxa0E3cXFv?oc=5) *(Fri, 17 Apr 2026 07:00:00)* — ⚪ Neutral
   > This timeline shows how the price of oil responds to global events World Economic Forum...
 - **[CNBC]** [Why India looks especially vulnerable as conflict rages in Middle East](https://news.google.com/rss/articles/CBMimwFBVV95cUxOQ3hGRVhJbnpFaWhSbnNMVnhGNXdMR0tSTmhBMTVUdXBsSlNMSTE3T0FZOGQyMFczUk9UQWthc1ZtMkhSdnR4QXdDX3VLb0dfektUc1Rvek9pLXVseHowOFVWcXRpR2pheHo4VnZtbmxrUG5Eb19tNUZCTTZkOFRPNFoxc2tDaEdGRFZ0WXBWMVJMb2p4Q1hsME1ZNNIBoAFBVV95cUxQV3BYaTBJSTV2YlgyTHNvWmVVMS1MLV9ZSFQxdnMzZl9VV0tOcTRwNlNYYU9XNzJfSkRVYlhfSkFGcWxzM0NXUng4MWJGdWNyeVEwRFBfWWFtM2F6cjNwamZfckNIYk05Rm9tZ3o0OUdpUGpia2lRTjRLWFlqNEZDVWZ3Y2FpRFFRR0RCOHUtZmNGZTBiVXozVTQ3eW4yWWRk?oc=5) *(Mon, 02 Mar 2026 08:00:00)* — ⚪ Neutral
   > Why India looks especially vulnerable as conflict rages in Middle East CNBC...
-- **[Reserve Bank of India]** [RBI Bulletin](https://news.google.com/rss/articles/CBMibEFVX3lxTE5abkd2WGtTU1RQalRpRVhDcUE5alpSeF9SWmpyelZpcG80Qk9vaHkxUktsUzRrYWpKcDdsYmpKeVFNOXVXODhVMUhjbVdHdjZsZ2lTZlZPd3VlNXlhZDFlZmNUOUZnN1RENDA4eQ?oc=5) *(Fri, 23 Jun 2023 07:00:00)* — ⚪ Neutral
-  > RBI Bulletin Reserve Bank of India...
-- **[MP-IDSA]** [OPEC+ and the Global Oil Market](https://news.google.com/rss/articles/CBMie0FVX3lxTE1vZ0VXSWF2TFQ1ZUdWWmhRRGxxb2otSzdFUUduVUhiX2padVlhWTdoanVaYnNScW4wTWJ1N2dzVnpwN21JakJmQTRIWW5ma25tYV9JQlUybWlVYmhWVWF0NUdIX3dYSjczN1VzN3Jpc25VRS1ya251dkVsdw?oc=5) *(Mon, 13 Feb 2023 08:00:00)* — ⚪ Neutral
-  > OPEC+ and the Global Oil Market MP-IDSA...
+- **[J.P. Morgan]** [Oil prices forecast: What’s next for oil in 2026 and beyond?](https://news.google.com/rss/articles/CBMifEFVX3lxTFBHY3BsWU0zZEY5VExIb3Y0RElSVHl3NmN6dE5yZmNZOWlYUGpDQ19sNV9hX2t4YkREOV95NHl1Z09qRjlPSno5SUFLQlU2cEU1YnZpNUtiUXIxaDVaRWotelFzM25fZDEtVDE2eW1vSzd3cEFFSGZqWTRUeks?oc=5) *(Fri, 27 Feb 2026 16:06:36)* — ⚪ Neutral
+  > Oil prices forecast: What’s next for oil in 2026 and beyond? J.P. Morgan...
+- **[Council on Foreign Relations]** [Oil Dependence and U.S. Foreign Policy](https://news.google.com/rss/articles/CBMic0FVX3lxTE50b2ZhOGt4UkNPSnNIRFFsUlBLNUFEc19vcTItVVJmT3FLcnRGTC1vTGVpYkMwOVNtYmZXaVNrYnZNZW1saTlYWkpQc25WT3ZtMkQ2UU5mTUF0UVFZV3FOX0V3c0thZk5Od0t2QTBtSVBEaEE?oc=5) *(Tue, 31 Mar 2026 15:58:41)* — ⚪ Neutral
+  > Oil Dependence and U.S. Foreign Policy Council on Foreign Relations...
 
 ---
 
 ## 💵 2. Indian Rupee (USD/INR) & Forex Dynamics
-**Current Exchange Rate**: `₹94.47 per USD` (-0.29%)
+**Current Exchange Rate**: `₹93.91 per USD` (-0.58%)
 
 ### Market Implications:
 - **IT & Tech Services (TCS, Infosys, Coforge)**: A weaker rupee boosts rupee revenue realizations from US-denominated billing.
@@ -60,10 +60,10 @@
   > India's RBI has spent half of $140 billion FX capital haul in rupee defence, bankers estimate Reuters...
 - **[Bloomberg.com]** [India Forex Reserves Log Record Weekly Drop on Rupee Defense](https://news.google.com/rss/articles/CBMisAFBVV95cUxOU3d3RC1lVy12MU5rcjhVZXRvRFlGc1hzMERLSGVlZWJ2cWZaMHc4TjdUN2VCOTNfQlM1SDdZazBXUVh5OEpobE9DV2tGb2dfaS11SEhYcWZsbTVIczFMVmxPRktnWE5QeTNVTUs5VHFXcWJFLWluU2NXRnBVNWZ0QUwyaUN2Q2ltWlRsZFZLUjJRSjlQLWFxWlNiSmNXa09PQ1VYcHR3eTBLU191Wk0zZQ?oc=5) *(Fri, 02 Oct 2026 07:00:00)* — ⚪ Neutral
   > India Forex Reserves Log Record Weekly Drop on Rupee Defense Bloomberg.com...
+- **[India Infoline]** [RBI's $5 Billion Rupee-Dollar Swap: What It Means and Why It Matters](https://news.google.com/rss/articles/CBMiogFBVV95cUxOQUVqS2NVaEdvNF9VZ19RSnpQYldRWEhWQVFnRlNWWk04b3FnSWlMbnZlZGdvOWJvbUFHVmJkZFBlUXBIclpxckpfa1V0cVZwUVpOV3BGekpqNXhYMzRTdkRnbDk3RE1BY2hfbXFuYTQyTGtSeWdyRWdvSVlTak1uQi1iSkpGVFd0eDNXdmVlUVYxNkJCQ1JMSDRRcUtZWlhOeGc?oc=5) *(Fri, 22 May 2026 07:00:00)* — ⚪ Neutral
+  > RBI's $5 Billion Rupee-Dollar Swap: What It Means and Why It Matters India Infoline...
 - **[CNBC]** [India unveils tough curbs on dollar demand to defend rupee](https://news.google.com/rss/articles/CBMimwFBVV95cUxPYzNGSVV4Mm52a2ppakRmRWJPNE5malNqWFotTktSQ1VGczFSRUFDRW95VmVMejBDd2RrUDlLTExzV1ZIUHlPVXlTSXd1VTJTV2lUUkxyQ0d4eld6YXE0Nm16QktmQkdWWXgtRl9WdzZBS0tuOGdldVFMOHNGX2Frb3pxdGRKdkIxMFA2M2VERWFHWjVxaHp4bWJQY9IBoAFBVV95cUxPS1NkcVh1N0ZGVER3MEtlTDcyTDJrZ2FBSGFnaVdEZTdfcWNzTFloenMyUkVTS0s4QmRyU04zZ1E5R29JT1dxTUszVEJla0o5RmV0ZVhfMVdYZGxZX291OVB6bVE2X2Zkc25QTFp5aDM4dXhkSXNkNEhSamk3VDc2WmNCdVhneU81VnRCSzRQRHZMRWdRV1NzcnhBTXRXUU9M?oc=5) *(Sat, 10 Oct 2026 07:00:00)* — ⚪ Neutral
   > India unveils tough curbs on dollar demand to defend rupee CNBC...
-- **[Reuters]** [India draws a bumper $136 billion in forex inflows, bolstering rupee defence](https://news.google.com/rss/articles/CBMiqAFBVV95cUxQb05GRzZpQ2VFMXEyVTVCdzFLd2NtYVBqYUNldVo3WXhybzRZTXctUFEwSkxzWF9TcmE1d3hmM2JNMnkycndvLXJreW1XZkE1elp4QU5Sc25tbERmMVhaMktXUlNWQkQzMkF1VVl0YmFtQUo4c2hqZGhFX21HdFlmR3NsMVJwanZSaG12M3MxaUVvLUxyOGlzbE8tWjRQM0VVYjliWFR0ams?oc=5) *(Wed, 02 Sep 2026 07:00:00)* — ⚪ Neutral
-  > India draws a bumper $136 billion in forex inflows, bolstering rupee defence Reuters...
 
 ---
 
@@ -74,14 +74,14 @@
 ### Latest Institutional & Market Flow Headlines:
 - **[Multibagg AI]** [Indian stock market rises on Rs 21,607 crore FII buying](https://news.google.com/rss/articles/CBMipAFBVV95cUxOdk5JbENaaXBMWTExNkN5dmNrRWw4THBvdGFMVmNVNTh0YnZ1RVlEekRaYkRidFQzeEdsWE00cWlodG9nc2dLRTZ2MnJQdzFvc0F4Rkx0T0FtN0xJRVZrUVI0SDZNZmhSMGY0MkRkM1Y2RTh2RTZaT0lscXFJRmRHMTQteHc5TDY0aVViTTI0UXZmNUV3QU1fM1BJMmx0TS1jV2VOdA?oc=5) *(Wed, 04 Nov 2026 15:02:16)* — 🟢 Bullish
   > Indian stock market rises on Rs 21,607 crore FII buying Multibagg AI...
-- **[Multibagg AI]** [Foreign institutional investors drive Sensex 3,000-point rebound](https://news.google.com/rss/articles/CBMiowFBVV95cUxPN0NWempER293RkFhOWZmaXVJbVlneFFETF85azlHNGtDd3k3cGJXWW0tQ0pWbmRRUV91THpKOENHTXlGcmxaNWNmNE5hTGhmUDVWUlhBc09jN3hPWWNKQ2g1YnFEVjdDei1palNxZUZpaGJhOFNmRUEwWEFJOUR2el9hbE5jb3RzTmZ3b3JWWTdXM25OSGNnUDd2R1JSSnZsbi00?oc=5) *(Thu, 05 Nov 2026 05:05:46)* — ⚪ Neutral
-  > Foreign institutional investors drive Sensex 3,000-point rebound Multibagg AI...
 - **[NiftyTrader]** [FIIs Turn Buyers on Friday, but October Selling Still Tops ₹51,000 Crore](https://news.google.com/rss/articles/CBMigAFBVV95cUxPekZBRTFIbGRheXBQalRmV3ZqQmI2ZHZMWlBZWnVTUC00QmkwUDBTWDZPZkpfVVlXMmp2ZFRJNnl2cmh3ZmlXWUF5NV9iSkpYOVNwQk10ZUxwZjc0UjFhdkxEQTRRWVFzYUJNNk9yRktWbjNBSk5FQWRRY3pGMjRJag?oc=5) *(Sat, 24 Oct 2026 07:00:00)* — ⚪ Neutral
   > FIIs Turn Buyers on Friday, but October Selling Still Tops ₹51,000 Crore NiftyTrader...
+- **[Multibagg AI]** [Foreign Institutional Investors Lead ₹13,802 Crore Flow Shift](https://news.google.com/rss/articles/CBMiogFBVV95cUxQZW04eFRpUE1yaG1JM2ZPRGY2X0hkQlc1aFZnSjRnWWJ0T3lUbm5iWVZEM2VnS1BoSWRNVVJkYlJ2eFVVSjltejl3UFFUZk1pSjh4SWNqeGNrU3dxV2lkYUpqNGR0d09qRWtSUFlGNkhneXVLZ2RXdkViV0dHemhVdktEd1hVb28tVmlkOFFSS0VKMkNVX092NWpWV0tROEo5VFE?oc=5) *(Fri, 06 Nov 2026 16:00:50)* — ⚪ Neutral
+  > Foreign Institutional Investors Lead ₹13,802 Crore Flow Shift Multibagg AI...
+- **[NiftyTrader]** [DIIs Absorb 106% of FII Selling, Yet Nifty Ends October 1 Down 0.88%](https://news.google.com/rss/articles/CBMigwFBVV95cUxQc3ppUW50dWYtd0xVQlNBTHB5LVZIVXk3REh6elpUdlhDQ2xoVXB6ekJKZWlYREUxcDhVTHdCSnRqLTBTSDBSUE13alBGNmxTSk80a3U4eVNiNUs2dWhhQkUzdFkzVlY5X1BBbGU5OG54aE5aLXBrX0dTbFUzYUl6ZTRZUQ?oc=5) *(Fri, 02 Oct 2026 07:00:00)* — 🔴 Bearish
+  > DIIs Absorb 106% of FII Selling, Yet Nifty Ends October 1 Down 0.88% NiftyTrader...
 - **[IBEF]** [Growing Power of India’s DIIs in Indian Equity Markets](https://news.google.com/rss/articles/CBMiZ0FVX3lxTE5WQm4tWUVvVXNyZHdTVVlPcm1halhBWGJyS21GZ1hmbldSeURBNnYyUVpYc0k1bTVDdmZ1SnQwVjI5UTVrS0Y3T3c4X29TSG1xY0hJa2NZdFdxZ3hnbmZCTmhBYjZaWUE?oc=5) *(Thu, 15 Jan 2026 08:00:00)* — ⚪ Neutral
   > Growing Power of India’s DIIs in Indian Equity Markets IBEF...
-- **[Alice Blue]** [DIIs Anchor Nifty - FII DII trading activity October 2026 Hits 5,089 crore](https://news.google.com/rss/articles/CBMidEFVX3lxTE1jOFBXNEwxbFc3a2Jkbkc0cUowU3hKajJTdHptaHFENFRhRi1JdXF3MDNwX3JNRzMwOENtR0x1cFpVX05UUFZ3eV9ETE45bHFzMFdUdDRTYnpyY1F3TkVuUlRsX3pYODhnWEJ2bTVhcXd2RUIx?oc=5) *(Wed, 07 Oct 2026 07:00:00)* — ⚪ Neutral
-  > DIIs Anchor Nifty - FII DII trading activity October 2026 Hits 5,089 crore Alice Blue...
 
 ---
 
@@ -90,18 +90,18 @@
 
 | Source | Headline | Published Time | Signal |
 | :--- | :--- | :--- | :---: |
-| **The Economic Times** | [Sebi approves net settlement of cash market trades for mutual funds](https://economictimes.indiatimes.com/markets/stocks/news/sebi-approves-net-settlement-of-cash-market-trades-for-mutual-funds/articleshow/135572968.cms) | Thu, 05 Nov 2026 17:41:45 | ⚪ Neutral |
-| **The Economic Times** | [11 smallcap stocks maintain over 10% profit margin in Q1 and Q2, shares rally 150-350% in FY27](https://economictimes.indiatimes.com/markets/stocks/news/11-smallcap-stocks-maintain-over-10-profit-margin-in-q1-and-q2-shares-rally-150-350-in-fy27/slideshow/135569927.cms) | Thu, 05 Nov 2026 16:04:09 | 🟢 Bullish |
-| **The Economic Times** | [EPL Q2 Results: Profit rises 4% YoY to Rs 111 crore](https://economictimes.indiatimes.com/markets/stocks/earnings/epl-q2-results-profit-rises-4-yoy-to-rs-111-crore/articleshow/135565623.cms) | Thu, 05 Nov 2026 14:02:12 | 🟢 Bullish |
-| **The Economic Times** | [Bharat Electronics among 5 stocks showing White Marubozu pattern](https://economictimes.indiatimes.com/markets/stocks/news/bharat-electronics-among-5-stocks-showing-white-marubozu-pattern/slideshow/135559687.cms) | Thu, 05 Nov 2026 10:21:12 | 🟢 Bullish |
-| **The Economic Times** | [Diwali Dhamaka stocks for portfolio: 10 shares with up to 34% upside potential ICICI Direct is bullish on](https://economictimes.indiatimes.com/markets/stocks/news/diwali-dhamaka-stocks-for-portfolio-10-shares-with-up-to-34-upside-potential-icici-direct-is-bullish-on/slideshow/135559522.cms) | Thu, 05 Nov 2026 10:17:01 | 🟢 Bullish |
-| **The Economic Times** | [Adani Enterprises among 4 Nifty 50 stocks showing bullish RSI upswing](https://economictimes.indiatimes.com/markets/stocks/news/adani-enterprises-among-4-nifty-50-stocks-showing-bullish-rsi-upswing/slideshow/135559417.cms) | Thu, 05 Nov 2026 10:11:41 | 🟢 Bullish |
-| **Livemint** | [Titan shines in Q2 Results 2026; Net profit doubles to ₹2,393 crore, aided by one-time gain; jewellery business up 24%](https://www.livemint.com/market/stock-market-news/titan-shines-in-q2-results-2026-net-profit-doubles-to-rs-2-393-crore-aided-by-one-time-gain-jewellery-business-up-24-11793880484831.html) | Thu, 05 Nov 2026 18:18:39 | 🟢 Bullish |
-| **Livemint** | [Bharti Airtel Q2 results: Profit jumps 31% to ₹8,888 crore, ARPU up ₹271 crore, telco stock rallies 121% in 3 yrs](https://www.livemint.com/market/stock-market-news/bharti-airtel-q2-results-profit-jumps-31-to-rs-8-888-crore-arpu-up-rs-271-telecom-stock-rallies-121-in-3-yrs-11793882129364.html) | Thu, 05 Nov 2026 18:08:53 | 🟢 Bullish |
-| **Livemint** | [Sebi allows mutual fund schemes to net cash market fund settlements](https://www.livemint.com/market/sebi-allows-mutual-fund-schemes-to-net-cash-market-fund-settlements-11793879902529.html) | Thu, 05 Nov 2026 18:06:56 | ⚪ Neutral |
-| **Livemint** | [Terrific Thursday for stock market! Nifty jumps 576 pts, Sensex 2,009 pts after US election results; bank, IT shares fly](https://www.livemint.com/market/stock-market-news/terrific-thursday-for-stock-market-nifty-jumps-576-pts-sensex-2-009-pts-after-us-election-results-bank-it-shares-fly-11793879260120.html) | Thu, 05 Nov 2026 17:37:14 | 🟢 Bullish |
-| **Livemint** | [Gold Price Prediction: After 20% crash, Gold may rise 20–25% by Dhanteras 2027; check price forecast - Buy or wait?](https://www.livemint.com/market/stock-market-news/gold-price-prediction-after-20-crash-gold-may-rise-20-25-by-dhanteras-2027-check-price-forecast-buy-or-wait-11793874721471.html) | Thu, 05 Nov 2026 17:13:12 | 🟢 Bullish |
-| **Livemint** | [168% rally in 3 yrs: After ₹270 dividend, auto ancillary stock to consider bonus, stock split - Do you own?](https://www.livemint.com/market/stock-market-news/168-rally-in-3-yrs-after-rs-270-dividend-auto-ancillary-stock-to-consider-bonus-stock-split-do-you-own-11793867159176.html) | Thu, 05 Nov 2026 17:06:14 | 🟢 Bullish |
+| **The Economic Times** | [Dalal Street Week Ahead: Nifty bulls come back to life, but 25,000–25,200 zone poses next test](https://economictimes.indiatimes.com/markets/stocks/news/dalal-street-week-ahead-nifty-bulls-come-back-to-life-but-2500025200-zone-poses-next-test/articleshow/135634291.cms) | Sat, 07 Nov 2026 16:37:31 | 🟢 Bullish |
+| **The Economic Times** | [Concurrent Gainers: 9 stocks gain for 5 days in a row](https://economictimes.indiatimes.com/markets/stocks/news/concurrent-gainers-9-stocks-gain-for-5-days-in-a-row/slideshow/135631187.cms) | Sat, 07 Nov 2026 13:41:56 | 🟢 Bullish |
+| **The Economic Times** | [Patakha stock picks! ICICI Bank, BEL, 6 other stocks with 62% to buy this Samvat 2083. See full list](https://economictimes.indiatimes.com/markets/stocks/news/patakha-stock-picks-icici-bank-bel-6-other-stocks-with-62-to-buy-this-samvat-2023-see-full-list/slideshow/135627923.cms) | Sat, 07 Nov 2026 11:13:51 | 🟢 Bullish |
+| **The Economic Times** | [Diwali shagun ke shares! Angel One selects 8 stocks with up to 50% upside to Buy this Diwali. How many do you own?](https://economictimes.indiatimes.com/markets/stocks/news/diwali-shagun-ke-shares-angel-one-selects-8-stocks-with-up-to-50-upside-to-buy-this-diwali-how-many-do-you-own/slideshow/135626837.cms) | Sat, 07 Nov 2026 10:14:51 | 🟢 Bullish |
+| **The Economic Times** | [Siemens Q2 Results: Profit grows 5% to Rs 504 crore](https://economictimes.indiatimes.com/markets/stocks/earnings/siemens-q2-results-profit-grows-5-to-rs-504-crore/articleshow/135605589.cms) | Fri, 06 Nov 2026 16:52:53 | 🟢 Bullish |
+| **The Economic Times** | [12 midcap stocks deliver returns of up to 136% in FY27 so far](https://economictimes.indiatimes.com/markets/stocks/news/12-midcap-stocks-deliver-returns-of-up-to-136-in-fy27-so-far/slideshow/135603584.cms) | Fri, 06 Nov 2026 15:33:29 | 🟢 Bullish |
+| **Livemint** | [₹90 dividend per share: This stock announces 900% payout - Do you own? Payment, record date, returns](https://www.livemint.com/market/stock-market-news/rs-90-dividend-per-share-this-stock-announces-900-payout-do-you-own-payment-record-date-returns-11794063019136.html) | Sat, 07 Nov 2026 20:23:10 | 🟢 Bullish |
+| **Livemint** | [Q2 results race: Samvardhana Motherson vs Uno Minda - Which auto ancillary stock scores better? Revenue, profit, target](https://www.livemint.com/market/stock-market-news/q2-results-race-samvardhana-motherson-vs-uno-minda-which-auto-ancillary-stock-scores-better-revenue-profit-target-11794054095084.html) | Sat, 07 Nov 2026 19:52:01 | 🟢 Bullish |
+| **Livemint** | [Dividend dhamaka: 4 high yield stocks from brokerages' Diwali stock picks for Samvat 2083- Annual return, target price](https://www.livemint.com/market/stock-market-news/dividend-dhamaka-4-high-yield-stocks-from-brokerages-diwali-stock-picks-for-samvat-2083-annual-return-target-price-11794058869190.html) | Sat, 07 Nov 2026 19:16:43 | 🟢 Bullish |
+| **Livemint** | [Diwali cheer missing? Nifty lights up, but your portfolio may be burning; what's driving the disconnect? SAMCO explains](https://www.livemint.com/market/stock-market-news/diwali-cheer-missing-nifty-lights-up-but-your-portfolio-may-be-burning-whats-driving-the-disconnect-samco-explains-11794050891575.html) | Sat, 07 Nov 2026 18:00:24 | ⚪ Neutral |
+| **Livemint** | [Diwali 2026 Muhurat trading: Why do NSE, BSE break the holiday rule for special live trading session? Explained](https://www.livemint.com/market/stock-market-news/diwali-2026-muhurat-trading-why-do-nse-bse-break-the-holiday-rule-for-special-live-trading-session-explained-11794054250580.html) | Sat, 07 Nov 2026 17:57:10 | ⚪ Neutral |
+| **Livemint** | [ONGC shares: Venezuela oil project hopes lift focus after Q2 results | Should you buy? Key levels to watch](https://www.livemint.com/market/stock-market-news/ongc-shares-venezuela-oil-project-hopes-lift-focus-after-q2-results-should-you-buy-key-levels-to-watch-11794051814943.html) | Sat, 07 Nov 2026 17:43:09 | 🟢 Bullish |
 | **Moneycontrol** | [ICICI Prudential Life Insurance to focus on growing absolute VNB amid slump in FY24](https://www.moneycontrol.com/news/business/icici-prudential-life-insurance-to-focusgrowing-absolute-vnb-amid-slumpfy24_17532041.html) | Tue, 23 Apr 2024 22:36:32 | 🔴 Bearish |
 | **Moneycontrol** | [Tata Elxsi Q4 net profit, revenue decline QoQ; firm declares dividend of Rs 70 per share](https://www.moneycontrol.com/news/business/tata-elxsi-q4-net-profit-revenue-decline-qoq-firm-declares-dividendrs-70-per-share_17532061.html) | Tue, 23 Apr 2024 18:51:45 | 🟢 Bullish |
 | **Moneycontrol** | [ICICI Pru Life Q4 net profit falls 26% to Rs 174 cr, insurer announces dividend](https://www.moneycontrol.com/news/business/icici-pru-life-q4-net-profit-falls-26-to-rs-174-cr-insurer-announces-dividend_17532101.html) | Tue, 23 Apr 2024 18:26:16 | 🟢 Bullish |
