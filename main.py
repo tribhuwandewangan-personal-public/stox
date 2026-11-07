@@ -203,7 +203,7 @@ def main():
             safe_print(f"🚀 [Started] {symbol:<10} ({company_name}) | Processing engines & quantitative synthesis...")
 
             try:
-                res = workflow.run_analysis(symbol, company_name, sector)
+                res = workflow.run_analysis(symbol, company_name, sector, force_refresh=args.force)
                 queue_mgr.mark_completed(symbol, task_id)
                 elapsed = time.time() - t_start
                 

@@ -1,6 +1,45 @@
-node_modules
-.DS_Store
-news_reports
-reports
-storage
+# Byte-compiled / optimized / DLL files
 __pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+
+# Local SQLite Databases & Task Queues (Keep DB out of git)
+*.db
+*.db-journal
+*.db-wal
+*.sqlite
+*.sqlite3
+storage/*.db
+storage/*.db-journal
+storage/*.db-wal
+storage/*.sqlite
+storage/*.sqlite3
+
+# Generated Excel Data & Markdown Reports
+reports/
+news_reports/
+*.xlsx
+*.xls
+NSE_Historical_Data.xlsx
+
+# OS & Editor Artifacts
+.DS_Store
+Thumbs.db
+ehthumbs.db
+.vscode/
+.idea/
+
+# Node / JS
+node_modules/
+
+# Logs & Temporary Scratch Files
+*.log
+scratch/
+scratch_*.py
+*.tmp

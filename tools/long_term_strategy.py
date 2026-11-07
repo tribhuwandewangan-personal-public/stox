@@ -70,6 +70,14 @@ class LongTermStrategyEngine:
 
         # Specific institutional multi-year ratings for key tracked symbols
         self.curated_profiles = {
+            "GROWW": {
+                "multiplier": 1.60,
+                "verdict": "STRONG BUY (Fintech & WealthTech Leader)",
+                "moat": "Wide Moat (India's Largest Active Client Broker)",
+                "horizon": "1-3 Years (Pre-IPO / Retail Expansion)",
+                "thesis": "Over 1.2 crore active NSE clients, fast-growing mutual fund and margin trading facility (MTF) book.",
+                "peers": ["BSE", "CDSL", "NSE"]
+            },
             "NSE": {
                 "multiplier": 1.55,
                 "verdict": "STRONG BUY (Core Monopoly Compounder)",

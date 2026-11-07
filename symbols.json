@@ -338,6 +338,13 @@
       "sector": "Information Technology",
       "sub_sector": "IT Services & Consulting",
       "exchange": "NSE"
+    },
+    {
+      "symbol": "GROWW",
+      "name": "Groww (Nextbillion Technology)",
+      "sector": "Capital Markets & Fintech",
+      "sub_sector": "Discount Broking & WealthTech Platform",
+      "exchange": "NSE"
     }
   ]
 }

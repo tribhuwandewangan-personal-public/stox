@@ -232,6 +232,14 @@ class EventsEngine:
                 "corporate_action": "Project Fortius Margin Recovery & Telecom Deal Wins",
                 "impact": "High Impact Tier-1 IT Catalyst"
             },
+            "GROWW": {
+                "earnings_date": "2026-11-22",
+                "earnings_quarter": "Q2 FY27 Financial Review & Active NSE Client Addition",
+                "dividend_ex_date": "2026-12-28",
+                "dividend_amount": "Pre-IPO Phase",
+                "corporate_action": "India Redomiciling & WealthTech Market Share Milestones",
+                "impact": "Fintech & Broking Moat Driver"
+            },
             "NSE": {
                 "earnings_date": "2026-11-20",
                 "earnings_quarter": "Q2 FY27 Financial Results & Index Turnover",
