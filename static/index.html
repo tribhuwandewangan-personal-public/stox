@@ -2338,28 +2338,181 @@ ${report}
       }
     }
 
+    function drawSparklineFallbackChart(symbol, sparkline, lastPrice) {
+      const canvas = document.getElementById('modalChartCanvas');
+      if (!canvas) return;
+
+      const dpr = window.devicePixelRatio || 1;
+      const container = canvas.parentElement || canvas;
+      const width = Math.max(container.clientWidth || canvas.offsetWidth || 0, 750);
+      const height = 340;
+
+      canvas.style.width = width + 'px';
+      canvas.style.height = height + 'px';
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, width, height);
+
+      const n = sparkline.length;
+      let minP = Math.min(...sparkline);
+      let maxP = Math.max(...sparkline);
+      if (!isFinite(minP) || minP <= 0) minP = 100;
+      if (!isFinite(maxP) || maxP <= minP) maxP = minP * 1.1;
+      const pad = (maxP - minP) * 0.1 || 5;
+      minP -= pad;
+      maxP += pad;
+      const rangeP = Math.max(maxP - minP, 0.01);
+
+      const plotW = width - 75;
+      const plotH = height - 50;
+      const padTop = 25;
+      const padLeft = 15;
+
+      function priceToY(p) {
+        return padTop + plotH - ((p - minP) / rangeP) * plotH;
+      }
+
+      // Grid Lines & Price Labels
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= 4; i++) {
+        const pVal = minP + (rangeP / 4) * i;
+        const y = priceToY(pVal);
+        ctx.beginPath();
+        ctx.moveTo(padLeft, y);
+        ctx.lineTo(padLeft + plotW, y);
+        ctx.stroke();
+
+        ctx.fillStyle = '#64748b';
+        ctx.font = '11px JetBrains Mono';
+        ctx.textAlign = 'left';
+        ctx.fillText(pVal.toFixed(1), padLeft + plotW + 6, y + 4);
+      }
+
+      // Gradient Fill
+      const isUp = sparkline[n - 1] >= sparkline[0];
+      const strokeColor = isUp ? '#10b981' : '#ef4444';
+      const grad = ctx.createLinearGradient(0, padTop, 0, padTop + plotH);
+      grad.addColorStop(0, isUp ? 'rgba(16, 185, 129, 0.25)' : 'rgba(239, 68, 68, 0.25)');
+      grad.addColorStop(1, 'rgba(0, 0, 0, 0.0)');
+
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) {
+        const x = padLeft + (i / (n - 1)) * plotW;
+        const y = priceToY(sparkline[i]);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.lineTo(padLeft + plotW, padTop + plotH);
+      ctx.lineTo(padLeft, padTop + plotH);
+      ctx.closePath();
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Trend Line
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) {
+        const x = padLeft + (i / (n - 1)) * plotW;
+        const y = priceToY(sparkline[i]);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+
+      // Status Badge
+      ctx.fillStyle = '#38bdf8';
+      ctx.font = 'bold 12px Inter, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(`📈 High-Resolution Price Trend (${n} sessions)`, padLeft, 16);
+
+      const curPrice = lastPrice || sparkline[n - 1];
+      ctx.fillStyle = strokeColor;
+      ctx.font = 'bold 13px JetBrains Mono, monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText(`Current: Rs. ${Number(curPrice).toLocaleString('en-IN')}`, padLeft + plotW, 16);
+    }
+
     async function loadAndRenderChart(symbol, days) {
+      const sym = (symbol || '').toUpperCase().trim();
+      const canvas = document.getElementById('modalChartCanvas');
+
+      // Immediate loading placeholder
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        const dpr = window.devicePixelRatio || 1;
+        const width = Math.max(canvas.parentElement?.clientWidth || canvas.offsetWidth || 0, 750);
+        const height = 340;
+        canvas.style.width = width + 'px';
+        canvas.style.height = height + 'px';
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+        ctx.scale(dpr, dpr);
+        ctx.clearRect(0, 0, width, height);
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '14px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(`⏳ Syncing real-time candlestick chart for ${sym}...`, width / 2, height / 2);
+      }
+
       try {
-        const canvas = document.getElementById('modalChartCanvas');
-        if (canvas) {
-          const ctx = canvas.getContext('2d');
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          // Show loading placeholder
-          canvas.style.background = 'rgba(255,255,255,0.02)';
+        const encodedSym = encodeURIComponent(sym);
+        const res = await fetch(`/api/history?symbol=${encodedSym}&days=${days}`);
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
         }
-        const res = await fetch(`/api/history?symbol=${symbol}&days=${days}`);
-        const data = safeJsonParse(await res.text());
-        activeChartData = data;
-        // Use double-rAF so the browser has completed layout before we size/draw the canvas
-        requestAnimationFrame(() => requestAnimationFrame(() => drawCandleChart(data)));
+        const text = await res.text();
+        const data = safeJsonParse(text);
+
+        if (data && data.candles && data.candles.length > 0) {
+          activeChartData = data;
+          requestAnimationFrame(() => requestAnimationFrame(() => drawCandleChart(data)));
+          return;
+        }
+
+        // If candles empty, fall back to sparkline
+        if (activeStockData && activeStockData.sparkline && activeStockData.sparkline.length >= 2) {
+          const lp = activeStockData.tech_output?.raw_indicators?.last_price;
+          drawSparklineFallbackChart(sym, activeStockData.sparkline, lp);
+          return;
+        }
+
+        drawCandleChart(data || { symbol: sym, candles: [] });
       } catch (e) {
-        console.error("Failed to load chart data", e);
-        const canvas = document.getElementById('modalChartCanvas');
+        console.warn("Notice: /api/history fetch fallback:", e);
+        // Fallback: Use cached stock sparkline if API connection is unavailable
+        if (activeStockData && activeStockData.sparkline && activeStockData.sparkline.length >= 2) {
+          const lp = activeStockData.tech_output?.raw_indicators?.last_price;
+          drawSparklineFallbackChart(sym, activeStockData.sparkline, lp);
+          return;
+        }
+
         if (canvas) {
+          const dpr = window.devicePixelRatio || 1;
+          const width = Math.max(canvas.parentElement?.clientWidth || canvas.offsetWidth || 0, 750);
+          const height = 340;
           const ctx = canvas.getContext('2d');
+          ctx.clearRect(0, 0, width, height);
+          ctx.fillStyle = 'rgba(239, 68, 68, 0.08)';
+          ctx.fillRect(20, 20, width - 40, height - 40);
+          ctx.strokeStyle = 'rgba(239, 68, 68, 0.35)';
+          ctx.strokeRect(20, 20, width - 40, height - 40);
+
           ctx.fillStyle = '#ef4444';
-          ctx.font = '14px Inter';
-          ctx.fillText('Chart data unavailable', 20, 60);
+          ctx.font = 'bold 15px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(`⚠️ Chart Data Temporarily Unavailable for ${sym}`, width / 2, height / 2 - 20);
+
+          ctx.fillStyle = '#94a3b8';
+          ctx.font = '13px Inter, sans-serif';
+          ctx.fillText(`Make sure the backend dashboard server is running at http://localhost:8765`, width / 2, height / 2 + 10);
+          ctx.fillStyle = '#38bdf8';
+          ctx.font = '12px JetBrains Mono, monospace';
+          ctx.fillText(`Run: .venv\\Scripts\\python.exe dashboard_server.py`, width / 2, height / 2 + 35);
         }
       }
     }
@@ -2478,21 +2631,25 @@ ${report}
       ctx.lineWidth = 1.2;
       ctx.strokeStyle = 'rgba(56, 189, 248, 0.6)';
       ctx.beginPath();
+      let startedUpper = false;
       for (let i = 0; i < n; i++) {
         if (candles[i].bb_upper != null) {
           const x = padLeft + (i / (n - 1)) * plotW;
           const y = priceToY(candles[i].bb_upper);
-          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          if (!startedUpper) { ctx.moveTo(x, y); startedUpper = true; }
+          else { ctx.lineTo(x, y); }
         }
       }
       ctx.stroke();
 
       ctx.beginPath();
+      let startedLower = false;
       for (let i = 0; i < n; i++) {
         if (candles[i].bb_lower != null) {
           const x = padLeft + (i / (n - 1)) * plotW;
           const y = priceToY(candles[i].bb_lower);
-          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          if (!startedLower) { ctx.moveTo(x, y); startedLower = true; }
+          else { ctx.lineTo(x, y); }
         }
       }
       ctx.stroke();
@@ -2501,11 +2658,13 @@ ${report}
       ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
+      let startedMiddle = false;
       for (let i = 0; i < n; i++) {
         if (candles[i].bb_middle != null) {
           const x = padLeft + (i / (n - 1)) * plotW;
           const y = priceToY(candles[i].bb_middle);
-          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          if (!startedMiddle) { ctx.moveTo(x, y); startedMiddle = true; }
+          else { ctx.lineTo(x, y); }
         }
       }
       ctx.stroke();

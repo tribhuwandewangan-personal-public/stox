@@ -365,6 +365,13 @@ def generate_markdown_viewer_html(title: str, md_content: str, raw_url: str) -> 
     return template.replace("{{TITLE}}", title).replace("{{RAW_URL}}", raw_url).replace("{{CONTENT}}", safe_md)
 
 class DashboardHandler(http.server.SimpleHTTPRequestHandler):
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Accept")
+        self.end_headers()
+
     def do_GET(self):
         parsed_path = urllib.parse.urlparse(self.path)
         path = parsed_path.path
@@ -391,6 +398,7 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
         elif path == "/api/stocks":
             self.send_response(200)
             self.send_header("Content-type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             stocks_data = get_all_stock_data()
             self.wfile.write(safe_json_dumps(stocks_data))
@@ -398,13 +406,23 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
 
         elif path.startswith("/api/history"):
             query = urllib.parse.parse_qs(parsed_path.query)
-            sym = query.get("symbol", [""])[0].upper()
-            days = int(query.get("days", [90])[0]) if query.get("days") else 90
+            sym = query.get("symbol", [""])[0].upper().strip()
+            raw_days = query.get("days", ["90"])[0]
+            try:
+                days = int(''.join(c for c in str(raw_days) if c.isdigit())) or 90
+            except Exception:
+                days = 90
+
+            try:
+                chart_data = tech_engine.get_chart_data(sym, limit_days=days) if sym else {"error": "Missing symbol", "candles": []}
+            except Exception as e:
+                print(f"Error fetching chart data for {sym}: {e}", flush=True)
+                chart_data = {"symbol": sym, "candles": [], "error": str(e)}
 
             self.send_response(200)
             self.send_header("Content-type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
-            chart_data = tech_engine.get_chart_data(sym, limit_days=days) if sym else {"error": "Missing symbol"}
             self.wfile.write(safe_json_dumps(chart_data))
             return
 
@@ -569,14 +587,17 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(safe_json_dumps(res))
             return
 
+class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
 def start_dashboard_server(port=None):
     if port is None:
         port = PORT
     os.makedirs(os.path.join(PROJECT_ROOT, "static"), exist_ok=True)
-    socketserver.TCPServer.allow_reuse_address = True
     for p in [port, port + 1, port + 2]:
         try:
-            with socketserver.TCPServer(("", p), DashboardHandler) as httpd:
+            with ThreadedTCPServer(("", p), DashboardHandler) as httpd:
                 print(f"🌐 [Realtime Dashboard Server] Running live at http://localhost:{p}", flush=True)
                 httpd.serve_forever()
                 break
