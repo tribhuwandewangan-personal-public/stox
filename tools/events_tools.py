@@ -191,6 +191,86 @@ class EventsEngine:
                 "dividend_amount": "Rs. 12.00 / share",
                 "corporate_action": "Active Demat Milestones & Transaction Volume Report",
                 "impact": "Market Infrastructure Driver"
+            },
+            "MOTHERSON": {
+                "earnings_date": "2026-11-13",
+                "earnings_quarter": "Q2 FY27 Consolidated Financial Results",
+                "dividend_ex_date": "2026-12-18",
+                "dividend_amount": "Rs. 0.65 / share",
+                "corporate_action": "Global Wiring Harness Orderbook & M&A Synergy Review",
+                "impact": "Auto Ancillary Momentum Catalyst"
+            },
+            "HAPPSTMNDS": {
+                "earnings_date": "2026-11-14",
+                "earnings_quarter": "Q2 FY27 Financial Results & GenAI Business Review",
+                "dividend_ex_date": "2026-12-04",
+                "dividend_amount": "Rs. 3.25 / share",
+                "corporate_action": "Strategic Digital Transformation & IT Capex Update",
+                "impact": "Midcap IT Turnaround Catalyst"
+            },
+            "SUPRIYA": {
+                "earnings_date": "2026-11-15",
+                "earnings_quarter": "Q2 FY27 Financial Results & USFDA Update",
+                "dividend_ex_date": "2026-12-08",
+                "dividend_amount": "Rs. 1.20 / share",
+                "corporate_action": "API Capacity Expansion & CDMO Pipeline Review",
+                "impact": "Pharma Smallcap High-Beta Catalyst"
+            },
+            "TANLA": {
+                "earnings_date": "2026-11-18",
+                "earnings_quarter": "Q2 FY27 Enterprise CPaaS Results",
+                "dividend_ex_date": "2026-12-15",
+                "dividend_amount": "Rs. 6.00 / share",
+                "corporate_action": "Wisely OTT & Enterprise Messaging Volume Disclosures",
+                "impact": "CPaaS Margin Rebound Watch"
+            },
+            "TECHM": {
+                "earnings_date": "2026-11-12",
+                "earnings_quarter": "Q2 FY27 Earnings & Turnaround Margin Roadmap",
+                "dividend_ex_date": "2026-11-25",
+                "dividend_amount": "Rs. 33.00 / share",
+                "corporate_action": "Project Fortius Margin Recovery & Telecom Deal Wins",
+                "impact": "High Impact Tier-1 IT Catalyst"
+            },
+            "NSE": {
+                "earnings_date": "2026-11-20",
+                "earnings_quarter": "Q2 FY27 Financial Results & Index Turnover",
+                "dividend_ex_date": "2026-12-22",
+                "dividend_amount": "Rs. 25.00 / share",
+                "corporate_action": "IPO Listing Roadmap & Equity Derivatives Market Share",
+                "impact": "Market Infrastructure Moat Driver"
+            },
+            "POLYCAB": {
+                "earnings_date": "2026-11-19",
+                "earnings_quarter": "Q2 FY27 Cables & FMEG Volume Growth",
+                "dividend_ex_date": "2026-12-14",
+                "dividend_amount": "Rs. 30.00 / share",
+                "corporate_action": "Domestic Infra & International Export Expansion",
+                "impact": "Cables Benchmark Catalyst"
+            },
+            "BEL": {
+                "earnings_date": "2026-11-11",
+                "earnings_quarter": "Q2 FY27 Defence Electronics Order Execution",
+                "dividend_ex_date": "2026-12-05",
+                "dividend_amount": "Rs. 1.80 / share",
+                "corporate_action": "MoD Radar & Electronic Warfare Contract Update",
+                "impact": "Defence PSU Benchmark"
+            },
+            "COFORGE": {
+                "earnings_date": "2026-11-15",
+                "earnings_quarter": "Q2 FY27 IT Services & BFS Orderbook",
+                "dividend_ex_date": "2026-11-28",
+                "dividend_amount": "Rs. 19.00 / share",
+                "corporate_action": "Cigniti Acquisition Synergies & Large Deal Announcements",
+                "impact": "Tier-2 IT Growth Leader"
+            },
+            "MUTHOOTFIN": {
+                "earnings_date": "2026-11-17",
+                "earnings_quarter": "Q2 FY27 Gold Loan AUM & Spread Update",
+                "dividend_ex_date": "2026-12-10",
+                "dividend_amount": "Rs. 24.00 / share",
+                "corporate_action": "Branch Network Expansion & Non-Gold Diversification",
+                "impact": "NBFC Lending Catalyst"
             }
         }
 

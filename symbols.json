@@ -1,6 +1,6 @@
 {
   "description": "List of NSE stock symbols for multi-agent RAG analysis and prediction",
-  "updated_at": "2026-11-05",
+  "updated_at": "2026-11-07",
   "default_timeframe_days": 1825,
   "symbols": [
     {
@@ -309,6 +309,34 @@
       "name": "Muthoot Finance Limited",
       "sector": "Banking & Financial Services",
       "sub_sector": "NBFC (Gold Loans)",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "HAPPSTMNDS",
+      "name": "Happiest Minds Technologies Limited",
+      "sector": "Information Technology",
+      "sub_sector": "Digital Transformation & Cloud Services",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "SUPRIYA",
+      "name": "Supriya Lifescience Limited",
+      "sector": "Healthcare & Pharmaceuticals",
+      "sub_sector": "Active Pharmaceutical Ingredients (API)",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "TANLA",
+      "name": "Tanla Platforms Limited",
+      "sector": "Information Technology",
+      "sub_sector": "CPaaS & Enterprise Cloud Communications",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "TECHM",
+      "name": "Tech Mahindra Limited",
+      "sector": "Information Technology",
+      "sub_sector": "IT Services & Consulting",
       "exchange": "NSE"
     }
   ]

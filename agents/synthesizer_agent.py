@@ -177,14 +177,24 @@ class MasterPredictionSynthesizerAgent:
                 )
                 action = f"Accumulate on dips in {entry} with protective stop loss at Rs. {sl} targeting Rs. {target}."
 
+        from tools.long_term_strategy import long_term_engine
+        lt_eval = long_term_engine.evaluate_long_term_stock(symbol, company_name, last_price=lp, short_verdict=verdict)
+
         return {
             "action_verdict": verdict,
             "confidence_rating": conf,
             "confidence_percentage": conf_pct,
             "when_to_buy_entry": entry,
             "when_to_sell_target": f"Rs. {target}",
+            "short_term_target": f"Rs. {target}",
+            "short_term_horizon": "1-3 Weeks (Swing/Momentum)",
             "stop_loss": f"Rs. {sl}",
             "holding_horizon": "Medium-Term (1-3 Months)" if verdict in ("BUY", "ACCUMULATE") else "Short-Term (1-3 Weeks)",
+            "long_term_signal": lt_eval,
+            "long_term_target": lt_eval["long_term_target"],
+            "long_term_verdict": lt_eval["long_term_verdict"],
+            "long_term_horizon": lt_eval["long_term_horizon"],
+            "suggested_long_term_peers": lt_eval["suggested_long_term_peers"],
             "chart_patterns": p_name,
             "upcoming_events_note": earnings_str,
             "key_rationale": rationale,

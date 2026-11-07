@@ -65,6 +65,7 @@ from graph import MultiAgentWorkflow
 from tools.historical_data_tools import HistoricalDataEngine
 from tools.tech_tools import TechnicalAnalysisEngine
 from tools.events_tools import EventsEngine
+from tools.long_term_strategy import long_term_engine
 from tools.symbol_search_tools import search_internet_symbols, add_symbol_to_json, remove_symbol_from_json
 
 PORT = int(os.getenv("DASHBOARD_PORT", "8765"))
@@ -141,7 +142,35 @@ def get_all_stock_data():
         except Exception:
             sparkline = []
 
+        # Compute Long-Term Strategy & Multi-Year Compounder Evaluation
+        last_price = 100.0
+        if tech_output and "raw_indicators" in tech_output and tech_output["raw_indicators"].get("last_price"):
+            last_price = float(tech_output["raw_indicators"]["last_price"])
+        elif sparkline:
+            last_price = float(sparkline[-1])
+
+        short_verdict = "HOLD"
+        if synth_output and "structured_signal" in synth_output:
+            short_verdict = synth_output["structured_signal"].get("action_verdict", "HOLD")
+
+        long_term_signal = long_term_engine.evaluate_long_term_stock(
+            symbol=sym,
+            name=name,
+            sector=sector,
+            last_price=last_price,
+            short_verdict=short_verdict
+        )
+
+        # Enrich structured_signal with long-term metrics
+        if synth_output and "structured_signal" in synth_output:
+            synth_output["structured_signal"]["long_term_signal"] = long_term_signal
+            synth_output["structured_signal"]["long_term_target"] = long_term_signal["long_term_target"]
+            synth_output["structured_signal"]["long_term_verdict"] = long_term_signal["long_term_verdict"]
+            synth_output["structured_signal"]["long_term_horizon"] = long_term_signal["long_term_horizon"]
+            synth_output["structured_signal"]["suggested_long_term_peers"] = long_term_signal["suggested_long_term_peers"]
+
         results.append({
+            "long_term_signal": long_term_signal,
             "symbol": sym,
             "name": name,
             "sector": sector,
