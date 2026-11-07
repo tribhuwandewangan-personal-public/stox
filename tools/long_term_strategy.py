@@ -238,7 +238,7 @@ class LongTermStrategyEngine:
                 "long_term_moat": cp["moat"],
                 "long_term_thesis": cp["thesis"],
                 "suggested_long_term_peers": cp["peers"],
-                "is_top_wealth_pick": "STRONG BUY" in cp["verdict"] or "BUY" in cp["verdict"]
+                "is_top_wealth_pick": any(w in cp["verdict"].upper() for w in ["STRONG BUY", "BUY", "ACCUMULATE"]) and not any(w in cp["verdict"].upper() for w in ["AVOID", "NEUTRAL", "HARVEST"])
             }
 
         # Dynamic heuristic based on sector and short-term verdict
