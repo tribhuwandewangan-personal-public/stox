@@ -2102,7 +2102,6 @@
             </div>
           `;
         }).join('');
-      } catch (e) { console.error("Stock fetch error", e); }
     }
 
     async function openModal(s) {
@@ -2978,100 +2977,6 @@ body{background:#090d16;color:#f3f4f6;font-family:'Inter',sans-serif;min-height:
   </div>
 
 </div>
-
-  <!-- Multi-Agent Architecture & Workflow Graph Modal -->
-  <div class="modal-overlay" id="workflowModalOverlay" onclick="if(event.target.id==='workflowModalOverlay') closeWorkflowModal()">
-    <div class="modal-card" style="max-width:920px;">
-      <span class="modal-close" onclick="closeWorkflowModal()">&times;</span>
-      <div style="margin-bottom:18px;">
-        <h2 style="font-family:'Outfit'; font-size:1.6rem; color:#fff; display:flex; align-items:center; gap:10px;">
-          <span>🕸️</span> LangGraph Multi-Agent Architecture & Pipeline
-        </h2>
-        <p style="color:var(--text-muted); font-size:0.85rem;">
-          StateGraph Orchestrator dispatching stocks from <code style="color:var(--accent-blue)">symbols.json</code> through parallel analyst agents to the Master Synthesizer.
-        </p>
-      </div>
-
-      <div style="background:rgba(0,0,0,0.4); border:1px solid var(--border-card); border-radius:14px; padding:20px; margin-bottom:18px;">
-        <!-- Visual Flow Diagram -->
-        <div style="display:flex; flex-direction:column; gap:16px; align-items:center;">
-          <!-- Top Row: Input & Cache -->
-          <div style="display:flex; gap:16px; justify-content:center; width:100%; flex-wrap:wrap;">
-            <div style="background:#1e293b; border:1px solid #38bdf8; border-radius:10px; padding:12px 18px; text-align:center; min-width:200px;">
-              <div style="font-size:0.75rem; color:#94a3b8;">INPUT DISPATCHER</div>
-              <div style="font-weight:700; color:#fff; font-size:1rem;">symbols.json (48 Stocks)</div>
-              <div style="font-size:0.7rem; color:#38bdf8;">Valkey / SQLite Queue</div>
-            </div>
-            <div style="display:flex; align-items:center; color:#38bdf8; font-size:1.4rem;">➔</div>
-            <div style="background:#1e293b; border:1px solid #10b981; border-radius:10px; padding:12px 18px; text-align:center; min-width:200px;">
-              <div style="font-size:0.75rem; color:#94a3b8;">INCREMENTAL CACHE</div>
-              <div style="font-weight:700; color:#fff; font-size:1rem;">SQLite (cache.db)</div>
-              <div style="font-size:0.7rem; color:#10b981;">&lt;12h Freshness Gate</div>
-            </div>
-          </div>
-
-          <div style="color:var(--text-muted); font-size:1rem;">▼ Parallel Execution (ThreadPoolExecutor) ▼</div>
-
-          <!-- Middle Row: 6 Parallel Analyst Agents -->
-          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:10px; width:100%;">
-            <div style="background:rgba(56,189,248,0.1); border:1px solid rgba(56,189,248,0.3); border-radius:8px; padding:10px 8px; text-align:center;">
-              <div style="font-size:1.2rem;">📈</div>
-              <div style="font-weight:600; font-size:0.78rem; color:#fff;">Historical RAG</div>
-              <div style="font-size:0.65rem; color:#94a3b8;">5Y Candles & Splits</div>
-            </div>
-            <div style="background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.3); border-radius:8px; padding:10px 8px; text-align:center;">
-              <div style="font-size:1.2rem;">📐</div>
-              <div style="font-weight:600; font-size:0.78rem; color:#fff;">Technical Agent</div>
-              <div style="font-size:0.65rem; color:#94a3b8;">Patterns & Bollinger</div>
-            </div>
-            <div style="background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.3); border-radius:8px; padding:10px 8px; text-align:center;">
-              <div style="font-size:1.2rem;">📰</div>
-              <div style="font-weight:600; font-size:0.78rem; color:#fff;">News & Sentiment</div>
-              <div style="font-size:0.65rem; color:#94a3b8;">Live Feed Scoring</div>
-            </div>
-            <div style="background:rgba(168,85,247,0.1); border:1px solid rgba(168,85,247,0.3); border-radius:8px; padding:10px 8px; text-align:center;">
-              <div style="font-size:1.2rem;">🌍</div>
-              <div style="font-weight:600; font-size:0.78rem; color:#fff;">Global Macro</div>
-              <div style="font-size:0.65rem; color:#94a3b8;">Yields, Crude & DXY</div>
-            </div>
-            <div style="background:rgba(236,72,153,0.1); border:1px solid rgba(236,72,153,0.3); border-radius:8px; padding:10px 8px; text-align:center;">
-              <div style="font-size:1.2rem;">🏢</div>
-              <div style="font-weight:600; font-size:0.78rem; color:#fff;">Fundamental & Events</div>
-              <div style="font-size:0.65rem; color:#94a3b8;">Earnings & Dividends</div>
-            </div>
-            <div style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); border-radius:8px; padding:10px 8px; text-align:center;">
-              <div style="font-size:1.2rem;">🛡️</div>
-              <div style="font-weight:600; font-size:0.78rem; color:#fff;">Risk Agent</div>
-              <div style="font-size:0.65rem; color:#94a3b8;">ATR Bounds & Stop Loss</div>
-            </div>
-          </div>
-
-          <div style="color:var(--text-muted); font-size:1rem;">▼ Synthesis & Final Action Signal ▼</div>
-
-          <!-- Bottom: Master Synthesizer -->
-          <div style="background:linear-gradient(135deg, rgba(56,189,248,0.2), rgba(16,185,129,0.2)); border:1px solid var(--accent-blue); border-radius:12px; padding:14px 24px; text-align:center; width:100%; max-width:540px;">
-            <div style="font-size:0.8rem; color:#38bdf8; font-weight:700;">MASTER PREDICTION SYNTHESIZER</div>
-            <div style="font-weight:700; color:#fff; font-size:1.1rem; margin:2px 0;">Ollama (qwen2.5:7b) Multi-Agent Decision Engine</div>
-            <div style="font-size:0.75rem; color:#e2e8f0;">Outputs: Action Verdict, Price Targets, Stop Loss, Horizon & Markdown Report</div>
-          </div>
-        </div>
-      </div>
-
-      <div style="display:flex; justify-content:flex-end;">
-        <button class="nav-btn" onclick="closeWorkflowModal()">Close</button>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    function openWorkflowModal() {
-      document.getElementById('workflowModalOverlay').style.display = 'flex';
-    }
-    function closeWorkflowModal() {
-      document.getElementById('workflowModalOverlay').style.display = 'none';
-    }
-  </script>
-
 </body>
 </html>`;
 
@@ -3113,7 +3018,7 @@ body{background:#090d16;color:#f3f4f6;font-family:'Inter',sans-serif;min-height:
           <div style="display:flex; gap:16px; justify-content:center; width:100%; flex-wrap:wrap;">
             <div style="background:#1e293b; border:1px solid #38bdf8; border-radius:10px; padding:12px 18px; text-align:center; min-width:200px;">
               <div style="font-size:0.75rem; color:#94a3b8;">INPUT DISPATCHER</div>
-              <div style="font-weight:700; color:#fff; font-size:1rem;">symbols.json (48 Stocks)</div>
+              <div style="font-weight:700; color:#fff; font-size:1rem;">symbols.json (49 Stocks)</div>
               <div style="font-size:0.7rem; color:#38bdf8;">Valkey / SQLite Queue</div>
             </div>
             <div style="display:flex; align-items:center; color:#38bdf8; font-size:1.4rem;">➔</div>
@@ -3185,6 +3090,5 @@ body{background:#090d16;color:#f3f4f6;font-family:'Inter',sans-serif;min-height:
       document.getElementById('workflowModalOverlay').style.display = 'none';
     }
   </script>
-
 </body>
 </html>
