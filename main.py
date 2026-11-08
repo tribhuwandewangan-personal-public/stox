@@ -29,10 +29,46 @@ if hasattr(sys.stderr, "reconfigure"):
     except Exception:
         pass
 
-if sys.stderr is None:
-    sys.stderr = open(os.devnull, "w", encoding="utf-8")
-if sys.stdout is None:
+# Thread-safe null-safe stream wrapper — prevents "lost sys.stderr" crashes
+# when parallel worker threads try to print after the main thread has exited
+# or when Python is running without an attached terminal (e.g. nohup / service).
+class _SafeStream:
+    """Wraps sys.stdout/stderr so writes never raise, even if the underlying
+    stream is closed or None (common in detached/parallel contexts on Windows)."""
+    def __init__(self, stream, encoding="utf-8"):
+        self._stream = stream
+        self.encoding = encoding
+        self.errors = "replace"
+    def write(self, s):
+        try:
+            if self._stream and not getattr(self._stream, "closed", False):
+                self._stream.write(s)
+        except Exception:
+            pass
+    def flush(self):
+        try:
+            if self._stream and not getattr(self._stream, "closed", False):
+                self._stream.flush()
+        except Exception:
+            pass
+    def fileno(self):
+        try:
+            return self._stream.fileno()
+        except Exception:
+            return -1
+    def isatty(self):
+        try:
+            return self._stream.isatty()
+        except Exception:
+            return False
+
+if sys.stdout is None or getattr(sys.stdout, "closed", False):
     sys.stdout = open(os.devnull, "w", encoding="utf-8")
+if sys.stderr is None or getattr(sys.stderr, "closed", False):
+    sys.stderr = open(os.devnull, "w", encoding="utf-8")
+
+sys.stdout = _SafeStream(sys.stdout)
+sys.stderr = _SafeStream(sys.stderr)
 
 from config import SYMBOLS_FILE_PATH, OLLAMA_MODEL, VERBOSE_LOGGING, MAX_PARALLEL_WORKERS, MAX_SYMBOL_WORKERS
 from storage.queue_manager import ValkeyQueueManager
@@ -52,9 +88,13 @@ def load_symbols():
     if not os.path.exists(SYMBOLS_FILE_PATH):
         print(f"Error: {SYMBOLS_FILE_PATH} not found.")
         return []
-    with open(SYMBOLS_FILE_PATH, "r", encoding="utf-8") as f:
-        data = json.load(f)
-        return data.get("symbols", [])
+    try:
+        with open(SYMBOLS_FILE_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data.get("symbols", [])
+    except Exception as e:
+        print(f"[Error] Failed to parse {SYMBOLS_FILE_PATH}: {e}")
+        return []
 
 def render_progress_bar(current: int, total: int, items_this_run: int, elapsed_this_run: float):
     """Renders an intuitive visual progress bar with percentage and accurate ETA."""
@@ -75,6 +115,117 @@ def render_progress_bar(current: int, total: int, items_this_run: int, elapsed_t
         eta_str = "ETA: calculating..."
     
     return f"Progress: [{bar}] {pct}% ({current}/{total}) | Elapsed: {int(elapsed_this_run)}s | {eta_str}"
+
+def build_quick_picks_section(symbols_list: list, results_dict: dict, cache_mgr) -> str:
+    """
+    Builds a compact 'Today's Quick Picks' section — HIGH-confidence BUY/ACCUMULATE
+    stocks ranked by Reward:Risk ratio. Designed to be scannable in under 30 seconds
+    on days when you don't have time to read the full report.
+    """
+    picks = []
+
+    for item in symbols_list:
+        sym   = item.get("symbol", "").upper()
+        cname = item.get("name", "")
+        sec   = item.get("sector", "")
+
+        # Resolve synthesis result (same cascade as main report)
+        synth_res = None
+        if sym in results_dict:
+            synth_res = results_dict[sym]["result"]
+        if not synth_res:
+            synth_res = cache_mgr.get_latest_agent_output(sym, "Master Prediction Synthesizer Agent", max_age_hours=168)
+        if not synth_res:
+            synth_res = cache_mgr.get_latest_agent_output(sym, "Master Prediction Synthesizer Agent", max_age_hours=None)
+        if not synth_res:
+            continue
+
+        sig      = synth_res.get("structured_signal", {})
+        verdict  = str(sig.get("action_verdict", "HOLD")).upper()
+        conf_raw = str(sig.get("confidence_rating", "")).upper()
+        entry    = sig.get("when_to_buy_entry", "N/A")
+        target   = sig.get("when_to_sell_target", "N/A")
+        sl       = sig.get("stop_loss", "N/A")
+        pattern  = sig.get("chart_patterns", "")
+        horizon  = sig.get("holding_horizon", "")
+        lp       = synth_res.get("last_price", "N/A")
+
+        # Only HIGH-confidence BUY or ACCUMULATE
+        if verdict not in ("BUY", "ACCUMULATE", "STRONG BUY"):
+            continue
+        if "HIGH" not in conf_raw:
+            continue
+
+        # Compute Reward:Risk ratio for ranking
+        rr = 0.0
+        upside = "N/A"
+        try:
+            _lp  = float(lp)
+            _sl  = float(str(sl).replace("Rs.", "").replace(",", "").strip())
+            _tgt = float(str(target).split("-")[0].replace("Rs.", "").replace(",", "").strip())
+
+            # Directional sanity: skip stocks with inverted stop loss (LLM hallucination)
+            if _sl >= _lp:   # stop loss must be BELOW price for BUY
+                continue
+            if _tgt <= _lp:  # target must be ABOVE price for BUY
+                continue
+
+            risk   = _lp - _sl          # always positive after guard above
+            reward = _tgt - _lp
+            rr     = round(reward / risk, 2)
+            upside = f"+{round((_tgt - _lp) / _lp * 100, 1)}%"
+
+            # Cap absurd R:R — indicates bad data
+            if rr > 20:
+                continue
+        except Exception:
+            upside = "N/A"
+
+        picks.append({
+            "sym":     sym,
+            "cname":   cname,
+            "sec":     sec,
+            "verdict": verdict,
+            "entry":   entry,
+            "target":  target,
+            "sl":      sl,
+            "lp":      lp,
+            "upside":  upside,
+            "rr":      rr,
+            "pattern": pattern,
+            "horizon": horizon,
+        })
+
+    # Rank by Reward:Risk descending, cap at top 7
+    picks.sort(key=lambda x: x["rr"], reverse=True)
+    top_picks = picks[:7]
+
+    if not top_picks:
+        return "\n## ⚡ Today's Quick Picks\n> No HIGH-confidence BUY signals found in this run.\n\n---\n"
+
+    lines = []
+    lines.append("\n## ⚡ Today's Quick Picks")
+    lines.append("> **For busy days** — HIGH-confidence BUY signals only, ranked by Reward:Risk ratio.")
+    lines.append("> Entry, target and stop-loss are all you need. No need to read individual stock sections.\n")
+    lines.append("| # | Symbol | Company | Sector | Last Price | Entry Range | Target | Stop Loss | Upside | R:R | Pattern |")
+    lines.append("|---|---|---|---|---|---|---|---|---|---|---|")
+
+    for i, p in enumerate(top_picks, 1):
+        rr_disp = f"{p['rr']:.1f}x" if p["rr"] else "N/A"
+        lines.append(
+            f"| {i} | **{p['sym']}** | {p['cname']} | {p['sec']} "
+            f"| Rs. {p['lp']} | {p['entry']} | {p['target']} "
+            f"| {p['sl']} | {p['upside']} | {rr_disp} | {p['pattern']} |"
+        )
+
+    lines.append("")
+    lines.append("> [!TIP]")
+    lines.append("> **How to use**: Place limit orders at the lower end of the Entry Range. Stop loss is non-negotiable.")
+    lines.append("> Stocks are sorted best Reward:Risk first — if you can only act on 1–2, start from the top.\n")
+    lines.append("---\n")
+
+    return "\n".join(lines)
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="NSE Multi-Agent RAG & Stock Prediction System")
@@ -176,8 +327,26 @@ def main():
 
         reports_dir = os.path.join(PROJECT_ROOT, "reports")
         os.makedirs(reports_dir, exist_ok=True)
-        timestamp_str = datetime.now().strftime('%Y%m%d_%H%M%S')
-        report_filepath = os.path.join(reports_dir, f"NSE_Stock_Predictions_{timestamp_str}.md")
+
+        # Daily report management: if second (or subsequent) analysis of the day,
+        # reuse and update today's existing file instead of creating a new report md file.
+        today_str = datetime.now().strftime('%Y%m%d')
+        today_prefix = f"NSE_Stock_Predictions_{today_str}"
+        today_files = sorted([
+            f for f in os.listdir(reports_dir)
+            if f.startswith(today_prefix) and f.endswith(".md") and not f.endswith("_latest.md")
+        ])
+
+        if today_files:
+            is_second_run_of_day = True
+            report_filepath = os.path.join(reports_dir, today_files[-1])
+            safe_print(f"📄 [Report Engine] Existing report for today found ({today_files[-1]}). Reusing and updating existing file (no new file created).")
+        else:
+            is_second_run_of_day = False
+            timestamp_str = datetime.now().strftime('%Y%m%d_%H%M%S')
+            report_filepath = os.path.join(reports_dir, f"NSE_Stock_Predictions_{timestamp_str}.md")
+            safe_print(f"📄 [Report Engine] First run of day. Creating daily report: {os.path.basename(report_filepath)}")
+
         latest_report_filepath = os.path.join(reports_dir, "NSE_Stock_Predictions_latest.md")
 
         report_markdown = []
@@ -255,6 +424,10 @@ def main():
             print(f"\n✨ All {total_symbols} queued stock tasks are already completed!")
 
         # Always format and save full report from newly processed results or SQLite cache
+        # --- Build Quick Picks section first (top of report, after header) ---
+        quick_picks_md = build_quick_picks_section(symbols_list, results_dict, cache_mgr)
+        report_markdown.append(quick_picks_md)
+
         for item in symbols_list:
             sym = item.get("symbol", "").upper()
             c_name = item.get("name", "")
@@ -312,7 +485,11 @@ def main():
         print("\n" + "═" * 80)
         print("🎉 REPORT GENERATION COMPLETE!")
         print(f"   • Total Pipeline Time: {int(time.time() - pipeline_start_time)} seconds")
-        print(f"   • Stock Predictions Report: {latest_report_filepath}")
+        if is_second_run_of_day:
+            print(f"   • Daily Report (Updated today's file, no new file created): {report_filepath}")
+        else:
+            print(f"   • Daily Report (First run of day, created): {report_filepath}")
+        print(f"   • Latest Pointer: {latest_report_filepath}")
         print(f"   • Multi-Source News Reports: {news_path}")
         print("═" * 80 + "\n")
     except KeyboardInterrupt:

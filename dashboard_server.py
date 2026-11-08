@@ -85,8 +85,12 @@ def get_workflow():
 def get_all_stock_data():
     symbols_list = []
     if os.path.exists(SYMBOLS_FILE_PATH):
-        with open(SYMBOLS_FILE_PATH, "r", encoding="utf-8") as f:
-            symbols_list = json.load(f).get("symbols", [])
+        try:
+            with open(SYMBOLS_FILE_PATH, "r", encoding="utf-8") as f:
+                symbols_list = json.load(f).get("symbols", [])
+        except Exception as e:
+            print(f"⚠️ [Dashboard Warning] Could not parse {SYMBOLS_FILE_PATH}: {e}", flush=True)
+            symbols_list = []
 
     # Get live queue statuses from SQLite queue
     queue_statuses = queue_mgr.get_symbol_statuses()
@@ -377,31 +381,57 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
         path = parsed_path.path
 
         if path == "/api/status":
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            
-            q_status = queue_mgr.get_queue_status()
-            shared_bulletin = cache_mgr.get_latest_market_bulletin()
-            macro_items = cache_mgr.get_cached_macro(max_age_hours=24)
+            try:
+                q_status = queue_mgr.get_queue_status()
+                shared_bulletin = cache_mgr.get_latest_market_bulletin()
+                macro_items = cache_mgr.get_cached_macro(max_age_hours=24)
 
-            resp_data = {
-                "model": OLLAMA_MODEL,
-                "timestamp": datetime.now().isoformat(),
-                "queue_status": q_status,
-                "bulletin": shared_bulletin,
-                "macro_items": macro_items
-            }
-            self.wfile.write(safe_json_dumps(resp_data))
+                resp_data = {
+                    "model": OLLAMA_MODEL,
+                    "timestamp": datetime.now().isoformat(),
+                    "queue_status": q_status,
+                    "bulletin": shared_bulletin,
+                    "macro_items": macro_items
+                }
+                body = safe_json_dumps(resp_data)
+                self.send_response(200)
+                self.send_header("Content-type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(body)
+            except Exception as e:
+                err_body = safe_json_dumps({"error": str(e)})
+                self.send_response(500)
+                self.send_header("Content-type", "application/json")
+                self.send_header("Content-Length", str(len(err_body)))
+                self.end_headers()
+                self.wfile.write(err_body)
             return
 
         elif path == "/api/stocks":
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.send_header("Access-Control-Allow-Origin", "*")
+            try:
+                stocks_data = get_all_stock_data()
+                body = safe_json_dumps(stocks_data)
+                self.send_response(200)
+                self.send_header("Content-type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(body)
+            except Exception as e:
+                err_body = safe_json_dumps({"error": str(e), "stocks": []})
+                self.send_response(500)
+                self.send_header("Content-type", "application/json")
+                self.send_header("Content-Length", str(len(err_body)))
+                self.end_headers()
+                self.wfile.write(err_body)
+            return
+
+        elif path == "/favicon.ico":
+            self.send_response(204)
+            self.send_header("Content-Length", "0")
             self.end_headers()
-            stocks_data = get_all_stock_data()
-            self.wfile.write(safe_json_dumps(stocks_data))
             return
 
         elif path.startswith("/api/history"):
@@ -419,44 +449,57 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                 print(f"Error fetching chart data for {sym}: {e}", flush=True)
                 chart_data = {"symbol": sym, "candles": [], "error": str(e)}
 
+            body = safe_json_dumps(chart_data)
             self.send_response(200)
             self.send_header("Content-type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
-            self.wfile.write(safe_json_dumps(chart_data))
+            self.wfile.write(body)
             return
 
         elif path.startswith("/api/events"):
             query = urllib.parse.parse_qs(parsed_path.query)
             sym = query.get("symbol", [""])[0].upper()
 
+            events_data = events_engine.fetch_stock_events(sym) if sym else {"upcoming_macro_catalysts": events_engine.get_upcoming_macro_events()}
+            body = safe_json_dumps(events_data)
             self.send_response(200)
             self.send_header("Content-type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
             self.end_headers()
-            events_data = events_engine.fetch_stock_events(sym) if sym else {"upcoming_macro_catalysts": events_engine.get_upcoming_macro_events()}
-            self.wfile.write(safe_json_dumps(events_data))
+            self.wfile.write(body)
             return
 
         elif path.startswith("/api/search-symbol"):
             query = urllib.parse.parse_qs(parsed_path.query)
             q_str = query.get("q", [""])[0].strip()
+            matches = search_internet_symbols(q_str) if q_str else []
+            body = safe_json_dumps({"query": q_str, "results": matches})
             self.send_response(200)
             self.send_header("Content-type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
             self.end_headers()
-            matches = search_internet_symbols(q_str) if q_str else []
-            self.wfile.write(safe_json_dumps({"query": q_str, "results": matches}))
+            self.wfile.write(body)
             return
 
         elif path == "/" or path == "/index.html":
-            self.send_response(200)
-            self.send_header("Content-type", "text/html; charset=utf-8")
-            self.end_headers()
             html_path = os.path.join(PROJECT_ROOT, "static", "index.html")
             if os.path.exists(html_path):
                 with open(html_path, "rb") as f:
-                    self.wfile.write(f.read())
+                    content = f.read()
+                self.send_response(200)
+                self.send_header("Content-type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(content)))
+                self.end_headers()
+                self.wfile.write(content)
             else:
-                self.wfile.write(b"Dashboard HTML missing.")
+                missing = b"Dashboard HTML missing."
+                self.send_response(404)
+                self.send_header("Content-type", "text/plain")
+                self.send_header("Content-Length", str(len(missing)))
+                self.end_headers()
+                self.wfile.write(missing)
             return
 
         elif path.startswith("/news_reports/") or path.startswith("/reports/") or path.startswith("/news/"):
@@ -589,16 +632,30 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
 
 class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     daemon_threads = True
-    allow_reuse_address = True
+    allow_reuse_address = sys.platform != "win32"
 
-def start_dashboard_server(port=None):
+def open_browser_delayed(url: str, delay: float = 0.5):
+    def _open():
+        import time
+        time.sleep(delay)
+        try:
+            import webbrowser
+            webbrowser.open(url)
+        except Exception:
+            pass
+    threading.Thread(target=_open, daemon=True).start()
+
+def start_dashboard_server(port=None, open_browser=True):
     if port is None:
         port = PORT
     os.makedirs(os.path.join(PROJECT_ROOT, "static"), exist_ok=True)
     for p in [port, port + 1, port + 2]:
         try:
             with ThreadedTCPServer(("", p), DashboardHandler) as httpd:
-                print(f"🌐 [Realtime Dashboard Server] Running live at http://localhost:{p}", flush=True)
+                server_url = f"http://localhost:{p}"
+                print(f"🌐 [Realtime Dashboard Server] Running live at {server_url}", flush=True)
+                if open_browser:
+                    open_browser_delayed(server_url, delay=0.5)
                 httpd.serve_forever()
                 break
         except OSError:
@@ -608,5 +665,6 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Real-Time Dashboard Server for NSE Stock Predictor")
     parser.add_argument("--port", type=int, default=PORT, help="Port to run the dashboard server on")
+    parser.add_argument("--no-browser", action="store_true", help="Do not automatically open the web browser")
     args, _ = parser.parse_known_args()
-    start_dashboard_server(port=args.port)
+    start_dashboard_server(port=args.port, open_browser=not args.no_browser)

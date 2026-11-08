@@ -4,6 +4,13 @@
   "default_timeframe_days": 1825,
   "symbols": [
     {
+      "symbol": "ABB",
+      "name": "ABB India Limited",
+      "sector": "Capital Goods & Electricals",
+      "sub_sector": "Electrification, Motion & Industrial Automation",
+      "exchange": "NSE"
+    },
+    {
       "symbol": "ADANIPORTS",
       "name": "Adani Ports and Special Economic Zone Limited",
       "sector": "Infrastructure & Logistics",

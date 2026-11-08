@@ -9,6 +9,7 @@ Features a sub-millisecond QuantitativeVerdictEngine and safety-capped Ollama sy
 
 import json
 import os
+import re
 from typing import Dict, Any, List
 from langchain_core.prompts import PromptTemplate
 
@@ -124,7 +125,10 @@ class MasterPredictionSynthesizerAgent:
             # HARD CEILING CLAMP: Entry ceiling must never be at or above target price
             entry_ceiling = min(entry_ceiling, round(target * 0.96, 2))
             entry_floor = min(entry_floor, round(entry_ceiling * 0.985, 2))
-            entry = f"Rs. {entry_floor:.2f} - {entry_ceiling:.2f}"
+            # Always display as lower - higher (floor must be strictly below ceiling)
+            if entry_floor >= entry_ceiling:
+                entry_floor = round(entry_ceiling * 0.985, 2)
+            entry = f"Rs. {min(entry_floor, entry_ceiling):.2f} - {max(entry_floor, entry_ceiling):.2f}"
 
             rationale = (
                 f"Bullish quantitative pattern {p_name} (Score: {p_score}/100) confirms strong accumulation structure for {symbol}. "
@@ -308,17 +312,104 @@ Return ONLY valid JSON.
                 # Fallback directly to the high-conviction quantitative verdict
                 parsed = quant_verdict
 
-        # Format markdown representation
-        report_text = f"""### 🎯 VERDICT: {parsed.get('action_verdict', 'HOLD')} | Confidence: {parsed.get('confidence_rating', 'MEDIUM (60%)')}
-- **When to Buy (Entry Range)**: {parsed.get('when_to_buy_entry', f'Rs. {last_price}')}
-- **When to Sell (Target Price)**: {parsed.get('when_to_sell_target', f'Rs. {suggested_tp}')}
-- **Stop Loss**: {parsed.get('stop_loss', f'Rs. {suggested_sl}')}
-- **Holding Horizon**: {parsed.get('holding_horizon', 'Medium-Term (1-3 Months)')}
-- **Technical Chart Patterns**: {parsed.get('chart_patterns', patterns_text)}
-- **Upcoming Events & Catalysts**: {parsed.get('upcoming_events_note', events_text)}
+        # ── Post-LLM sanity guard: enforce directional correctness ──────────
+        # The LLM sometimes hallucinates stop-loss above price for BUY,
+        # or target below price for BUY, etc.  Clamp back to safe values.
+        try:
+            _lp = float(last_price)
+            _verdict = str(parsed.get("action_verdict", "HOLD")).upper()
 
-**Key Rationale**: {parsed.get('key_rationale', '')}
-**Action Plan**: {parsed.get('actionable_recommendation', '')}
+            def _parse_rs(val):
+                """Extract first numeric value from an Rs./range string."""
+                nums = re.findall(r"[\d,]+\.?\d*", str(val).replace(",", ""))
+                return float(nums[0]) if nums else None
+
+            if _verdict in ("BUY", "ACCUMULATE"):
+                # Stop loss MUST be below last price
+                _sl = _parse_rs(parsed.get("stop_loss"))
+                if _sl is None or _sl >= _lp:
+                    _fallback_sl = quant_verdict.get("stop_loss", f"Rs. {round(_lp * 0.95, 2)}")
+                    parsed["stop_loss"] = _fallback_sl
+
+                # Target MUST be above last price
+                _tgt = _parse_rs(str(parsed.get("when_to_sell_target", "")).split("-")[0])
+                if _tgt is None or _tgt <= _lp:
+                    parsed["when_to_sell_target"] = quant_verdict.get("when_to_sell_target", f"Rs. {round(_lp * 1.08, 2)}")
+
+                # Entry range: lower bound must be <= last price
+                _entry_low = _parse_rs(str(parsed.get("when_to_buy_entry", "")).split("-")[0])
+                if _entry_low is not None and _entry_low > _lp * 1.05:
+                    parsed["when_to_buy_entry"] = quant_verdict.get("when_to_buy_entry", f"Rs. {round(_lp * 0.985, 2)} - Rs. {round(_lp * 1.015, 2)}")
+
+            elif _verdict == "SELL":
+                # Stop loss MUST be above last price
+                _sl = _parse_rs(parsed.get("stop_loss"))
+                if _sl is None or _sl <= _lp:
+                    parsed["stop_loss"] = quant_verdict.get("stop_loss", f"Rs. {round(_lp * 1.05, 2)}")
+        except Exception:
+            pass  # Never crash the report over a sanity check
+        # ────────────────────────────────────────────────────────────────────
+
+        # Pull long-term evaluation (always from quant_verdict since it runs deterministically)
+        lt = quant_verdict.get("long_term_signal", {})
+        lt_verdict   = lt.get("long_term_verdict",   quant_verdict.get("long_term_verdict",   "HOLD"))
+        lt_horizon   = lt.get("long_term_horizon",   quant_verdict.get("long_term_horizon",   "1-3 Years"))
+        lt_target    = lt.get("long_term_target",    quant_verdict.get("long_term_target",    "N/A"))
+        lt_upside    = lt.get("long_term_upside_pct", "N/A")
+        lt_moat      = lt.get("long_term_moat",      "N/A")
+        lt_thesis    = lt.get("long_term_thesis",    "")
+        lt_peers     = lt.get("suggested_long_term_peers", quant_verdict.get("suggested_long_term_peers", []))
+        lt_peers_str = ", ".join(lt_peers) if lt_peers else "N/A"
+
+        # Normalise entry / target / sl fields — ensure Rs. prefix is always present
+        def _rs(val, fallback):
+            v = str(val or fallback)
+            return v if v.startswith("Rs") else f"Rs. {v}"
+
+        entry_display   = parsed.get('when_to_buy_entry',   f'Rs. {last_price}')
+        target_display  = parsed.get('when_to_sell_target', f'Rs. {suggested_tp}')
+        sl_display      = parsed.get('stop_loss',           f'Rs. {suggested_sl}')
+
+        # Reward-to-Risk ratio (short-term)
+        try:
+            _lp  = float(last_price)
+            _sl  = float(str(sl_display).replace("Rs.", "").replace(",", "").strip())
+            _tgt = float(str(target_display).split("-")[0].replace("Rs.", "").replace(",", "").strip())
+            risk = max(0.01, _lp - _sl)
+            reward = max(0, _tgt - _lp)
+            rr_ratio = f"{reward / risk:.1f}x"
+            upside_pct_st = f"+{round((_tgt - _lp) / _lp * 100, 1)}%"
+        except Exception:
+            rr_ratio = "N/A"
+            upside_pct_st = "N/A"
+
+        # Format markdown representation
+        report_text = f"""### 🎯 SHORT-TERM VERDICT: {parsed.get('action_verdict', 'HOLD')} | Confidence: {parsed.get('confidence_rating', 'MEDIUM (60%)')}
+| Field | Details |
+|---|---|
+| **Entry Range** | {entry_display} |
+| **Target Price** | {target_display} |
+| **Stop Loss** | {sl_display} |
+| **Upside Potential** | {upside_pct_st} |
+| **Reward : Risk** | {rr_ratio} |
+| **Holding Horizon** | {parsed.get('holding_horizon', 'Short-Term (1-3 Weeks)')} |
+| **Chart Patterns** | {parsed.get('chart_patterns', patterns_text)} |
+| **Upcoming Events** | {parsed.get('upcoming_events_note', events_text)} |
+
+**📌 Key Rationale**: {parsed.get('key_rationale', quant_verdict.get('key_rationale', ''))}
+**⚡ Action Plan**: {parsed.get('actionable_recommendation', quant_verdict.get('actionable_recommendation', ''))}
+
+---
+### 📈 LONG-TERM OUTLOOK ({lt_horizon})
+| Field | Details |
+|---|---|
+| **Long-Term Signal** | {lt_verdict} |
+| **Long-Term Target** | {lt_target} |
+| **Expected Upside** | {lt_upside} |
+| **Competitive Moat** | {lt_moat} |
+| **Sector Peers** | {lt_peers_str} |
+
+**💡 Investment Thesis**: {lt_thesis}
 """
 
         return {

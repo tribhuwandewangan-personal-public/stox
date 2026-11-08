@@ -82,48 +82,79 @@ catch {
 $DashPort = 8765
 $DashUrl = "http://localhost:$DashPort"
 
-# Check if Dashboard Server is already listening
+# Check if Dashboard Server is already listening and responding on 8765, 8766, or 8767
 $serverRunning = $false
-try {
-    $dashSocket = New-Object System.Net.Sockets.TcpClient
-    $dashSocket.Connect("127.0.0.1", $DashPort)
-    $serverRunning = $true
-    $dashSocket.Close()
+$activePort = $DashPort
+
+foreach ($checkPort in @($DashPort, ($DashPort + 1), ($DashPort + 2))) {
+    try {
+        $statusResp = Invoke-RestMethod -Uri "http://127.0.0.1:$checkPort/api/status" -TimeoutSec 2 -ErrorAction Stop
+        if ($statusResp -and $statusResp.model) {
+            $serverRunning = $true
+            $activePort = $checkPort
+            break
+        }
+    }
+    catch {
+        $serverRunning = $false
+    }
 }
-catch {
-    $serverRunning = $false
-}
+$DashUrl = "http://localhost:$activePort"
 
 if ($serverRunning) {
     Write-Host "Realtime Dashboard Server running at $DashUrl" -ForegroundColor Green
 }
 else {
+    # Clean up any stale or hung dashboard server instances
+    try {
+        Get-CimInstance Win32_Process -Filter "Name = 'python.exe'" -ErrorAction SilentlyContinue | 
+            Where-Object { $_.CommandLine -like "*dashboard_server.py*" } | 
+            ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    }
+    catch {}
+
     Write-Host "Launching Realtime Dashboard Server on $DashUrl..." -ForegroundColor Yellow
-    Start-Process -FilePath "uv" -ArgumentList @("run", "python", "$ScriptDir\dashboard_server.py", "--port", "$DashPort") -WindowStyle Hidden
     
-    # Wait briefly for server to bind
-    $retries = 6
+    # Prefer project .venv Python directly for reliable startup
+    $venvPy = Join-Path $ScriptDir ".venv\Scripts\python.exe"
+    if (Test-Path $venvPy) {
+        Start-Process -FilePath $venvPy -ArgumentList @("$ScriptDir\dashboard_server.py", "--port", "$DashPort") -WorkingDirectory $ScriptDir -WindowStyle Hidden
+    }
+    elseif (Get-Command uv -ErrorAction SilentlyContinue) {
+        Start-Process -FilePath "uv" -ArgumentList @("run", "python", "$ScriptDir\dashboard_server.py", "--port", "$DashPort") -WorkingDirectory $ScriptDir -WindowStyle Hidden
+    }
+    else {
+        Start-Process -FilePath "python" -ArgumentList @("$ScriptDir\dashboard_server.py", "--port", "$DashPort") -WorkingDirectory $ScriptDir -WindowStyle Hidden
+    }
+    
+    # Wait for server to bind and answer HTTP requests (Python library imports take ~7-9 seconds on Windows)
+    $retries = 25
     while ($retries -gt 0) {
         Start-Sleep -Milliseconds 500
-        try {
-            $testSocket = New-Object System.Net.Sockets.TcpClient
-            $testSocket.Connect("127.0.0.1", $DashPort)
-            $serverRunning = $true
-            $testSocket.Close()
-            break
+        foreach ($checkPort in @($DashPort, ($DashPort + 1), ($DashPort + 2))) {
+            try {
+                $statusResp = Invoke-RestMethod -Uri "http://127.0.0.1:$checkPort/api/status" -TimeoutSec 2 -ErrorAction Stop
+                if ($statusResp -and $statusResp.model) {
+                    $serverRunning = $true
+                    $activePort = $checkPort
+                    break
+                }
+            }
+            catch {}
         }
-        catch {}
+        if ($serverRunning) { break }
         $retries--
     }
+    $DashUrl = "http://localhost:$activePort"
     if ($serverRunning) {
         Write-Host "Realtime Dashboard Server started successfully at $DashUrl" -ForegroundColor Green
     }
     else {
-        Write-Host "Notice: Dashboard background process launched at $DashUrl" -ForegroundColor DarkYellow
+        Write-Host "Notice: Dashboard background process launched. Connecting to $DashUrl..." -ForegroundColor DarkYellow
     }
 }
 
-# Automatically launch browser
+# Automatically launch browser once server port is confirmed
 try {
     Start-Process $DashUrl
     Write-Host "Opening dashboard in web browser: $DashUrl" -ForegroundColor Cyan

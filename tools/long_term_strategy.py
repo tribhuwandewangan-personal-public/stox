@@ -70,6 +70,14 @@ class LongTermStrategyEngine:
 
         # Specific institutional multi-year ratings for key tracked symbols
         self.curated_profiles = {
+            "ABB": {
+                "multiplier": 1.48,
+                "verdict": "STRONG BUY (Industrial Automation Leader)",
+                "moat": "Wide Moat (Electrification & Motion MNC Duopoly)",
+                "horizon": "1-3 Years (Capex & Automation Wave)",
+                "thesis": "Dominant global MNC player in industrial robotics, drives, energy-efficient motors, and electrification equipment.",
+                "peers": ["POWERINDIA", "CGPOWER", "LT", "TARIL"]
+            },
             "GROWW": {
                 "multiplier": 1.60,
                 "verdict": "STRONG BUY (Fintech & WealthTech Leader)",
