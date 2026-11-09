@@ -9,7 +9,6 @@ import os
 import sys
 import json
 import sqlite3
-import contextlib
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 
@@ -19,6 +18,9 @@ if PROJECT_ROOT not in sys.path:
 
 from config import CACHE_DB_PATH
 from storage.cache_manager import CacheManager
+from tools.yf_quiet import silence_yfinance_logging
+
+silence_yfinance_logging()
 
 
 class EventsEngine:
@@ -28,7 +30,7 @@ class EventsEngine:
         self._init_events_table()
 
     def _init_events_table(self):
-        with sqlite3.connect(self.db_path) as conn:
+        with self.cache_manager._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS events_cache (
@@ -42,9 +44,9 @@ class EventsEngine:
     def get_upcoming_macro_events(self) -> List[Dict[str, Any]]:
         """
         Returns scheduled high-impact macroeconomic events and policy meetings.
-        Provides date, impact level, and affected sectors.
+        Provides date, impact level, and affected sectors. Past events are dropped.
         """
-        return [
+        events = [
             {
                 "event_name": "India CPI Inflation Release (MoM/YoY)",
                 "date": "2026-11-12",
@@ -88,11 +90,13 @@ class EventsEngine:
                 "note": "Dictates Brent crude price trajectory and petrochemical refining margins."
             }
         ]
+        today = datetime.now().strftime("%Y-%m-%d")
+        return [e for e in events if e["date"] >= today]
 
-    def _get_curated_corporate_calendar(self, symbol: str) -> Dict[str, Any]:
+    def _get_curated_corporate_calendar(self, symbol: str) -> Optional[Dict[str, Any]]:
         """
-        Curated institutional corporate calendar for high-visibility NSE stocks.
-        Provides realistic quarterly results, dividend dates, and corporate actions.
+        Curated (hand-maintained, NOT live-verified) corporate calendar for some high-visibility NSE stocks.
+        Returns None when the symbol is not curated or the curated earnings date has already passed.
         """
         sym = symbol.upper().strip()
         calendar_map = {
@@ -282,22 +286,22 @@ class EventsEngine:
             }
         }
 
-        if sym in calendar_map:
-            return calendar_map[sym]
+        entry = calendar_map.get(sym)
+        today = datetime.now().strftime("%Y-%m-%d")
+        if entry and (entry.get("earnings_date") or "") >= today:
+            return entry
+        return None
 
-        # General dynamic fallback for any other symbol based on current date
-        now = datetime.now()
-        est_earnings = (now + timedelta(days=12 + (hash(sym) % 15))).strftime("%Y-%m-%d")
-        est_div_ex = (now + timedelta(days=25 + (hash(sym) % 20))).strftime("%Y-%m-%d")
-
-        return {
-            "earnings_date": est_earnings,
-            "earnings_quarter": "Q2 FY27 Earnings Announcement",
-            "dividend_ex_date": est_div_ex,
-            "dividend_amount": "Interim Dividend Expected",
-            "corporate_action": "Quarterly Board Review & Financial Results",
-            "impact": "Standard Corporate Earnings Catalyst"
-        }
+    def get_cached_events(self, symbol: str) -> Dict[str, Any]:
+        """Read-only: last stored events for a symbol regardless of age ({} if none). Never touches the network."""
+        try:
+            with self.cache_manager._get_connection() as conn:
+                row = conn.execute(
+                    "SELECT events_data FROM events_cache WHERE symbol = ?", (symbol.upper().strip(),)
+                ).fetchone()
+            return json.loads(row[0]) if row else {}
+        except Exception:
+            return {}
 
     def fetch_stock_events(self, symbol: str) -> Dict[str, Any]:
         """
@@ -307,15 +311,17 @@ class EventsEngine:
         symbol_clean = symbol.upper().strip()
 
         # Check SQLite cache first
-        with sqlite3.connect(self.db_path) as conn:
+        with self.cache_manager._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT updated_at, events_data FROM events_cache WHERE symbol = ?", (symbol_clean,))
             row = cursor.fetchone()
             if row:
                 try:
                     updated_dt = datetime.fromisoformat(row[0])
-                    if (datetime.now() - updated_dt).total_seconds() < 48 * 3600:
-                        return json.loads(row[1])
+                    cached_events = json.loads(row[1])
+                    ttl = 3600 if cached_events.get("source") == "unavailable" else 48 * 3600
+                    if (datetime.now() - updated_dt).total_seconds() < ttl:
+                        return cached_events
                 except Exception:
                     pass
 
@@ -331,11 +337,9 @@ class EventsEngine:
             import yfinance as yf
             for cand in candidates:
                 try:
-                    with open(os.devnull, 'w', encoding='utf-8', errors='replace') as devnull:
-                        with contextlib.redirect_stderr(devnull), contextlib.redirect_stdout(devnull):
-                            ticker = yf.Ticker(cand)
-                            cal = ticker.calendar
-                            info = ticker.info or {}
+                    ticker = yf.Ticker(cand)
+                    cal = ticker.calendar
+                    info = ticker.info or {}
 
                     earnings_dt_val = None
                     if cal is not None:
@@ -346,23 +350,37 @@ class EventsEngine:
                         elif hasattr(cal, "loc") and "Earnings Date" in cal.index:
                             earnings_dt_val = cal.loc["Earnings Date"].values[0]
 
+                    today_str = datetime.now().strftime("%Y-%m-%d")
                     ex_div_val = info.get("exDividendDate") or info.get("dividendDate")
                     ex_div_str = datetime.fromtimestamp(ex_div_val).strftime("%Y-%m-%d") if ex_div_val else None
+                    if ex_div_str and ex_div_str < today_str:
+                        ex_div_str = None  # last ex-date already passed -> not an upcoming event
 
-                    if earnings_dt_val or ex_div_str:
-                        if isinstance(earnings_dt_val, list) and len(earnings_dt_val) > 0:
+                    earnings_str = None
+                    if isinstance(earnings_dt_val, (list, tuple)):
+                        if len(earnings_dt_val) > 0:
                             earnings_str = str(earnings_dt_val[0])[:10]
-                        else:
-                            earnings_str = str(earnings_dt_val)[:10] if earnings_dt_val else "Upcoming Q2 FY27"
+                    elif earnings_dt_val is not None:
+                        earnings_str = str(earnings_dt_val)[:10]
+                    if earnings_str and earnings_str < today_str:
+                        earnings_str = None
 
+                    if earnings_str or ex_div_str:
+                        days_to_results = None
+                        if earnings_str:
+                            try:
+                                days_to_results = (datetime.strptime(earnings_str, "%Y-%m-%d") - datetime.now()).days + 1
+                            except ValueError:
+                                days_to_results = None
+                        div_rate = info.get("dividendRate")
                         events_found = {
                             "symbol": symbol_clean,
                             "earnings_date": earnings_str,
-                            "earnings_quarter": "Q2 FY27 Earnings Release",
-                            "dividend_ex_date": ex_div_str or "N/A",
-                            "dividend_amount": f"Rs. {info.get('dividendRate', 0.0):.2f}" if info.get('dividendRate') else "N/A",
-                            "corporate_action": "Board Meeting & Results Disclosure",
-                            "impact": "High Volatility Catalyst",
+                            "earnings_quarter": "Quarterly Results" if earnings_str else None,
+                            "dividend_ex_date": ex_div_str,
+                            "dividend_amount": f"Rs. {float(div_rate):.2f} / share" if (ex_div_str and div_rate) else None,
+                            "corporate_action": "Board Meeting & Results Disclosure" if earnings_str else None,
+                            "impact": "High (results within 7 days)" if (days_to_results is not None and days_to_results <= 7) else "Normal",
                             "source": "Live Market Feed"
                         }
                         break
@@ -373,16 +391,28 @@ class EventsEngine:
 
         if not events_found:
             curated = self._get_curated_corporate_calendar(symbol_clean)
-            events_found = {
-                "symbol": symbol_clean,
-                "earnings_date": curated.get("earnings_date"),
-                "earnings_quarter": curated.get("earnings_quarter"),
-                "dividend_ex_date": curated.get("dividend_ex_date"),
-                "dividend_amount": curated.get("dividend_amount"),
-                "corporate_action": curated.get("corporate_action"),
-                "impact": curated.get("impact"),
-                "source": "Institutional Calendar Verified"
-            }
+            if curated:
+                events_found = {
+                    "symbol": symbol_clean,
+                    "earnings_date": curated.get("earnings_date"),
+                    "earnings_quarter": curated.get("earnings_quarter"),
+                    "dividend_ex_date": curated.get("dividend_ex_date"),
+                    "dividend_amount": curated.get("dividend_amount"),
+                    "corporate_action": curated.get("corporate_action"),
+                    "impact": curated.get("impact"),
+                    "source": "Curated Calendar (not live-verified)"
+                }
+            else:
+                events_found = {
+                    "symbol": symbol_clean,
+                    "earnings_date": None,
+                    "earnings_quarter": None,
+                    "dividend_ex_date": None,
+                    "dividend_amount": None,
+                    "corporate_action": None,
+                    "impact": "Normal",
+                    "source": "unavailable"
+                }
 
         # Add upcoming macroeconomic events
         macro_events = self.get_upcoming_macro_events()
@@ -390,7 +420,7 @@ class EventsEngine:
 
         # Save to SQLite events_cache
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self.cache_manager._get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
                     INSERT OR REPLACE INTO events_cache (symbol, updated_at, events_data)

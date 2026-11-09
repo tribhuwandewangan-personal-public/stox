@@ -1,1 +1,3 @@
-"""Storage module stubs for queue and cache management."""
+"""
+Storage package initialization.
+"""

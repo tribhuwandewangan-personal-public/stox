@@ -32,6 +32,7 @@ if PROJECT_ROOT not in sys.path:
 
 from config import SYMBOLS_FILE_PATH, VERBOSE_LOGGING
 from storage.cache_manager import CacheManager
+from tools.macro_tools import GlobalMacroEngine
 
 
 def clean_text(text: str) -> str:
@@ -101,20 +102,6 @@ class NewsSentimentEngine:
                 seen_titles.add(norm_title)
                 fetched_items.append(item)
 
-        # Fallback if offline
-        if not fetched_items:
-            now_iso = datetime.now().isoformat()
-            fetched_items.append({
-                "symbol": symbol,
-                "url": f"http://local_fallback_{symbol}",
-                "title": f"{symbol} Stock Analysis & Sector Trends",
-                "snippet": f"Recent market updates for {symbol} indicate balanced trading activity on the National Stock Exchange.",
-                "source": "Market Feed",
-                "pub_date": now_iso,
-                "sentiment_score": 0.1,
-                "sentiment_label": "Mildly Bullish"
-            })
-
         if fetched_items:
             self.cache_manager.save_news(symbol, fetched_items)
 
@@ -167,60 +154,43 @@ class NewsSentimentEngine:
 
         return items
 
+    # Telemetry names used by the report -> canonical indicator names in tools/macro_tools.py
+    _TELEMETRY_NAMES = {
+        "Brent Crude Oil": "Brent Crude Oil",
+        "WTI Crude Oil": "WTI Crude Oil",
+        "USD / INR (Rupee)": "USD / INR (Rupee)",
+        "US Dollar Index (DXY)": "US Dollar Index (DXY)",
+        "US 10Y Treasury Yield": "US 10Y Treasury Yield",
+        "S&P 500 Index": "S&P 500",
+        "Nasdaq Composite": "Nasdaq",
+        "Gold Futures": "Gold Futures",
+    }
+    _TELEMETRY_UNITS = {
+        "Brent Crude Oil": "USD/bbl", "WTI Crude Oil": "USD/bbl", "USD / INR (Rupee)": "INR",
+        "US Dollar Index (DXY)": "pts", "US 10Y Treasury Yield": "%", "S&P 500 Index": "pts",
+        "Nasdaq Composite": "pts", "Gold Futures": "USD/oz",
+    }
+
     def fetch_market_macro_telemetry(self) -> Dict[str, Any]:
         """
-        Pulls real-time financial market indicators (Crude Oil, USD/INR, DXY, S&P 500, Nasdaq, Gold, Yields)
-        using yfinance with graceful fallbacks.
+        Real market indicators only (shared parallel fetch + cache in GlobalMacroEngine, max 1h old).
+        Indicators that could not be fetched are simply absent from the result -- nothing is invented.
         """
-        indicators = {
-            "Brent Crude Oil": {"ticker": "BZ=F", "unit": "USD/bbl", "category": "Energy"},
-            "WTI Crude Oil": {"ticker": "CL=F", "unit": "USD/bbl", "category": "Energy"},
-            "USD / INR (Rupee)": {"ticker": "USDINR=X", "unit": "INR", "category": "Currency"},
-            "US Dollar Index (DXY)": {"ticker": "DX-Y.NYB", "unit": "pts", "category": "Currency"},
-            "US 10Y Treasury Yield": {"ticker": "^TNX", "unit": "%", "category": "Bonds"},
-            "S&P 500 Index": {"ticker": "^GSPC", "unit": "pts", "category": "Equities"},
-            "Nasdaq Composite": {"ticker": "^IXIC", "unit": "pts", "category": "Equities"},
-            "Gold Futures": {"ticker": "GC=F", "unit": "USD/oz", "category": "Commodities"}
-        }
+        macro = GlobalMacroEngine(self.cache_manager).fetch_macro_indicators(max_age_hours=1)
+        by_name = {m["indicator"]: m for m in macro.get("indicators", [])}
 
-        results = {}
-        try:
-            import yfinance as yf
-            for name, meta in indicators.items():
-                try:
-                    t = yf.Ticker(meta["ticker"])
-                    h = t.history(period="5d")
-                    if not h.empty:
-                        curr = float(h["Close"].iloc[-1])
-                        prev = float(h["Close"].iloc[-2]) if len(h) > 1 else curr
-                        pct = round(((curr - prev) / (prev + 1e-5)) * 100, 2)
-                        results[name] = {
-                            "price": round(curr, 2),
-                            "change_pct": pct,
-                            "unit": meta["unit"],
-                            "category": meta["category"]
-                        }
-                except Exception:
-                    continue
-        except Exception:
-            pass
-
-        # Robust fallbacks if offline
-        defaults = {
-            "Brent Crude Oil": {"price": 104.72, "change_pct": 0.42, "unit": "USD/bbl", "category": "Energy"},
-            "WTI Crude Oil": {"price": 91.85, "change_pct": 0.39, "unit": "USD/bbl", "category": "Energy"},
-            "USD / INR (Rupee)": {"price": 96.78, "change_pct": -0.04, "unit": "INR", "category": "Currency"},
-            "US Dollar Index (DXY)": {"price": 102.21, "change_pct": 0.07, "unit": "pts", "category": "Currency"},
-            "US 10Y Treasury Yield": {"price": 5.24, "change_pct": 0.25, "unit": "%", "category": "Bonds"},
-            "S&P 500 Index": {"price": 7811.54, "change_pct": 0.59, "unit": "pts", "category": "Equities"},
-            "Nasdaq Composite": {"price": 27366.17, "change_pct": 0.64, "unit": "pts", "category": "Equities"},
-            "Gold Futures": {"price": 4216.30, "change_pct": 1.43, "unit": "USD/oz", "category": "Commodities"}
-        }
-
-        for k, v in defaults.items():
-            if k not in results:
-                results[k] = v
-
+        results: Dict[str, Any] = {}
+        for report_name, canon in self._TELEMETRY_NAMES.items():
+            m = by_name.get(canon)
+            if not m or m.get("value") is None:
+                continue
+            results[report_name] = {
+                "price": m["value"],
+                "change_pct": m.get("pct_change"),
+                "unit": self._TELEMETRY_UNITS[report_name],
+                "category": m.get("category", ""),
+                "stale": bool(m.get("stale")),
+            }
         return results
 
     def fetch_generic_market_news(self) -> Dict[str, List[Dict[str, Any]]]:
@@ -345,6 +315,12 @@ class NewsSentimentEngine:
         nasdaq = telemetry.get("Nasdaq Composite", {})
         gold = telemetry.get("Gold Futures", {})
 
+        def _px(d, prefix="", suffix=""):
+            return f"{prefix}{d['price']}{suffix}" if d.get("price") is not None else "N/A"
+
+        def _chg(d):
+            return f"{d['change_pct']:+.2f}%" if d.get("change_pct") is not None else "N/A"
+
         g_md = []
         g_md.append(f"# 🌐 General Market News & Macro Trend Report — {date_str}")
         g_md.append(f"**Generated**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S IST')} | **Classification**: Common / Macro News\n")
@@ -355,20 +331,28 @@ class NewsSentimentEngine:
         g_md.append("\n## 📊 Live Macro Telemetry Dashboard\n")
         g_md.append("| Indicator | Value | Daily Change | Key Impact on Indian Equities |")
         g_md.append("| :--- | :---: | :---: | :--- |")
-        g_md.append(f"| **🛢️ Brent Crude Oil** | `${brent.get('price', 'N/A')}` | `{brent.get('change_pct', 0.0):+.2f}%` | {'🔴 Headwind: Elevates import bill & inflation' if brent.get('price', 0) > 85 else '🟢 Tailwind: Benign crude aids margins'} |")
-        g_md.append(f"| **🛢️ WTI Crude Oil** | `${wti.get('price', 'N/A')}` | `{wti.get('change_pct', 0.0):+.2f}%` | US energy benchmark; impacts global transport costs |")
-        g_md.append(f"| **💵 USD / INR (Rupee)** | `₹{rupee.get('price', 'N/A')}` | `{rupee.get('change_pct', 0.0):+.2f}%` | {'🔴 Weakening rupee pressurizes CAD & imported inputs' if rupee.get('change_pct', 0) > 0.1 else '🟢 Stable rupee bolsters FII confidence & currency stability'} |")
-        g_md.append(f"| **💵 US Dollar Index (DXY)** | `{dxy.get('price', 'N/A')} pts` | `{dxy.get('change_pct', 0.0):+.2f}%` | Stronger dollar drives capital outflows from Emerging Markets |")
-        g_md.append(f"| **📈 US 10Y Bond Yield** | `{yield_10y.get('price', 'N/A')}%` | `{yield_10y.get('change_pct', 0.0):+.2f}%` | Elevated US yields trigger FII equity sales into US debt |")
-        g_md.append(f"| **🇺🇸 S&P 500 Index** | `{sp500.get('price', 'N/A')} pts` | `{sp500.get('change_pct', 0.0):+.2f}%` | Global risk appetite bellwether |")
-        g_md.append(f"| **💻 Nasdaq Composite** | `{nasdaq.get('price', 'N/A')} pts` | `{nasdaq.get('change_pct', 0.0):+.2f}%` | Key lead indicator for Indian IT sector stocks |")
-        g_md.append(f"| **🪙 Gold Futures** | `${gold.get('price', 'N/A')}` | `{gold.get('change_pct', 0.0):+.2f}%` | Safe-haven demand proxy amidst geopolitical stress |")
+        if brent.get("price") is None:
+            brent_impact = "Data unavailable"
+        else:
+            brent_impact = '🔴 Headwind: Elevates import bill & inflation' if brent["price"] > 85 else '🟢 Tailwind: Benign crude aids margins'
+        if rupee.get("change_pct") is None:
+            rupee_impact = "Data unavailable"
+        else:
+            rupee_impact = '🔴 Weakening rupee pressurizes CAD & imported inputs' if rupee["change_pct"] > 0.1 else '🟢 Stable rupee bolsters FII confidence & currency stability'
+        g_md.append(f"| **🛢️ Brent Crude Oil** | `{_px(brent, '$')}` | `{_chg(brent)}` | {brent_impact} |")
+        g_md.append(f"| **🛢️ WTI Crude Oil** | `{_px(wti, '$')}` | `{_chg(wti)}` | US energy benchmark; impacts global transport costs |")
+        g_md.append(f"| **💵 USD / INR (Rupee)** | `{_px(rupee, '₹')}` | `{_chg(rupee)}` | {rupee_impact} |")
+        g_md.append(f"| **💵 US Dollar Index (DXY)** | `{_px(dxy, '', ' pts')}` | `{_chg(dxy)}` | Stronger dollar drives capital outflows from Emerging Markets |")
+        g_md.append(f"| **📈 US 10Y Bond Yield** | `{_px(yield_10y, '', '%')}` | `{_chg(yield_10y)}` | Elevated US yields trigger FII equity sales into US debt |")
+        g_md.append(f"| **🇺🇸 S&P 500 Index** | `{_px(sp500, '', ' pts')}` | `{_chg(sp500)}` | Global risk appetite bellwether |")
+        g_md.append(f"| **💻 Nasdaq Composite** | `{_px(nasdaq, '', ' pts')}` | `{_chg(nasdaq)}` | Key lead indicator for Indian IT sector stocks |")
+        g_md.append(f"| **🪙 Gold Futures** | `{_px(gold, '$')}` | `{_chg(gold)}` | Safe-haven demand proxy amidst geopolitical stress |")
         g_md.append("\n---\n")
 
         # 1. Crude Oil Detailed Trend
         g_md.append("## 🛢️ 1. Crude Oil Trend & Economic Impact")
-        g_md.append(f"**Current Brent Price**: `${brent.get('price', 'N/A')} / bbl` ({brent.get('change_pct', 0.0):+.2f}%)  ")
-        g_md.append(f"**Current WTI Price**: `${wti.get('price', 'N/A')} / bbl` ({wti.get('change_pct', 0.0):+.2f}%)\n")
+        g_md.append(f"**Current Brent Price**: `{_px(brent, '$', ' / bbl')}` ({_chg(brent)})  ")
+        g_md.append(f"**Current WTI Price**: `{_px(wti, '$', ' / bbl')}` ({_chg(wti)})\n")
         g_md.append("### Sectoral Transmission Channels:")
         g_md.append("- **Oil Marketing Companies (IOC, BPCL, HPCL)**: Higher crude squeezes retail fuel gross marketing margins.")
         g_md.append("- **Aviation & Logistics (InterGlobe Aviation)**: Aviation Turbine Fuel (ATF) accounts for ~40% of operating costs.")
@@ -388,7 +372,7 @@ class NewsSentimentEngine:
 
         # 2. Rupee Trend
         g_md.append("## 💵 2. Indian Rupee (USD/INR) & Forex Dynamics")
-        g_md.append(f"**Current Exchange Rate**: `₹{rupee.get('price', 'N/A')} per USD` ({rupee.get('change_pct', 0.0):+.2f}%)\n")
+        g_md.append(f"**Current Exchange Rate**: `{_px(rupee, '₹', ' per USD')}` ({_chg(rupee)})\n")
         g_md.append("### Market Implications:")
         g_md.append("- **IT & Tech Services (TCS, Infosys, Coforge)**: A weaker rupee boosts rupee revenue realizations from US-denominated billing.")
         g_md.append("- **Pharma Exporters (Sun Pharma, Cipla)**: Improved export margins in US and European markets.")

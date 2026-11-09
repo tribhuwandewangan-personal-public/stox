@@ -1,8 +1,7 @@
 """
-LangGraph Multi-Agent Orchestrator.
-Defines the StateGraph execution workflow, dispatching stock symbols from symbols.json,
-checking incremental SQLite cache, invoking specialized analyst agents,
-and running the Master Synthesizer Agent.
+Multi-Agent Orchestrator.
+Dispatches stock symbols from symbols.json, checks the incremental SQLite cache, runs the specialized
+analyst agents in parallel (with a hard timeout) and then the deterministic Master Synthesizer Agent.
 """
 
 from typing import Dict, Any, List, TypedDict, Annotated
@@ -49,8 +48,9 @@ from agents.macro_agent import GlobalMacroAgent
 from agents.fundamental_agent import FundamentalAgent
 from agents.risk_agent import RiskAgent
 from agents.synthesizer_agent import MasterPredictionSynthesizerAgent
+from tools.outcome_tracker import build_prediction_record
 
-# LangGraph State Schema
+# State schema (documentation of the data flowing through the pipeline)
 class StockAnalysisState(TypedDict):
     symbol: str
     company_name: str
@@ -66,7 +66,7 @@ class StockAnalysisState(TypedDict):
 
 import concurrent.futures
 import time
-from config import VERBOSE_LOGGING, MAX_PARALLEL_WORKERS
+from config import VERBOSE_LOGGING, MAX_PARALLEL_WORKERS, AGENT_TIMEOUT_SECONDS
 
 class MultiAgentWorkflow:
     def __init__(self, cache_manager: CacheManager = None):
@@ -74,6 +74,7 @@ class MultiAgentWorkflow:
         
         # Engines initialized with shared SQLite cache_manager
         hist_engine = HistoricalDataEngine(cache_manager=self.cache_manager)
+        self.hist_engine = hist_engine
         tech_engine = TechnicalAnalysisEngine(rag_engine=hist_engine, cache_manager=self.cache_manager)
         news_engine = NewsSentimentEngine(cache_manager=self.cache_manager)
         macro_engine = GlobalMacroEngine(cache_manager=self.cache_manager)
@@ -94,15 +95,27 @@ class MultiAgentWorkflow:
         Executes all 6 analyst agents in parallel for maximum speed!
         """
         symbol = symbol.upper()
-        
+
+        # Make sure stored candles reach the last completed NSE session. Network-free when already up to date,
+        # so Re-Analyze and batch runs always analyse current data instead of whatever was stored last week.
+        try:
+            self.hist_engine.sync_symbol_data(symbol)
+        except Exception as e:
+            safe_print(f"  ⚠️ Warning: price sync failed for {symbol} ({e}); analysing stored candles")
+        latest_candle = self.cache_manager.get_latest_candle_date(symbol)
+
         # Check incremental cache first unless force_refresh is True
         if not force_refresh:
             cached_synth = self.cache_manager.get_latest_agent_output(symbol, "Master Prediction Synthesizer Agent", max_age_hours=12)
-            if cached_synth:
+            # Serve the cache only if it was built on the same newest candle (a newer session invalidates it) and
+            # no agent failed (a "degraded" result is recomputed instead of being served for 12h)
+            if (cached_synth
+                    and cached_synth.get("as_of_date") == latest_candle
+                    and not (cached_synth.get("data_quality") or {}).get("failed_agents")):
                 safe_print(f"⚡ [Cache Hit] Returning incremental cached prediction for {symbol}")
                 return cached_synth
 
-        safe_print(f"\n🤖 [LangGraph Pipeline] Starting multi-agent analysis for {symbol} ({company_name})...")
+        safe_print(f"\n🤖 [Pipeline] Starting multi-agent analysis for {symbol} ({company_name})...")
         start_time = time.time()
 
         # Helper functions for parallel tasks
@@ -166,23 +179,36 @@ class MultiAgentWorkflow:
                 safe_print(f"  ├─ [Done 6/6] Risk & Volatility Agent completed in {time.time()-t0:.2f}s")
             return "risk", out
 
-        # Step 1: Execute all 6 analyst agents concurrently in parallel
+        # Step 1: Execute all 6 analyst agents concurrently in parallel (bounded wait)
         agent_outputs = {}
-        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_PARALLEL_WORKERS) as executor:
-            futures = [
-                executor.submit(run_hist),
-                executor.submit(run_tech),
-                executor.submit(run_news),
-                executor.submit(run_macro),
-                executor.submit(run_fund),
-                executor.submit(run_risk)
-            ]
-            for future in concurrent.futures.as_completed(futures):
+        failed_agents = []
+        tasks = {
+            "historical_rag": run_hist,
+            "technical": run_tech,
+            "news_sentiment": run_news,
+            "macro": run_macro,
+            "fundamental": run_fund,
+            "risk": run_risk,
+        }
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=MAX_PARALLEL_WORKERS)
+        futures = {executor.submit(fn): name for name, fn in tasks.items()}
+        try:
+            for future in concurrent.futures.as_completed(futures, timeout=AGENT_TIMEOUT_SECONDS):
+                name = futures[future]
                 try:
                     key, out = future.result()
                     agent_outputs[key] = out
                 except Exception as e:
-                    safe_print(f"  ⚠️ Warning: Agent task execution error: {e}")
+                    failed_agents.append(name)
+                    safe_print(f"  ⚠️ Warning: Agent '{name}' failed for {symbol}: {e}")
+        except concurrent.futures.TimeoutError:
+            for future, name in futures.items():
+                if not future.done():
+                    failed_agents.append(name)
+                    safe_print(f"  ⚠️ Warning: Agent '{name}' timed out after {AGENT_TIMEOUT_SECONDS}s for {symbol}")
+        finally:
+            # Don't block on a hung agent thread; queued-but-unstarted work is cancelled
+            executor.shutdown(wait=False, cancel_futures=True)
 
         # Step 2: Master Prediction Synthesizer
         if VERBOSE_LOGGING:
@@ -190,11 +216,24 @@ class MultiAgentWorkflow:
         
         t_synth = time.time()
         final_synth = self.synth_agent.run(symbol, company_name, agent_outputs)
+        final_synth["data_quality"] = {
+            "failed_agents": sorted(failed_agents),
+            "agents_ok": sorted(agent_outputs.keys()),
+        }
+        final_synth["as_of_date"] = latest_candle
         
         if VERBOSE_LOGGING:
             safe_print(f"  └─ [Complete] Total multi-agent parallel runtime: {time.time()-start_time:.2f}s (Synthesis: {time.time()-t_synth:.2f}s)")
 
         # Save Synthesizer output in incremental cache
         self.cache_manager.save_agent_output(symbol, "Master Prediction Synthesizer Agent", final_synth)
+
+        # Record the call so it can be scored against what the stock actually did (tools/outcome_tracker.py)
+        try:
+            record = build_prediction_record(symbol, final_synth, latest_candle)
+            if record:
+                self.cache_manager.log_prediction(record)
+        except Exception as e:
+            safe_print(f"  ⚠️ Warning: could not log prediction for {symbol}: {e}")
 
         return final_synth

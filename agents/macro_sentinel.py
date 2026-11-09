@@ -1,33 +1,28 @@
 """
 Background Market & Macro Sentinel Worker Thread.
-Runs continuously in parallel to poll global macro indicators (S&P 500, GIFT Nifty, Crude, DXY, Gold)
-and global news. When significant shifts occur, the LLM merges and updates a shared Common Market Bulletin
-in SQLite (storage/cache.db) so all stock prediction streams automatically incorporate the latest market context.
+Polls global macro indicators (S&P 500, Nasdaq, Crude, DXY, USD/INR, US 10Y, Gold) on a timer, keeps the
+shared macro cache fresh, and writes a Common Market Bulletin to SQLite (storage/cache.db) that the dashboard
+shows. The bulletin is computed with deterministic rules (tools/macro_tools.py) -- no LLM.
 """
 
 import threading
-import time
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
-from config import get_llm, VERBOSE_LOGGING, FAST_MODE
+from config import VERBOSE_LOGGING
 from storage.cache_manager import CacheManager
-from tools.macro_tools import GlobalMacroEngine
-from langchain_core.prompts import PromptTemplate
+from tools.macro_tools import GlobalMacroEngine, compute_macro_sentiment
+
+# Re-fetch whenever the cache is older than this (poll interval is 5 min, so every poll refreshes)
+SENTINEL_MAX_CACHE_AGE_HOURS = 0.05
+
 
 class BackgroundMacroSentinel:
     def __init__(self, cache_manager: CacheManager = None, poll_interval_seconds: int = 300):
         self.cache_manager = cache_manager or CacheManager()
         self.macro_engine = GlobalMacroEngine(self.cache_manager)
-        self._llm = None
         self.poll_interval = poll_interval_seconds
         self._stop_event = threading.Event()
         self._thread = None
-
-    @property
-    def llm(self):
-        if self._llm is None:
-            self._llm = get_llm(temperature=0.1, max_tokens=150, timeout=12)
-        return self._llm
 
     def start(self):
         """Starts the background sentinel monitor thread."""
@@ -55,64 +50,32 @@ class BackgroundMacroSentinel:
             self.update_market_bulletin()
 
     def update_market_bulletin(self) -> Dict[str, Any]:
-        """Fetches macro indicators, uses LLM to merge insights, and updates shared bulletin in SQLite."""
+        """Fetches macro indicators, computes the rule-based sentiment and updates the shared bulletin."""
         try:
-            macro_res = self.macro_engine.fetch_macro_indicators()
+            macro_res = self.macro_engine.fetch_macro_indicators(max_age_hours=SENTINEL_MAX_CACHE_AGE_HOURS)
             indicators = macro_res.get("indicators", [])
+            sentiment = compute_macro_sentiment(indicators)
 
-            if FAST_MODE:
-                sentiment_label = "Neutral"
-                summary_text = "Global market indicators reflect a stable, neutral-to-balanced macroeconomic backdrop for Indian equities."
+            # Don't overwrite a good bulletin with an "unavailable" one
+            if sentiment["available"]:
                 self.cache_manager.save_market_bulletin(
-                    sentiment_label=sentiment_label,
-                    macro_summary=summary_text,
+                    sentiment_label=sentiment["label"],
+                    macro_summary=sentiment["summary"],
                     raw_indicators={"indicators": indicators}
                 )
-                return {
-                    "sentiment_label": sentiment_label,
-                    "summary": summary_text,
-                    "indicators": indicators
-                }
-
-            indic_text = "\n".join([f"- {m['indicator']}: {m['summary']}" for m in indicators])
-
-            prompt = PromptTemplate.from_template(
-                """You are a Chief Market Strategist monitoring common global market factors.
-Synthesize the following live global market indicators into a unified Common Market Context Bulletin:
-
-Live Indicators:
-{indic_text}
-
-Produce a 2-sentence Common Market Context Bulletin assessing whether global tailwinds are Bullish, Bearish, or Neutral for Indian equities today.
-"""
-            )
-
-            chain = prompt | self.llm
-            response = chain.invoke({"indic_text": indic_text})
-            summary_text = response.content if hasattr(response, 'content') else str(response)
-
-            sentiment_label = "Neutral"
-            if "bullish" in summary_text.lower():
-                sentiment_label = "Bullish"
-            elif "bearish" in summary_text.lower():
-                sentiment_label = "Bearish"
-
-            # Save to shared SQLite database table
-            self.cache_manager.save_market_bulletin(
-                sentiment_label=sentiment_label,
-                macro_summary=summary_text,
-                raw_indicators={"indicators": indicators}
-            )
-
-            if VERBOSE_LOGGING:
-                print(f"🌐 [Macro Sentinel Update] Shared Bulletin: [{sentiment_label}] {summary_text[:90]}...")
+                if VERBOSE_LOGGING:
+                    print(f"🌐 [Macro Sentinel Update] Shared Bulletin: [{sentiment['label']}] {sentiment['summary'][:90]}...")
 
             return {
-                "sentiment_label": sentiment_label,
-                "summary": summary_text,
+                "sentiment_label": sentiment["label"],
+                "summary": sentiment["summary"],
                 "indicators": indicators
             }
         except Exception as e:
             if VERBOSE_LOGGING:
                 print(f"⚠️ [Macro Sentinel Notice] Bulletin update deferred: {e}")
-            return {"sentiment_label": "Neutral", "summary": "Global markets present a stable backdrop.", "indicators": []}
+            return {
+                "sentiment_label": "Neutral",
+                "summary": "Global macro data is unavailable right now.",
+                "indicators": []
+            }

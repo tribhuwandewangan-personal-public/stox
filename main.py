@@ -70,7 +70,7 @@ if sys.stderr is None or getattr(sys.stderr, "closed", False):
 sys.stdout = _SafeStream(sys.stdout)
 sys.stderr = _SafeStream(sys.stderr)
 
-from config import SYMBOLS_FILE_PATH, OLLAMA_MODEL, VERBOSE_LOGGING, MAX_PARALLEL_WORKERS, MAX_SYMBOL_WORKERS
+from config import SYMBOLS_FILE_PATH, ENGINE_LABEL, VERBOSE_LOGGING, MAX_PARALLEL_WORKERS, MAX_SYMBOL_WORKERS
 from storage.queue_manager import ValkeyQueueManager
 from storage.cache_manager import CacheManager
 from agents.macro_sentinel import BackgroundMacroSentinel
@@ -232,18 +232,15 @@ def parse_args():
     parser.add_argument("--force", "-f", action="store_true", help="Force fresh re-analysis of symbols (resets queue and cache)")
     parser.add_argument("--reset", action="store_true", help="Reset persistent queue status to pending and exit")
     parser.add_argument("--symbol", "-s", type=str, default="", help="Comma-separated stock symbol(s) to analyze (e.g. RELIANCE,TCS)")
-    parser.add_argument("--fast", action="store_true", help="Fast quantitative synthesis mode (all 34 stocks in under 30s)")
+    parser.add_argument("--fast", action="store_true", help=argparse.SUPPRESS)  # legacy no-op: the engine is always rule-based
     return parser.parse_args()
 
 def main():
     args = parse_args()
 
-    if args.fast:
-        os.environ["FAST_MODE"] = "true"
-
     print("=" * 80)
     print("  📈 NSE MULTI-AGENT RAG & STOCK PREDICTION SYSTEM")
-    print(f"  Model Engine: Ollama ({OLLAMA_MODEL}) [Zero-Cost High-Speed Pipeline]")
+    print(f"  Engine: {ENGINE_LABEL}")
     print(f"  Execution Mode: Dual Parallel ({MAX_SYMBOL_WORKERS} symbols x {MAX_PARALLEL_WORKERS} agent threads)")
     print(f"  Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 80)
@@ -352,7 +349,7 @@ def main():
         report_markdown = []
         report_markdown.append("# NSE Multi-Agent Stock Analysis & Prediction Report")
         report_markdown.append(f"**Generated At**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}  ")
-        report_markdown.append(f"**Model Engine**: Ollama (`{OLLAMA_MODEL}`) [Zero-Cost Local Setup]  ")
+        report_markdown.append(f"**Engine**: {ENGINE_LABEL}  ")
         report_markdown.append(f"**Total Symbols**: {total_symbols}\n")
         report_markdown.append("---")
 

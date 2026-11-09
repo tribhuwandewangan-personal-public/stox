@@ -1,11 +1,10 @@
 """
-Configuration module for Ollama qwen2.5:7b local LLM and fallback models.
-Zero-cost design: Uses local Ollama or Google Gemini Free Tier.
+Configuration module for the NSE multi-agent stock analysis system.
+The analysis engine is fully deterministic (rule-based): no LLM or external AI service is used.
 """
 
 import os
 import sys
-from typing import Optional
 
 # Ensure UTF-8 output encoding across all modules importing config
 if hasattr(sys.stdout, "reconfigure"):
@@ -19,20 +18,18 @@ if hasattr(sys.stderr, "reconfigure"):
     except Exception:
         pass
 
-# Primary Local Ollama Model
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
-
-# Optional Fallback Model (Google Gemini Free Tier)
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-GEMINI_MODEL = "gemini-1.5-flash"
-
 # Verbose & Execution Settings
 VERBOSE_LOGGING = os.getenv("VERBOSE_LOGGING", "false").lower() in ("true", "1", "yes")
-FAST_MODE = os.getenv("FAST_MODE", "true").lower() in ("true", "1", "yes")   # Default ON: zero-LLM quantitative mode for 34 symbols in <60s
-OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "25"))
-MAX_PARALLEL_WORKERS = int(os.getenv("MAX_PARALLEL_WORKERS", "6"))
-MAX_SYMBOL_WORKERS = int(os.getenv("MAX_SYMBOL_WORKERS", "4"))
+MAX_PARALLEL_WORKERS = int(os.getenv("MAX_PARALLEL_WORKERS", "6"))   # analyst agents per symbol
+MAX_SYMBOL_WORKERS = int(os.getenv("MAX_SYMBOL_WORKERS", "4"))       # symbols analysed concurrently
+AGENT_TIMEOUT_SECONDS = int(os.getenv("AGENT_TIMEOUT_SECONDS", "90"))  # max wait per analyst agent
+MAX_CONCURRENT_TRIGGERS = int(os.getenv("MAX_CONCURRENT_TRIGGERS", "4"))  # dashboard "Re-Analyze" cap
+
+# Dashboard / live quotes / scheduler
+DASHBOARD_HOST = os.getenv("DASHBOARD_HOST", "127.0.0.1")                    # loopback only; set 0.0.0.0 to expose (not advised)
+QUOTE_SOURCES = os.getenv("QUOTE_SOURCES", "kite,yahoo")                     # provider order; yahoo is always the last resort
+QUOTE_POLL_SECONDS = int(os.getenv("QUOTE_POLL_SECONDS", "300"))             # live quote refresh during market hours
+AUTO_SCHEDULE = os.getenv("AUTO_SCHEDULE", "1").lower() in ("1", "true", "yes")  # pre-market refresh + post-close analysis
 
 # Target Symbols Config File
 SYMBOLS_FILE_PATH = os.path.join(os.path.dirname(__file__), "symbols.json")
@@ -40,34 +37,5 @@ CACHE_DB_PATH = os.path.join(os.path.dirname(__file__), "storage", "cache.db")
 REPORTS_DIR = os.path.join(os.path.dirname(__file__), "reports")
 HISTORICAL_EXCEL_PATH = os.path.join(REPORTS_DIR, "NSE_Historical_Data.xlsx")
 
-
-def get_llm(model_name: Optional[str] = None, temperature: float = 0.2, max_tokens: int = 350, timeout: Optional[int] = None):
-    """
-    Instantiates and returns the configured LLM.
-    Defaults to local Ollama qwen2.5:7b with compact token cap and safety timeout.
-    Falls back to ChatGoogleGenerativeAI if Ollama fails or GEMINI_API_KEY is preferred.
-    """
-    target_model = model_name or OLLAMA_MODEL
-    req_timeout = timeout or OLLAMA_TIMEOUT
-
-    try:
-        from langchain_ollama import ChatOllama
-        return ChatOllama(
-            base_url=OLLAMA_BASE_URL,
-            model=target_model,
-            temperature=temperature,
-            num_predict=max_tokens,
-            timeout=req_timeout
-        )
-    except Exception as e:
-        print(f"[Config Warning] Local Ollama ({target_model}) initialization notice: {e}")
-        if GEMINI_API_KEY:
-            print("[Config Info] Falling back to Google Gemini Free Tier model...")
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            return ChatGoogleGenerativeAI(
-                model=GEMINI_MODEL,
-                google_api_key=GEMINI_API_KEY,
-                temperature=temperature,
-                max_output_tokens=max_tokens
-            )
-        raise e
+# Label shown in the dashboard / reports for the analysis engine
+ENGINE_LABEL = "Rule-based engine (no LLM)"

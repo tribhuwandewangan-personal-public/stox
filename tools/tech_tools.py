@@ -17,6 +17,35 @@ from storage.cache_manager import CacheManager
 from tools.pattern_engine import QuantitativePatternEngine
 
 
+def wilder_rsi(close: pd.Series, period: int = 14) -> pd.Series:
+    """
+    Relative Strength Index with Wilder's smoothing: the first average is the simple mean of the first `period`
+    changes, then avg = (previous_avg * (period - 1) + current) / period. NaN until `period` changes exist.
+    A series with no losses is 100, and one with no movement at all is 50.
+    """
+    values = close.astype(float).to_numpy()
+    out = np.full(len(values), np.nan)
+    if len(values) <= period:
+        return pd.Series(out, index=close.index)
+    delta = np.diff(values)
+    gain = np.where(delta > 0, delta, 0.0)
+    loss = np.where(delta < 0, -delta, 0.0)
+    avg_gain = gain[:period].mean()
+    avg_loss = loss[:period].mean()
+
+    def _rsi(g, l):
+        if l == 0:
+            return 50.0 if g == 0 else 100.0
+        return 100.0 - 100.0 / (1.0 + g / l)
+
+    out[period] = _rsi(avg_gain, avg_loss)
+    for i in range(period, len(delta)):
+        avg_gain = (avg_gain * (period - 1) + gain[i]) / period
+        avg_loss = (avg_loss * (period - 1) + loss[i]) / period
+        out[i + 1] = _rsi(avg_gain, avg_loss)
+    return pd.Series(out, index=close.index)
+
+
 def _safe_float(value, decimals: int = 2):
     """Convert a value to float, returning None for NaN/Inf (which are invalid JSON)."""
     try:
@@ -43,12 +72,8 @@ class TechnicalAnalysisEngine:
         df['SMA_50'] = close.rolling(window=50).mean()
         df['SMA_200'] = close.rolling(window=200).mean() if len(close) >= 200 else close.rolling(window=len(close)).mean()
 
-        # RSI (14)
-        delta = close.diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-        rs = gain / (loss + 1e-9)
-        df['RSI_14'] = 100 - (100 / (1 + rs))
+        # RSI (14), Wilder smoothing (the definition charting platforms use)
+        df['RSI_14'] = wilder_rsi(close, 14)
 
         # MACD (12, 26, 9)
         ema_12 = close.ewm(span=12, adjust=False).mean()

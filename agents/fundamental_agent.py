@@ -12,7 +12,7 @@ from storage.cache_manager import CacheManager
 
 class FundamentalAgent:
     def __init__(self, fund_engine: Optional[FundamentalAnalysisEngine] = None, events_engine: Optional[EventsEngine] = None, cache_manager: Optional[CacheManager] = None):
-        self.fund_engine = fund_engine or FundamentalAnalysisEngine()
+        self.fund_engine = fund_engine or FundamentalAnalysisEngine(cache_manager=cache_manager)
         self.events_engine = events_engine or EventsEngine(cache_manager=cache_manager)
 
     def run(self, symbol: str) -> Dict[str, Any]:
@@ -21,14 +21,20 @@ class FundamentalAgent:
         
         pe = fund_data.get("pe_ratio", "N/A")
         roe = fund_data.get("roe_pct", "N/A")
-        val = fund_data.get("valuation_assessment", "Fairly Valued")
-        earnings_dt = events_data.get("earnings_date", "TBD")
-        div_dt = events_data.get("dividend_ex_date", "N/A")
-        div_amt = events_data.get("dividend_amount", "N/A")
-        corp_action = events_data.get("corporate_action", "None")
+        val = fund_data.get("valuation_assessment", "Unavailable")
+        earnings_dt = events_data.get("earnings_date") or "TBD"
+        div_dt = events_data.get("dividend_ex_date") or "N/A"
+        div_amt = events_data.get("dividend_amount") or "N/A"
+        corp_action = events_data.get("corporate_action") or "None"
+        quarter = events_data.get("earnings_quarter")
 
-        events_summary = f"Next Earnings: {earnings_dt} ({events_data.get('earnings_quarter', '')}) | Dividend: {div_amt} (Ex-Date: {div_dt}) | Catalyst: {corp_action}"
-        analysis_text = f"P/E Ratio: {pe} | ROE: {roe}% | Valuation: {val} | Upcoming Events: {events_summary}"
+        earnings_part = f"Next Earnings: {earnings_dt}" + (f" ({quarter})" if quarter else "")
+        events_summary = f"{earnings_part} | Dividend: {div_amt} (Ex-Date: {div_dt}) | Catalyst: {corp_action}"
+        if fund_data.get("available", True):
+            roe_txt = f"{roe}%" if roe != "N/A" else "N/A"
+            analysis_text = f"P/E Ratio: {pe} | ROE: {roe_txt} | Valuation: {val} | Upcoming Events: {events_summary}"
+        else:
+            analysis_text = f"Fundamentals unavailable from market feed | Upcoming Events: {events_summary}"
 
         return {
             "agent_name": "Fundamental Analyst Agent",

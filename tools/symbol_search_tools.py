@@ -8,6 +8,7 @@ and the persistent SQLite task queue.
 import os
 import json
 import sqlite3
+from storage.cache_manager import open_db
 import urllib.request
 import urllib.parse
 from datetime import datetime
@@ -162,7 +163,7 @@ def add_symbol_to_json(
     # Insert into persistent SQLite queue
     try:
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
-        with sqlite3.connect(db_path) as conn:
+        with open_db(db_path) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS persistent_stock_queue (
@@ -224,7 +225,7 @@ def remove_symbol_from_json(
 
     # Clean from queue
     try:
-        with sqlite3.connect(db_path) as conn:
+        with open_db(db_path) as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM persistent_stock_queue WHERE symbol = ?", (clean_sym,))
             conn.commit()

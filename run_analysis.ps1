@@ -5,23 +5,19 @@
     1. Pulls latest repository updates (git pull).
     2. Syncs Python dependencies via uv & checks Valkey/dashboard services.
     3. Syncs split-adjusted historical data & exports Excel workbook (NSE_Historical_Data.xlsx).
-    4. Runs the multi-agent LangGraph workflow and generates prediction reports.
+    4. Runs the multi-agent analysis workflow (deterministic, no LLM) and generates prediction reports.
 .PARAMETER Force
     Force reset persistent queue and fresh re-analysis of all symbols.
 .PARAMETER Symbol
     Specific comma-separated symbol(s) to analyze (e.g. -Symbol "RELIANCE,TCS").
 .PARAMETER Fast
-    [DEPRECATED - now default] Explicitly enable fast quantitative mode (zero-LLM, all 34 stocks in <60s).
-.PARAMETER NoFast
-    Disable fast mode and use Ollama LLM narrative synthesis (requires Ollama running locally).
-    WARNING: Takes 1-3 hours for all 34 symbols without cache.
+    [DEPRECATED - ignored] The engine is always deterministic and LLM-free. 
 #>
 
 [CmdletBinding()]
 param(
     [switch]$Force,
-    [switch]$Fast,       # Kept for backward compatibility (now default)
-    [switch]$NoFast,     # Opt-in to full Ollama LLM synthesis (slow: ~1-3hrs for 34 symbols)
+    [switch]$Fast,       # Kept for backward compatibility (ignored)
     [string]$Symbol = ""
 )
 
@@ -175,24 +171,13 @@ catch {
 
 # Step 4: Run Multi-Agent Analysis & Generate Report
 Write-Host ""
-Write-Host "[4/4] Triggering LangGraph Multi-Agent Analysis Pipeline..." -ForegroundColor Green
+Write-Host "[4/4] Triggering Multi-Agent Analysis Pipeline (rule-based, no LLM)..." -ForegroundColor Green
 Write-Host "Target Symbols Configuration: $ScriptDir\symbols.json" -ForegroundColor DarkGray
 Write-Host "Press Ctrl+C at any time to interrupt cleanly." -ForegroundColor DarkGray
 Write-Host ""
 
 $mainArgs = @()
 if ($Force) { $mainArgs += "--force" }
-if ($NoFast) {
-    # Explicitly disable fast mode - use Ollama LLM (slow, requires Ollama running)
-    $env:FAST_MODE = "false"
-    Write-Host "WARNING: NoFast mode enabled. Ollama LLM synthesis active." -ForegroundColor Yellow
-    Write-Host "         Estimated time: 1-3 hours for 34 symbols." -ForegroundColor Yellow
-    Write-Host "         Ensure Ollama is running: ollama serve" -ForegroundColor DarkYellow
-} else {
-    # Default: fast quantitative mode (all 34 stocks in <60 seconds, no Ollama required)
-    $mainArgs += "--fast"
-    Write-Host "Fast Mode: ON (quantitative synthesis, zero LLM calls, <60s for 34 symbols)" -ForegroundColor Green
-}
 if ($Symbol -and $Symbol.Trim() -ne "") { $mainArgs += @("--symbol", $Symbol.Trim()) }
 
 try {

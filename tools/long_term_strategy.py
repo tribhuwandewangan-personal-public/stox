@@ -221,30 +221,45 @@ class LongTermStrategyEngine:
         symbol: str,
         name: str = "",
         sector: str = "",
-        last_price: float = 100.0,
+        last_price: Optional[float] = None,
         short_verdict: str = "BUY"
     ) -> Dict[str, Any]:
         """
-        Generates institutional 1-3 year wealth compounder outlook for any stock.
+        Generates a 1-3 year wealth compounder outlook for any stock.
+
+        NOTE: the long-term target is an *indicative scenario* (last price x a fixed per-profile multiple),
+        not a model forecast. Without a real last price no target is produced (shown as N/A).
         """
         sym = symbol.upper().strip()
-        lp = max(1.0, float(last_price or 100.0))
+        try:
+            lp = float(last_price)
+        except (TypeError, ValueError):
+            lp = 0.0
+        has_price = lp > 0 and lp == lp  # excludes NaN
+        basis_note = " (Target is an indicative scenario multiple, not a price forecast.)"
+
+        def _target(mult: float):
+            if not has_price:
+                return None, "N/A"
+            val = round(lp * mult, 2)
+            return val, f"Rs. {val:,.2f}"
 
         # Check curated profile first
         if sym in self.curated_profiles:
             cp = self.curated_profiles[sym]
             mult = cp["multiplier"]
-            lt_target = round(lp * mult, 2)
+            lt_target, lt_target_str = _target(mult)
             upside_pct = round((mult - 1.0) * 100, 1)
             return {
                 "symbol": sym,
                 "long_term_verdict": cp["verdict"],
                 "long_term_horizon": cp["horizon"],
-                "long_term_target": f"Rs. {lt_target:,.2f}",
+                "long_term_target": lt_target_str,
                 "long_term_target_num": lt_target,
-                "long_term_upside_pct": f"+{upside_pct}%",
+                "long_term_upside_pct": f"+{upside_pct}%" if has_price else "",
+                "target_basis": "indicative_scenario",
                 "long_term_moat": cp["moat"],
-                "long_term_thesis": cp["thesis"],
+                "long_term_thesis": cp["thesis"] + basis_note,
                 "suggested_long_term_peers": cp["peers"],
                 "is_top_wealth_pick": any(w in cp["verdict"].upper() for w in ["STRONG BUY", "BUY", "ACCUMULATE"]) and not any(w in cp["verdict"].upper() for w in ["AVOID", "NEUTRAL", "HARVEST"])
             }
@@ -280,7 +295,7 @@ class LongTermStrategyEngine:
             verdict = "ACCUMULATE ON DIPS (Long-Term Horizon)"
             is_pick = False
 
-        lt_target = round(lp * mult, 2)
+        lt_target, lt_target_str = _target(mult)
         upside_pct = round((mult - 1.0) * 100, 1)
 
         # Remove self from peers
@@ -292,11 +307,12 @@ class LongTermStrategyEngine:
             "symbol": sym,
             "long_term_verdict": verdict,
             "long_term_horizon": "1-3 Years (Wealth Compounder)",
-            "long_term_target": f"Rs. {lt_target:,.2f}",
+            "long_term_target": lt_target_str,
             "long_term_target_num": lt_target,
-            "long_term_upside_pct": f"+{upside_pct}%",
+            "long_term_upside_pct": f"+{upside_pct}%" if has_price else "",
+            "target_basis": "indicative_scenario",
             "long_term_moat": matched_sec["moat_type"],
-            "long_term_thesis": f"Beneficiary of {matched_sec['catalyst_theme']}. Expected earnings CAGR: {matched_sec['base_cagr']}.",
+            "long_term_thesis": f"Beneficiary of {matched_sec['catalyst_theme']}. Expected earnings CAGR: {matched_sec['base_cagr']}.{basis_note}",
             "suggested_long_term_peers": peers[:3],
             "is_top_wealth_pick": is_pick
         }

@@ -762,6 +762,117 @@
     }
 
     /* Modal */
+    /* Live price row on cards */
+    .live-price-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin: 2px 0 8px; font-family: 'JetBrains Mono', monospace; }
+    .live-price-main { font-size: 1.15rem; font-weight: 700; color: #fff; }
+    .chg-up { color: var(--accent-green); }
+    .chg-down { color: var(--accent-red); }
+    .price-tag { font-family: 'Inter', sans-serif; font-size: 0.68rem; padding: 1px 8px; border-radius: 10px; background: rgba(255, 255, 255, 0.07); color: var(--text-muted); }
+    .price-tag.live { background: rgba(16, 185, 129, 0.15); color: var(--accent-green); }
+    .price-tag.stale { background: rgba(245, 158, 11, 0.15); color: var(--accent-amber); }
+    .drift-note { width: 100%; font-family: 'Inter', sans-serif; font-size: 0.7rem; color: var(--text-muted); }
+    .drift-note.warn { color: var(--accent-amber); }
+    .acc-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin: 6px 0 16px; }
+    .acc-table th, .acc-table td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border-card); }
+    .acc-table th { color: var(--text-muted); font-weight: 600; font-size: 0.75rem; }
+
+    /* Floating, draggable Target / Stop-Loss % calculator */
+    .pct-tool {
+      position: fixed;
+      top: 90px;
+      right: 40px;
+      width: 290px;
+      z-index: 1100; /* above .modal-overlay (1000) so it stays usable over the chart modal */
+      display: none;
+      background: rgba(15, 22, 38, 0.97);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 14px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+      font-size: 0.85rem;
+      color: #e2e8f0;
+    }
+
+    .pct-tool-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
+      border-bottom: 1px solid var(--border-card);
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.15), rgba(139, 92, 246, 0.12));
+      border-radius: 14px 14px 0 0;
+    }
+
+    .pct-tool.dragging .pct-tool-header { cursor: grabbing; }
+    .pct-tool-title { font-weight: 700; font-family: 'Outfit', sans-serif; }
+    .pct-tool-title small { color: var(--accent-blue); font-weight: 600; margin-left: 6px; }
+
+    .pct-tool-close {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    .pct-tool-close:hover { color: #fff; }
+
+    .pct-tool-body { padding: 12px 14px 14px; display: grid; gap: 10px; }
+
+    .pct-row { display: grid; gap: 4px; }
+    .pct-row label { font-size: 0.72rem; color: var(--text-muted); font-weight: 600; letter-spacing: 0.03em; }
+
+    .pct-input-line { display: flex; align-items: center; gap: 8px; }
+    .pct-input-line input {
+      flex: 1;
+      min-width: 0;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--border-card);
+      border-radius: 8px;
+      padding: 7px 10px;
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem;
+    }
+    .pct-input-line input:focus { outline: none; border-color: var(--accent-blue); }
+
+    .pct-result {
+      min-width: 74px;
+      text-align: right;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+    }
+    .pct-result.pos { color: var(--accent-green); }
+    .pct-result.neg { color: var(--accent-red); }
+
+    .pct-rr {
+      display: flex;
+      justify-content: space-between;
+      padding-top: 8px;
+      border-top: 1px dashed rgba(255, 255, 255, 0.1);
+      color: var(--text-muted);
+    }
+    .pct-rr b { color: var(--accent-blue); font-family: 'JetBrains Mono', monospace; }
+
+    .pct-live { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; color: #e2e8f0; }
+    .pct-live small { font-family: 'Inter', sans-serif; color: var(--text-muted); font-size: 0.68rem; }
+    .pct-mini { background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); color: var(--accent-blue);
+      border-radius: 8px; padding: 4px 10px; font-size: 0.72rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    .pct-mini:hover { background: rgba(56, 189, 248, 0.28); }
+    .pct-pct-wrap { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; color: var(--text-muted); }
+    .pct-pct-wrap input { width: 78px; flex: none; text-align: right; }
+    .pct-row.target label { color: var(--accent-green); }
+    .pct-row.stop label { color: var(--accent-red); }
+    .pct-detail { font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; min-height: 1.1em; color: var(--text-muted); }
+    .pct-detail.pos { color: var(--accent-green); }
+    .pct-detail.neg { color: var(--accent-red); }
+    .pct-summary { background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-card); border-radius: 10px;
+      padding: 8px 10px; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; display: grid; gap: 4px; }
+    .pct-summary .line { display: flex; justify-content: space-between; gap: 8px; }
+    .pct-hint { font-family: 'Inter', sans-serif; font-size: 0.72rem; color: var(--text-muted); }
+
     .modal-overlay {
       position: fixed;
       top: 0;
@@ -2093,13 +2204,17 @@
         <span>📊</span> Stocks News (.md) ↗
       </a>
       <button class="nav-btn highlight" onclick="openWorkflowModal()"
-        title="View Multi-Agent LangGraph Architecture & Pipeline">
+        title="View Multi-Agent Architecture & Pipeline">
         <span>🕸️</span> Multi-Agent Graph
       </button>
       <div class="status-badge">
         <div class="pulse-dot"></div>
-        <span id="modelEngine">Ollama (qwen2.5:7b)</span>
+        <span id="modelEngine">Rule-based engine (no LLM)</span>
       </div>
+      <button class="nav-btn" onclick="openAccuracyModal()" title="How accurate have past verdicts been?">
+        <span>🎯</span> Accuracy
+      </button>
+      <div class="status-badge" id="marketBadge" title="Live quote status">Quotes: checking…</div>
       <div class="status-badge" id="queueBadge">
         Queue Engine Active
       </div>
@@ -2366,7 +2481,58 @@
     </div>
   </div>
 
+  <!-- Movable Target / Stop-Loss % calculator (opens when a stock is clicked) -->
+  <div class="pct-tool" id="pctTool">
+    <div class="pct-tool-header" id="pctToolHeader">
+      <span class="pct-tool-title">🎯 Target / SL %<small id="pctToolSymbol"></small></span>
+      <button class="pct-tool-close" onclick="closePctTool()" title="Close">✕</button>
+    </div>
+    <div class="pct-tool-body">
+      <div class="pct-live" id="pctLive"></div>
+      <div class="pct-row">
+        <label for="pctBuy">BUY PRICE (enter manually)</label>
+        <div class="pct-input-line">
+          <input id="pctBuy" type="number" step="any" min="0" inputmode="decimal" oninput="onPctBuyInput()">
+          <button class="pct-mini" id="pctUseLive" onclick="usePctLivePrice()" title="Fill the buy price with the current price">Use live</button>
+        </div>
+      </div>
+      <div class="pct-row target" id="pctRowTarget" data-src="price">
+        <label for="pctTarget">🎯 TARGET &nbsp;(price &harr; %)</label>
+        <div class="pct-input-line">
+          <input id="pctTarget" type="number" step="any" min="0" inputmode="decimal" placeholder="price" oninput="onPctPriceInput('target')">
+          <span class="pct-pct-wrap"><input id="pctTargetPctIn" type="number" step="any" inputmode="decimal" placeholder="%" oninput="onPctPercentInput('target')">%</span>
+        </div>
+        <div class="pct-detail" id="pctTargetDetail"></div>
+      </div>
+      <div class="pct-row stop" id="pctRowStop" data-src="price">
+        <label for="pctStop">🛡️ STOP LOSS &nbsp;(price &harr; %)</label>
+        <div class="pct-input-line">
+          <input id="pctStop" type="number" step="any" min="0" inputmode="decimal" placeholder="price" oninput="onPctPriceInput('stop')">
+          <span class="pct-pct-wrap"><input id="pctStopPctIn" type="number" step="any" inputmode="decimal" placeholder="%" oninput="onPctPercentInput('stop')">%</span>
+        </div>
+        <div class="pct-detail" id="pctStopDetail"></div>
+      </div>
+      <div class="pct-summary" id="pctSummary"></div>
+      <div class="pct-hint">% is measured from your buy price (a minus sign means below it).</div>
+    </div>
+  </div>
+
   <script>
+    // State-changing requests must carry this header: the server rejects cross-site POSTs without it
+    // (another website cannot add a custom header without a CORS preflight, which the server never approves).
+    const _nativeFetch = window.fetch.bind(window);
+    window.fetch = (url, opts = {}) => {
+      if ((opts.method || 'GET').toUpperCase() === 'POST') {
+        opts = { ...opts, headers: { ...(opts.headers || {}), 'X-Stox-Request': '1' } };
+      }
+      return _nativeFetch(url, opts);
+    };
+
+    // HTML-escape any text that did not originate in this file before putting it in innerHTML
+    function esc(v) {
+      return String(v ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+    }
+
     let activeStockData = null;
     let activeChartData = null;
     let activeChartDays = 90;
@@ -2375,12 +2541,220 @@
       if (e.target.id === 'modalOverlay') closeModal();
     }
 
+    // ---- Target / Stop-Loss % calculator (movable card) ----
+    const PCT_POS_KEY = 'stox.pctTool.pos';
+    const pctBuyKey = sym => `stox.pctTool.buy.${sym}`;
+
+    // First number in strings like "Rs. 1,250", "₹1250 - 1300"; null if none.
+    function parsePriceText(v) {
+      if (typeof v === 'number') return isFinite(v) ? v : null;
+      const m = String(v ?? '').replace(/,/g, '').match(/\d+(?:\.\d+)?/);
+      return m ? parseFloat(m[0]) : null;
+    }
+
+    function pctNum(id) {
+      const v = parseFloat(document.getElementById(id).value);
+      return isFinite(v) ? v : null;
+    }
+    function pctMoney(v) {
+      return 'Rs. ' + Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function pctSigned(v, digits = 2) { return (v > 0 ? '+' : v < 0 ? '-' : '') + Math.abs(v).toFixed(digits); }
+
+    // Current best price for the stock shown in the calculator (live quote > stored close > analysis price)
+    function pctLivePrice() {
+      const sym = document.getElementById('pctTool').dataset.symbol;
+      const s = (allStocksData || []).find(x => x.symbol === sym);
+      return s ? bestPrice(s).price : null;
+    }
+
+    function refreshPctLive() {
+      const tool = document.getElementById('pctTool');
+      if (!tool || tool.style.display !== 'block') return;
+      const sym = tool.dataset.symbol;
+      const s = (allStocksData || []).find(x => x.symbol === sym);
+      const live = document.getElementById('pctLive');
+      const btn = document.getElementById('pctUseLive');
+      if (!s) { live.textContent = ''; btn.style.display = 'none'; return; }
+      const info = bestPrice(s);
+      btn.style.display = info.price == null ? 'none' : '';
+      live.innerHTML = info.price == null ? '<small>No price available</small>'
+        : `<span>${fmtPrice(info.price)} ${fmtChg(info.change_pct)}</span><small>${priceTag(info)}</small>`;
+      document.getElementById('pctBuy').placeholder = info.price == null ? 'Your buy price' : `e.g. ${info.price}`;
+    }
+
+    function openPctTool(s) {
+      const tool = document.getElementById('pctTool');
+      if (!tool) return;
+      const synth = s.synth_output?.structured_signal || {};
+      const risk = s.risk_output?.raw_risk || {};
+
+      const target = parsePriceText(synth.when_to_sell_target) ?? parsePriceText(risk.suggested_target_price);
+      const stop = parsePriceText(synth.stop_loss) ?? parsePriceText(risk.suggested_stop_loss);
+
+      tool.dataset.symbol = s.symbol;
+      document.getElementById('pctToolSymbol').textContent = s.symbol;
+      document.getElementById('pctBuy').value = localStorage.getItem(pctBuyKey(s.symbol)) || '';
+      document.getElementById('pctTarget').value = target ?? '';
+      document.getElementById('pctStop').value = stop ?? '';
+      document.getElementById('pctTargetPctIn').value = '';
+      document.getElementById('pctStopPctIn').value = '';
+      document.getElementById('pctRowTarget').dataset.src = 'price';   // prices come from the analysis
+      document.getElementById('pctRowStop').dataset.src = 'price';
+
+      tool.style.display = 'block';
+      restorePctToolPosition();
+      refreshPctLive();
+      updatePctTool();
+    }
+
+    function closePctTool() {
+      const tool = document.getElementById('pctTool');
+      if (tool) tool.style.display = 'none';
+    }
+
+    function onPctBuyInput() {
+      const sym = document.getElementById('pctTool').dataset.symbol;
+      const val = document.getElementById('pctBuy').value;
+      if (sym) {
+        if (val) localStorage.setItem(pctBuyKey(sym), val); else localStorage.removeItem(pctBuyKey(sym));
+      }
+      updatePctTool();
+    }
+
+    function usePctLivePrice() {
+      const live = pctLivePrice();
+      if (live == null) return;
+      document.getElementById('pctBuy').value = Number(live).toFixed(2);
+      onPctBuyInput();
+    }
+
+    // The user typed a price: that price is now the source of truth, the % follows it
+    function onPctPriceInput(kind) {
+      document.getElementById(kind === 'target' ? 'pctRowTarget' : 'pctRowStop').dataset.src = 'price';
+      updatePctTool();
+    }
+
+    // The user typed a percentage: that % is now the source of truth, the price follows it
+    function onPctPercentInput(kind) {
+      document.getElementById(kind === 'target' ? 'pctRowTarget' : 'pctRowStop').dataset.src = 'pct';
+      updatePctTool();
+    }
+
+    function updatePctTool() {
+      const buy = pctNum('pctBuy');
+      const haveBuy = buy !== null && buy > 0;
+      const active = document.activeElement ? document.activeElement.id : '';
+
+      // Keep the two representations of each level in sync (never overwrite the field being typed in)
+      const sync = (kind, priceId, pctId, rowId) => {
+        const src = document.getElementById(rowId).dataset.src;
+        const priceEl = document.getElementById(priceId), pctEl = document.getElementById(pctId);
+        if (!haveBuy) { if (src === 'price' && active !== pctId) pctEl.value = ''; return; }
+        if (src === 'price') {
+          const price = pctNum(priceId);
+          if (active !== pctId) pctEl.value = price === null ? '' : ((price - buy) / buy * 100).toFixed(2);
+        } else {
+          const pct = pctNum(pctId);
+          if (active !== priceId) priceEl.value = pct === null ? '' : (buy * (1 + pct / 100)).toFixed(2);
+        }
+      };
+      sync('target', 'pctTarget', 'pctTargetPctIn', 'pctRowTarget');
+      sync('stop', 'pctStop', 'pctStopPctIn', 'pctRowStop');
+
+      const target = pctNum('pctTarget'), stop = pctNum('pctStop');
+      const detail = (id, price) => {
+        const el = document.getElementById(id);
+        if (!haveBuy || price === null) { el.textContent = ''; el.className = 'pct-detail'; return null; }
+        const pct = (price - buy) / buy * 100, diff = price - buy;
+        el.textContent = `${pctSigned(pct)}%  ·  ${diff < 0 ? '-' : '+'}${pctMoney(Math.abs(diff))} per share`;
+        el.className = 'pct-detail ' + (pct >= 0 ? 'pos' : 'neg');
+        return pct;
+      };
+      const tPct = detail('pctTargetDetail', target);
+      const sPct = detail('pctStopDetail', stop);
+
+      // Summary: target and stop prices next to their percentages, plus risk:reward
+      const summary = document.getElementById('pctSummary');
+      const rows = [];
+      if (haveBuy) {
+        rows.push(`<div class="line"><span>Buy</span><b>${pctMoney(buy)}</b></div>`);
+        if (target !== null) rows.push(`<div class="line"><span style="color:var(--accent-green)">🎯 Target</span><b>${pctMoney(target)} &nbsp;<span style="color:var(--accent-green)">${pctSigned(tPct)}%</span></b></div>`);
+        if (stop !== null) rows.push(`<div class="line"><span style="color:var(--accent-red)">🛡️ Stop loss</span><b>${pctMoney(stop)} &nbsp;<span style="color:var(--accent-red)">${pctSigned(sPct)}%</span></b></div>`);
+        // Risk:reward needs target and stop on opposite sides of the buy price (works for long and short setups)
+        const opposite = tPct !== null && sPct !== null && tPct !== 0 && sPct !== 0 && (tPct > 0) !== (sPct > 0);
+        rows.push(`<div class="line"><span>Risk : Reward</span><b style="color:var(--accent-blue)">${opposite ? '1 : ' + (Math.abs(tPct) / Math.abs(sPct)).toFixed(2) : '–'}</b></div>`);
+      } else {
+        // No buy price yet: show the analysis levels measured from the current price as a preview
+        const live = pctLivePrice();
+        rows.push('<div class="pct-hint">Enter your buy price (or tap “Use live”) to calculate.</div>');
+        if (live != null && (target !== null || stop !== null)) {
+          const pv = (price) => price === null ? '–' : `${pctMoney(price)} &nbsp;${pctSigned((price - live) / live * 100)}%`;
+          rows.push(`<div class="pct-hint">If bought at the live price ${pctMoney(live)}:</div>`);
+          rows.push(`<div class="line"><span style="color:var(--accent-green)">🎯 Target</span><b>${pv(target)}</b></div>`);
+          rows.push(`<div class="line"><span style="color:var(--accent-red)">🛡️ Stop loss</span><b>${pv(stop)}</b></div>`);
+        }
+      }
+      summary.innerHTML = rows.join('');
+    }
+
+    function clampPctToolIntoView() {
+      const tool = document.getElementById('pctTool');
+      const maxLeft = Math.max(0, window.innerWidth - tool.offsetWidth);
+      const maxTop = Math.max(0, window.innerHeight - tool.offsetHeight);
+      tool.style.left = Math.min(Math.max(0, tool.offsetLeft), maxLeft) + 'px';
+      tool.style.top = Math.min(Math.max(0, tool.offsetTop), maxTop) + 'px';
+      tool.style.right = 'auto';
+    }
+
+    function restorePctToolPosition() {
+      const tool = document.getElementById('pctTool');
+      try {
+        const pos = JSON.parse(localStorage.getItem(PCT_POS_KEY) || 'null');
+        if (pos) {
+          tool.style.left = pos.left + 'px';
+          tool.style.top = pos.top + 'px';
+          tool.style.right = 'auto';
+        }
+      } catch (e) { /* ignore bad saved position */ }
+      clampPctToolIntoView();
+    }
+
+    (function initPctToolDrag() {
+      const tool = document.getElementById('pctTool');
+      const header = document.getElementById('pctToolHeader');
+      let dx = 0, dy = 0;
+
+      header.addEventListener('pointerdown', e => {
+        if (e.target.closest('.pct-tool-close')) return;
+        const rect = tool.getBoundingClientRect();
+        dx = e.clientX - rect.left;
+        dy = e.clientY - rect.top;
+        header.setPointerCapture(e.pointerId);
+        tool.classList.add('dragging');
+      });
+      header.addEventListener('pointermove', e => {
+        if (!tool.classList.contains('dragging')) return;
+        tool.style.left = Math.min(Math.max(0, e.clientX - dx), window.innerWidth - tool.offsetWidth) + 'px';
+        tool.style.top = Math.min(Math.max(0, e.clientY - dy), window.innerHeight - tool.offsetHeight) + 'px';
+        tool.style.right = 'auto';
+      });
+      const endDrag = () => {
+        if (!tool.classList.contains('dragging')) return;
+        tool.classList.remove('dragging');
+        localStorage.setItem(PCT_POS_KEY, JSON.stringify({ left: tool.offsetLeft, top: tool.offsetTop }));
+      };
+      header.addEventListener('pointerup', endDrag);
+      header.addEventListener('pointercancel', endDrag);
+      window.addEventListener('resize', () => { if (tool.style.display === 'block') clampPctToolIntoView(); });
+    })();
+
     async function fetchStatus() {
       try {
         const res = await fetch('/api/status');
         const data = safeJsonParse(await res.text());
 
-        document.getElementById('modelEngine').innerText = `Ollama (${data.model})`;
+        document.getElementById('modelEngine').innerText = data.model || 'Rule-based engine (no LLM)';
         if (data.queue_status) {
           document.getElementById('queueBadge').innerText = `${data.queue_status.engine}: ${data.queue_status.pending} Pending | ${data.queue_status.completed || 0} Done`;
         }
@@ -2492,12 +2866,12 @@
 
     function renderEventBadge(events) {
       if (!events || (!events.earnings_date && !events.dividend_ex_date)) return '';
-      const earnings = events.earnings_date ? `📅 Q2 Results: ${events.earnings_date}` : '';
+      const earnings = events.earnings_date ? `📅 Results: ${events.earnings_date}` : '';
       const dividend = (events.dividend_amount && events.dividend_amount !== 'N/A') ? `💰 Div: ${events.dividend_amount}` : '';
       return `
         <div class="event-badge-row">
           ${earnings ? `<span class="event-pill event-earnings" title="${events.earnings_quarter || ''}">${earnings}</span>` : ''}
-          ${dividend ? `<span class="event-pill event-div" title="Ex-Date: ${events.dividend_ex_date}">${dividend}</span>` : ''}
+          ${dividend ? `<span class="event-pill event-div" title="Ex-Date: ${events.dividend_ex_date || 'N/A'}">${dividend}</span>` : ''}
         </div>
       `;
     }
@@ -2684,8 +3058,8 @@
       else if (verdict === 'ANALYZING') verdictClass = 'verdict-analyzing';
       else if (verdict === 'QUEUED') verdictClass = 'verdict-queued';
 
-      const lastPrice = tech.last_price || (s.sparkline && s.sparkline.length > 0 ? s.sparkline[s.sparkline.length - 1] : null);
-      const priceStr = lastPrice ? `Rs. ${Number(lastPrice).toLocaleString('en-IN')}` : 'N/A';
+      const pinfo = bestPrice(s);
+      const priceStr = `${fmtPrice(pinfo.price)} ${fmtChg(pinfo.change_pct)}`;
       const patternIcon = getPatternMiniIcon(s.patterns);
       const firstPatternName = (s.patterns && s.patterns[0]) ? s.patterns[0].name : '';
       const isActive = activeNavSymbol === s.symbol;
@@ -2700,8 +3074,8 @@
             <span class="sidebar-item-pill ${verdictClass}">${verdict}</span>
           </div>
           <div class="sidebar-item-bottom">
-            <span class="sidebar-item-price">${priceStr}</span>
-            <span class="sidebar-item-sector" title="${s.sector || s.name}">${s.sector || s.name}</span>
+            <span class="sidebar-item-price" data-live-price="${esc(s.symbol)}">${priceStr}</span>
+            <span class="sidebar-item-sector" title="${esc(s.sector || s.name)}">${esc(s.sector || s.name)}</span>
           </div>
           <button class="sidebar-open-btn" onclick="openStockModalDirect('${s.symbol}', event)" title="Open Full Interactive Chart">&#8599; View</button>
         </div>
@@ -2850,7 +3224,8 @@
 
       const sym = (s.symbol || '').toUpperCase().trim();
       const tech = s.tech_output?.raw_indicators || {};
-      const lp = Number(tech.last_price || (s.sparkline?.length > 0 ? s.sparkline[s.sparkline.length - 1] : 100)) || 100;
+      const lpRaw = bestPrice(s).price;   // null when unknown: no target is shown rather than one built from an invented price
+      const lp = lpRaw || 0;
       const synth = s.synth_output?.structured_signal || {};
       const verdict = (synth.action_verdict || '').toUpperCase();
 
@@ -2862,9 +3237,9 @@
           symbol: sym,
           long_term_verdict: cp.verdict,
           long_term_horizon: '1-3 Years (Wealth Compounder)',
-          long_term_target: `Rs. ${target.toLocaleString('en-IN')}`,
-          long_term_target_num: target,
-          long_term_upside_pct: `+${upside}%`,
+          long_term_target: lpRaw ? `Rs. ${target.toLocaleString('en-IN')}` : 'N/A',
+          long_term_target_num: lpRaw ? target : null,
+          long_term_upside_pct: lpRaw ? `+${upside}%` : '',
           long_term_moat: cp.moat,
           long_term_thesis: `Core thematic compounder in ${s.sector || 'Indian Equities'}. Expected multi-year CAGR: 15-22% p.a.`,
           suggested_long_term_peers: cp.peers,
@@ -2887,9 +3262,9 @@
         symbol: sym,
         long_term_verdict: isPick ? 'ACCUMULATE (Quality Compounder)' : 'HOLD (Cyclical Watch)',
         long_term_horizon: '1-3 Years (Wealth Compounder)',
-        long_term_target: `Rs. ${target.toLocaleString('en-IN')}`,
-        long_term_target_num: target,
-        long_term_upside_pct: `+${upside}%`,
+        long_term_target: lpRaw ? `Rs. ${target.toLocaleString('en-IN')}` : 'N/A',
+        long_term_target_num: lpRaw ? target : null,
+        long_term_upside_pct: lpRaw ? `+${upside}%` : '',
         long_term_moat: isPick ? 'Moderate Moat (Established Player)' : 'Narrow Moat',
         long_term_thesis: `Beneficiary of domestic macro tailwinds in ${s.sector || 'Equities'}.`,
         suggested_long_term_peers: ['LT', 'RELIANCE', 'HDFCBANK'],
@@ -3027,15 +3402,17 @@
               <div class="action-row">
                 <div class="symbol-box">
                   <h3 style="font-family:'Outfit'; font-size:1.3rem; display:flex; align-items:center; flex-wrap:wrap;">${s.symbol}${staleNotice}${wealthBadge}</h3>
-                  <p style="font-size:0.78rem; color:var(--text-muted);">${s.name}</p>
+                  <p style="font-size:0.78rem; color:var(--text-muted);">${esc(s.name)}</p>
                 </div>
                 <div class="verdict-badge ${verdictClass}">${verdict}</div>
               </div>
 
+              <div class="live-price-row" data-live-card="${esc(s.symbol)}">${livePriceRowHtml(s)}</div>
+
               ${renderPatternBadges(s.patterns)}
               ${renderEventBadge(s.events)}
 
-              ${renderSparklineSvg(s.sparkline, tech.last_price)}
+              ${renderSparklineSvg(s.sparkline, bestPrice(s).price)}
 
               <div class="confidence-box" style="margin-bottom:8px;">
                 <span>Confidence: <b>${confidence}</b></span>
@@ -3143,8 +3520,8 @@
       const content = `
         <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
           <div>
-            <h2 style="font-family:'Outfit'; font-size:1.8rem; margin-bottom:4px;">${s.symbol} - ${s.name}</h2>
-            <p style="color:var(--text-muted); font-size:0.88rem;">Sector: <b>${s.sector}</b></p>
+            <h2 style="font-family:'Outfit'; font-size:1.8rem; margin-bottom:4px;">${esc(s.symbol)} - ${esc(s.name)}</h2>
+            <p style="color:var(--text-muted); font-size:0.88rem;">Sector: <b>${esc(s.sector)}</b></p>
           </div>
           <div style="display:flex; gap:10px; align-items:center;">
             <div class="verdict-badge ${synth.action_verdict?.includes('BUY') ? 'verdict-buy' : 'verdict-hold'}">
@@ -3221,11 +3598,12 @@
 
         <!-- Master Synthesizer AI Report -->
         <div style="background:rgba(0,0,0,0.3); padding:20px; border-radius:12px; font-size:0.95rem; line-height:1.6; white-space:pre-wrap; border:1px solid var(--border-card);">
-${report}
+${esc(report)}
         </div>
       `;
       document.getElementById('modalContent').innerHTML = content;
       document.getElementById('modalOverlay').style.display = 'flex';
+      openPctTool(s);
 
       // Load and render interactive chart
       loadAndRenderChart(s.symbol, activeChartDays);
@@ -3379,7 +3757,7 @@ ${report}
 
         // If candles empty, fall back to sparkline
         if (activeStockData && activeStockData.sparkline && activeStockData.sparkline.length >= 2) {
-          const lp = activeStockData.tech_output?.raw_indicators?.last_price;
+          const lp = bestPrice(activeStockData).price;
           drawSparklineFallbackChart(sym, activeStockData.sparkline, lp);
           return;
         }
@@ -3389,7 +3767,7 @@ ${report}
         console.warn("Notice: /api/history fetch fallback:", e);
         // Fallback: Use cached stock sparkline if API connection is unavailable
         if (activeStockData && activeStockData.sparkline && activeStockData.sparkline.length >= 2) {
-          const lp = activeStockData.tech_output?.raw_indicators?.last_price;
+          const lp = bestPrice(activeStockData).price;
           drawSparklineFallbackChart(sym, activeStockData.sparkline, lp);
           return;
         }
@@ -3645,13 +4023,24 @@ ${report}
     }
 
     async function triggerSingleAnalysis(symbol) {
-      await fetch('/api/trigger', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbol })
-      });
-      alert(`Triggered multi-agent analysis for ${symbol}. Screen will update live!`);
-      closeModal();
+      let result = {};
+      try {
+        const res = await fetch('/api/trigger', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbol })
+        });
+        result = await res.json();
+      } catch (e) {
+        alert(`Could not reach the server to analyze ${symbol}.`);
+        return;
+      }
+      if (result.status === 'triggered') {
+        alert(`Triggered multi-agent analysis for ${symbol}. Screen will update live!`);
+        closeModal();
+      } else {
+        alert(result.message || `Analysis for ${symbol} could not be started.`);
+      }
     }
 
 
@@ -3686,6 +4075,35 @@ ${report}
       }
     }
 
+    // Search results come from an external API: escape for display and attach handlers in JS (never inline onclick)
+    function renderSearchResults(results, resultsEl) {
+      resultsEl.innerHTML = results.map((r, i) => {
+        const sym = esc(r.symbol || '');
+        const name = esc(r.name || r.symbol || '');
+        const sector = esc(r.sector || 'N/A');
+        const exchange = esc(r.exchange || 'NSE');
+        const actionBtn = r.is_added
+          ? `<button class="btn-remove-stock-search" data-i="${i}" data-action="remove">&#10005; Remove</button>`
+          : `<button class="btn-add-stock" data-i="${i}" data-action="add">&#10133; Add</button>`;
+        return `
+          <div class="search-result-card" id="search-card-${sym}">
+            <div class="search-result-info">
+              <div class="search-result-symbol">${sym}</div>
+              <div class="search-result-name">${name}</div>
+              <div class="search-result-meta">${exchange} &bull; ${sector}</div>
+            </div>
+            ${actionBtn}
+          </div>`;
+      }).join('');
+      resultsEl.querySelectorAll('button[data-action]').forEach(btn => {
+        const r = results[Number(btn.dataset.i)];
+        btn.addEventListener('click', () => {
+          if (btn.dataset.action === 'remove') handleRemoveStock(r.symbol);
+          else handleAddStock(r.symbol, r.name || r.symbol, r.sector || 'Unknown', r.exchange || 'NSE');
+        });
+      });
+    }
+
     async function searchInternetSymbols() {
       const q = (document.getElementById('internetSearchInput')?.value || '').trim();
       if (!q) return;
@@ -3699,25 +4117,7 @@ ${report}
           resultsEl.innerHTML = '<div class="search-no-results">&#128274; No results found. Try direct symbol (e.g. SUZLON) or use Manual Add below.</div>';
           return;
         }
-        resultsEl.innerHTML = data.results.map(r => {
-          const sym = r.symbol || '';
-          const name = r.name || sym;
-          const sector = r.sector || 'N/A';
-          const exchange = r.exchange || 'NSE';
-          const added = r.is_added || false;
-          const actionBtn = added
-            ? `<button class="btn-remove-stock-search" onclick="handleRemoveStock('${sym}')">&#10005; Remove</button>`
-            : `<button class="btn-add-stock" onclick="handleAddStock('${sym}','${name.replace(/'/g, "\'")}','${sector.replace(/'/g, "\'")}','${exchange}')">&#10133; Add</button>`;
-          return `
-            <div class="search-result-card" id="search-card-${sym}">
-              <div class="search-result-info">
-                <div class="search-result-symbol">${sym}</div>
-                <div class="search-result-name">${name}</div>
-                <div class="search-result-meta">${exchange} &bull; ${sector}</div>
-              </div>
-              ${actionBtn}
-            </div>`;
-        }).join('');
+        renderSearchResults(data.results, resultsEl);
       } catch (e) {
         resultsEl.innerHTML = '<div class="search-no-results">&#10060; Search failed. Try manual add below.</div>';
       }
@@ -3845,25 +4245,7 @@ ${report}
           resultsEl.innerHTML = '<div class="search-no-results">&#128274; No results. Try a direct symbol (e.g. SUZLON) or use Manual Add below.</div>';
           return;
         }
-        resultsEl.innerHTML = data.results.map(r => {
-          const sym = r.symbol || '';
-          const name = (r.name || sym).replace(/'/g, '&#39;');
-          const sector = (r.sector || 'Unknown').replace(/'/g, '&#39;');
-          const exchange = r.exchange || 'NSE';
-          const added = r.is_added || false;
-          const actionBtn = added
-            ? `<button class="btn-remove-stock-search" onclick="handleRemoveStock('${sym}')">&#10005; Remove</button>`
-            : `<button class="btn-add-stock" onclick="handleAddStock('${sym}','${name}','${sector}','${exchange}')">&#10133; Add</button>`;
-          return `
-            <div class="search-result-card" id="search-card-${sym}">
-              <div class="search-result-info">
-                <div class="search-result-symbol">${sym}</div>
-                <div class="search-result-name">${name}</div>
-                <div class="search-result-meta">${exchange} &bull; ${sector}</div>
-              </div>
-              ${actionBtn}
-            </div>`;
-        }).join('');
+        renderSearchResults(data.results, resultsEl);
       } catch (e) {
         resultsEl.innerHTML = '<div class="search-no-results">&#10060; Search failed. Try manual add below.</div>';
       }
@@ -4012,16 +4394,15 @@ ${report}
         const sl = synth.stop_loss || 'N/A';
         const horizon = synth.holding_horizon || 'Medium-Term';
         const rationale = (synth.key_rationale || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const price = tech.last_price || (s.sparkline?.length > 0 ? s.sparkline[s.sparkline.length - 1] : null);
-        const priceStr = price ? `Rs. ${Number(price).toLocaleString('en-IN')}` : 'N/A';
+        const priceStr = fmtPrice(bestPrice(s).price);
 
         return `
         <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.09);border-left:3px solid ${vc};border-radius:12px;padding:16px 18px;margin-bottom:12px;page-break-inside:avoid">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px">
             <div>
               <span style="font-family:'Outfit',sans-serif;font-size:1.15rem;font-weight:700;color:#fff">${s.symbol}</span>
-              <span style="font-size:0.75rem;color:#9ca3af;margin-left:8px">${s.name || ''}</span>
-              <span style="font-size:0.72rem;color:#64748b;margin-left:6px;background:rgba(255,255,255,0.05);padding:1px 7px;border-radius:8px">${s.sector || ''}</span>
+              <span style="font-size:0.75rem;color:#9ca3af;margin-left:8px">${esc(s.name)}</span>
+              <span style="font-size:0.72rem;color:#64748b;margin-left:6px;background:rgba(255,255,255,0.05);padding:1px 7px;border-radius:8px">${esc(s.sector)}</span>
             </div>
             <div style="display:flex;align-items:center;gap:10px">
               <span style="font-family:'JetBrains Mono',monospace;font-size:0.9rem;color:#e2e8f0;font-weight:600">${priceStr}</span>
@@ -4149,12 +4530,158 @@ body{background:#090d16;color:#f3f4f6;font-family:'Inter',sans-serif;min-height:
       setTimeout(() => URL.revokeObjectURL(url), 2000);
     }
 
-    function fetchAllData() { fetchStatus(); fetchStockCards(); }
+    // ── Live quotes (polled by the server every few minutes during market hours) ──────────────────
+    let liveQuotes = {};
+    let marketMeta = { state: 'unknown', open: false };
+
+    function fmtPrice(p) {
+      return (p === null || p === undefined || isNaN(p)) ? 'N/A'
+        : 'Rs. ' + Number(p).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function fmtChg(c) {
+      if (c === null || c === undefined || isNaN(c)) return '';
+      return `<span class="${c >= 0 ? 'chg-up' : 'chg-down'}">${c >= 0 ? '+' : ''}${Number(c).toFixed(2)}%</span>`;
+    }
+    function hhmm(ts) { return ts ? esc(String(ts).slice(11, 16)) : ''; }
+
+    // Best known price: live quote > newest stored close > price at analysis time. Never an invented number.
+    function bestPrice(s) {
+      const pi = s.price_info || {};
+      const q = liveQuotes[s.symbol];
+      const quoteDay = q && q.quote_ts ? String(q.quote_ts).slice(0, 10) : '';
+      const newerCloseExists = pi.kind === 'close' && pi.as_of && quoteDay && quoteDay < String(pi.as_of).slice(0, 10);
+      if (q && q.ltp && !newerCloseExists) {
+        return { price: q.ltp, change_pct: q.change_pct, kind: 'quote', stale: !!q.stale, as_of: q.quote_ts };
+      }
+      if (pi.price) return { price: pi.price, change_pct: pi.change_pct, kind: pi.kind, stale: false, as_of: pi.as_of };
+      const t = Number(s.tech_output?.raw_indicators?.last_price);
+      return t ? { price: t, change_pct: null, kind: 'analysis', stale: false, as_of: null } : { price: null };
+    }
+
+    function priceTag(info) {
+      if (!info || info.price == null) return '';
+      if (info.kind === 'quote') {
+        if (marketMeta.open) {
+          return info.stale ? `<span class="price-tag stale">⚠ stale ${hhmm(info.as_of)}</span>`
+            : `<span class="price-tag live">● live ${hhmm(info.as_of)}</span>`;
+        }
+        return `<span class="price-tag">last quote ${hhmm(info.as_of)}</span>`;
+      }
+      if (info.kind === 'close') return `<span class="price-tag">close ${esc(String(info.as_of || '').slice(0, 10))}</span>`;
+      return '<span class="price-tag stale">price at analysis</span>';
+    }
+
+    function livePriceRowHtml(s) {
+      const info = bestPrice(s);
+      if (info.price == null) return '<span class="live-price-main">N/A</span>';
+      const pi = s.price_info || {};
+      let note = '';
+      if (pi.analysis_price) {
+        const drift = (info.price - pi.analysis_price) / pi.analysis_price * 100;
+        if (Math.abs(drift) >= 0.05) {
+          const warn = Math.abs(drift) > 2;
+          note = `<div class="drift-note ${warn ? 'warn' : ''}">Levels computed at ${fmtPrice(pi.analysis_price)}`
+            + `${pi.analysis_as_of ? ' (as of ' + esc(pi.analysis_as_of) + ')' : ''}; price ${drift >= 0 ? 'up' : 'down'} `
+            + `${Math.abs(drift).toFixed(1)}% since${warn ? ' - entry/target/stop may be outdated' : ''}</div>`;
+        }
+      }
+      return `<span class="live-price-main">${fmtPrice(info.price)}</span> ${fmtChg(info.change_pct)} ${priceTag(info)}${note}`;
+    }
+
+    // Update prices in place (no full re-render)
+    function updateLivePrices() {
+      refreshPctLive();
+      const bySym = {};
+      allStocksData.forEach(s => { bySym[s.symbol] = s; });
+      document.querySelectorAll('[data-live-card]').forEach(el => {
+        const s = bySym[el.dataset.liveCard];
+        if (s) el.innerHTML = livePriceRowHtml(s);
+      });
+      document.querySelectorAll('[data-live-price]').forEach(el => {
+        const s = bySym[el.dataset.livePrice];
+        if (s) { const i = bestPrice(s); el.innerHTML = `${fmtPrice(i.price)} ${fmtChg(i.change_pct)}`; }
+      });
+    }
+
+    function updateMarketBadge(data) {
+      const el = document.getElementById('marketBadge');
+      if (!el) return;
+      const quotes = Object.values(data.quotes || {});
+      const staleCount = quotes.filter(q => q.stale).length;
+      let html;
+      if (quotes.length === 0) html = data.poller?.last_error ? '⚪ Quotes unavailable' : '⚪ Quotes: waiting for first poll';
+      else if (data.market_open) html = staleCount ? `🟠 Market open · ${staleCount} stale` : `🟢 Market open · live (${esc(quotes[0].source || '')})`;
+      else if (data.market_state === 'holiday') html = '⚪ Market closed today · last close';
+      else if (data.market_state === 'pre_open') html = '⚪ Pre-open · last close';
+      else html = '⚪ Market closed · last close';
+      el.innerHTML = html;
+      el.title = data.poller?.last_error || '';
+    }
+
+    async function fetchQuotes() {
+      try {
+        const res = await fetch('/api/quotes');
+        const data = await res.json();
+        liveQuotes = data.quotes || {};
+        marketMeta = { state: data.market_state, open: !!data.market_open };
+        updateMarketBadge(data);
+        updateLivePrices();
+      } catch (e) { /* keep showing the last values */ }
+    }
+
+    // ── Prediction accuracy panel ──────────────────────────────────────────────────────────────
+    function closeAccuracyModal() { document.getElementById('accuracyModalOverlay').style.display = 'none'; }
+    async function openAccuracyModal() {
+      const overlay = document.getElementById('accuracyModalOverlay');
+      const body = document.getElementById('accuracyBody');
+      overlay.style.display = 'flex';
+      body.textContent = 'Loading…';
+      try {
+        const a = await (await fetch('/api/accuracy')).json();
+        const rows = obj => Object.entries(obj || {}).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${v.n}</td>`
+          + `<td>${v.target_rate_pct ?? '-'}%</td><td>${v.win_rate_pct ?? '-'}%</td><td>${v.avg_return_pct ?? '-'}%</td>`
+          + `<td>${v.reliable ? 'ok' : '⚠ small sample'}</td></tr>`).join('');
+        const table = (title, obj) => `<h3 style="margin:10px 0 2px; color:#fff;">${title}</h3>`
+          + `<table class="acc-table"><tr><th>Group</th><th>Resolved</th><th>Target hit</th><th>Win rate</th><th>Avg return</th><th>Sample</th></tr>${rows(obj)}</table>`;
+        if (!a.resolved) {
+          body.innerHTML = `<p>${a.logged} predictions logged, none resolved yet. Each call is scored against later daily prices `
+            + `(target or stop touched, or ${a.horizon_trading_days} trading days elapsed), so results appear after a few weeks.</p>`;
+          return;
+        }
+        body.innerHTML = `<p>${a.logged} logged · ${a.open} open · ${a.resolved} resolved. Overall: target hit `
+          + `${a.overall.target_rate_pct}% · win rate ${a.overall.win_rate_pct}% · average return ${a.overall.avg_return_pct}%.</p>`
+          + table('By verdict', a.by_verdict) + table('By confidence', a.by_confidence)
+          + `<p style="font-size:0.78rem; color:#94a3b8;">${esc(a.note)}</p>`;
+      } catch (e) {
+        body.textContent = 'Could not load accuracy data.';
+      }
+    }
+
+    function fetchAllData() { fetchStatus(); fetchStockCards(); fetchQuotes(); }
+
+    // Poll only while the tab is visible. Full analysis payload every 20s; light quote refresh every 15s.
+    let pollTimers = [];
+    function startPolling() {
+      stopPolling();
+      fetchAllData();
+      pollTimers = [setInterval(fetchStatus, 20000), setInterval(fetchStockCards, 20000), setInterval(fetchQuotes, 15000)];
+    }
+    function stopPolling() { pollTimers.forEach(clearInterval); pollTimers = []; }
+    document.addEventListener('visibilitychange', () => { if (document.hidden) stopPolling(); else startPolling(); });
 
     initSidebarState();
-    fetchAllData();
-    setInterval(fetchAllData, 3000);
+    startPolling();
   </script>
+
+  <!-- Prediction accuracy modal -->
+  <div class="modal-overlay" id="accuracyModalOverlay"
+    onclick="if(event.target.id==='accuracyModalOverlay') closeAccuracyModal()">
+    <div class="modal-card" style="max-width:820px;">
+      <span class="modal-close" onclick="closeAccuracyModal()">&times;</span>
+      <h2 style="font-family:'Outfit'; font-size:1.6rem; color:#fff; margin-bottom:6px;">🎯 Prediction Accuracy</h2>
+      <div id="accuracyBody" style="color:#cbd5e1;">Loading…</div>
+    </div>
+  </div>
 
   <!-- Multi-Agent Architecture & Workflow Graph Modal -->
   <div class="modal-overlay" id="workflowModalOverlay"
@@ -4163,7 +4690,7 @@ body{background:#090d16;color:#f3f4f6;font-family:'Inter',sans-serif;min-height:
       <span class="modal-close" onclick="closeWorkflowModal()">&times;</span>
       <div style="margin-bottom:18px;">
         <h2 style="font-family:'Outfit'; font-size:1.6rem; color:#fff; display:flex; align-items:center; gap:10px;">
-          <span>🕸️</span> LangGraph Multi-Agent Architecture & Pipeline
+          <span>🕸️</span> Multi-Agent Architecture & Pipeline
         </h2>
         <p style="color:var(--text-muted); font-size:0.85rem;">
           StateGraph Orchestrator dispatching stocks from <code style="color:var(--accent-blue)">symbols.json</code>
@@ -4240,7 +4767,7 @@ body{background:#090d16;color:#f3f4f6;font-family:'Inter',sans-serif;min-height:
           <div
             style="background:linear-gradient(135deg, rgba(56,189,248,0.2), rgba(16,185,129,0.2)); border:1px solid var(--accent-blue); border-radius:12px; padding:14px 24px; text-align:center; width:100%; max-width:540px;">
             <div style="font-size:0.8rem; color:#38bdf8; font-weight:700;">MASTER PREDICTION SYNTHESIZER</div>
-            <div style="font-weight:700; color:#fff; font-size:1.1rem; margin:2px 0;">Ollama (qwen2.5:7b) Multi-Agent
+            <div style="font-weight:700; color:#fff; font-size:1.1rem; margin:2px 0;">Rule-based Weighted-Evidence
               Decision Engine</div>
             <div style="font-size:0.75rem; color:#e2e8f0;">Outputs: Action Verdict, Price Targets, Stop Loss, Horizon &
               Markdown Report</div>
@@ -4295,7 +4822,7 @@ body{background:#090d16;color:#f3f4f6;font-family:'Inter',sans-serif;min-height:
         const tgt = parseFloat(tgtRaw) || 0;
         const sl = parseFloat(slRaw) || 0;
 
-        // ── Directional sanity: skip if stop loss is ABOVE price (bad LLM data) ──
+        // ── Directional sanity: skip if stop loss is ABOVE price (bad data) ──
         if (lp > 0 && sl >= lp) return;
         // ── Also skip if target is BELOW price for a BUY ──
         if (lp > 0 && tgt > 0 && tgt <= lp) return;
