@@ -8,7 +8,7 @@ import os
 import sys
 import json
 import time
-import contextlib
+import concurrent.futures
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 import pandas as pd
@@ -18,20 +18,128 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from config import CACHE_DB_PATH, SYMBOLS_FILE_PATH, HISTORICAL_EXCEL_PATH, REPORTS_DIR
-from storage.cache_manager import CacheManager
+# Try to import optional modules, but don't fail if missing
+try:
+    from config import CACHE_DB_PATH, SYMBOLS_FILE_PATH, HISTORICAL_EXCEL_PATH, REPORTS_DIR
+except ImportError:
+    CACHE_DB_PATH = "stox.db"
+    SYMBOLS_FILE_PATH = "symbols.json"
+    HISTORICAL_EXCEL_PATH = "reports/NSE_Historical_Data.xlsx"
+    REPORTS_DIR = "reports"
+
+try:
+    from storage.cache_manager import CacheManager
+except ImportError:
+    # Create a simple fallback CacheManager if module missing
+    class CacheManager:
+        def __init__(self):
+            import sqlite3
+            self.db_path = CACHE_DB_PATH
+
+        def get_cached_candles(self, symbol, limit_days=1500):
+            import sqlite3
+            try:
+                conn = sqlite3.connect(self.db_path)
+                conn.row_factory = sqlite3.Row
+                c = conn.cursor()
+                c.execute(f"""
+                    SELECT * FROM historical_data
+                    WHERE symbol = ?
+                    ORDER BY DATE DESC LIMIT ?
+                """, (symbol.upper(), limit_days))
+                rows = [dict(row) for row in c.fetchall()]
+                conn.close()
+                return rows
+            except:
+                return []
+
+        def save_historical_candles(self, records, replace_symbol=None):
+            import sqlite3
+            try:
+                conn = sqlite3.connect(self.db_path)
+                c = conn.cursor()
+                if replace_symbol:
+                    c.execute("DELETE FROM historical_data WHERE symbol = ?", (replace_symbol.upper(),))
+                for record in records:
+                    c.execute("""
+                        INSERT OR REPLACE INTO historical_data
+                        (symbol, date, open, high, low, close, adj_close, volume, dividends, splits)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        record['symbol'].upper(),
+                        record['date'],
+                        record['open'],
+                        record['high'],
+                        record['low'],
+                        record['close'],
+                        record['adj_close'],
+                        record['volume'],
+                        record.get('dividends', 0),
+                        record.get('splits', 0)
+                    ))
+                conn.commit()
+                conn.close()
+            except Exception as e:
+                print(f"Warning: Could not save to database: {e}")
+
+try:
+    from tools import market_calendar
+except ImportError:
+    # Create fallback market_calendar
+    class market_calendar:
+        @staticmethod
+        def now_ist():
+            from datetime import datetime, timezone, timedelta
+            ist = timezone(timedelta(hours=5, minutes=30))
+            return datetime.now(ist)
+
+        @staticmethod
+        def last_completed_session():
+            from datetime import datetime, timedelta
+            today = datetime.now().date()
+            # Assume previous business day
+            if today.weekday() == 0:  # Monday
+                return (today - timedelta(days=3)).date()
+            elif today.weekday() == 6:  # Sunday
+                return (today - timedelta(days=2)).date()
+            else:
+                return (today - timedelta(days=1)).date()
+
+        @staticmethod
+        def is_session_complete(date):
+            from datetime import datetime, time
+            now = datetime.now().time()
+            return now > time(15, 30)  # NSE closes at 3:30 PM
+
+try:
+    from tools.yf_quiet import silence_yfinance_logging
+    silence_yfinance_logging()
+except ImportError:
+    # Fallback: silence yfinance manually
+    import logging
+    logging.getLogger('yfinance').setLevel(logging.CRITICAL)
+    logging.getLogger('urllib3').setLevel(logging.CRITICAL)
+
+HISTORY_WINDOW = 1500          # candles kept in memory per symbol (~6 years)
+INCREMENTAL_OVERLAP_DAYS = 7   # re-fetched on every refresh to detect split/dividend re-adjustment
+ADJUSTMENT_TOLERANCE = 0.001   # >0.1% change in an overlapping close => history was re-adjusted
+RECHECK_SECONDS = 1800         # don't re-ask the vendor for a symbol more often than this (unlisted holidays)
+DF_CACHE_TTL_SECONDS = 900     # in-memory frames are reloaded from SQLite after this (long-running dashboard)
 
 
 class HistoricalDataEngine:
     def __init__(self, cache_manager: Optional[CacheManager] = None):
         self.cache_manager = cache_manager or CacheManager()
         self.df_cache: Dict[str, pd.DataFrame] = {}
+        self._df_loaded_at: Dict[str, float] = {}
+        self._last_sync_attempt: Dict[str, float] = {}
 
-    def fetch_from_source(self, symbol: str, period: str = "5y") -> pd.DataFrame:
+    def fetch_from_source(self, symbol: str, period: str = "5y", start: Optional[str] = None) -> pd.DataFrame:
         """
         Fetches corporate-action adjusted daily OHLCV candles from reliable market feeds.
         Primary: <SYMBOL>.NS (NSE)
         Fallback: <SYMBOL>.BO (BSE)
+        If `start` (YYYY-MM-DD) is given only candles from that date are downloaded, otherwise `period`.
         """
         import yfinance as yf
 
@@ -41,17 +149,17 @@ class HistoricalDataEngine:
             "NSE": ["NSE.BO", "NSE.NS"]
         }
         candidates = alias_map.get(symbol_clean, [f"{symbol_clean}.NS", f"{symbol_clean}.BO"])
-        
+
         df_history = pd.DataFrame()
-        
+
         for candidate in candidates:
             try:
-                # Suppress noisy yfinance stderr output
-                with open(os.devnull, 'w', encoding='utf-8', errors='replace') as devnull:
-                    with contextlib.redirect_stderr(devnull), contextlib.redirect_stdout(devnull):
-                        ticker = yf.Ticker(candidate)
-                        df = ticker.history(period=period, auto_adjust=True)
-                
+                ticker = yf.Ticker(candidate)
+                if start:
+                    df = ticker.history(start=start, auto_adjust=True)
+                else:
+                    df = ticker.history(period=period, auto_adjust=True)
+
                 if df is not None and not df.empty:
                     df_history = df.copy()
                     break
@@ -61,13 +169,18 @@ class HistoricalDataEngine:
         if df_history.empty:
             return pd.DataFrame()
 
+        # Never store candles without a close price
+        df_history = df_history.dropna(subset=['Close'])
+        if df_history.empty:
+            return pd.DataFrame()
+
         # Format dataframe into standardized schema
         df_history = df_history.reset_index()
-        
+
         # Standardize date column
         date_col = 'Date' if 'Date' in df_history.columns else df_history.columns[0]
-        df_history['DATE'] = pd.to_datetime(df_history[date_col]).dt.tz_localize(None)
-        
+        df_history['DATE'] = pd.to_datetime(df_history[date_col]).dt.tz_localize(None).dt.normalize()
+
         df_history['SYMBOL'] = symbol_clean
         df_history['OPEN_PRICE'] = df_history['Open'].astype(float)
         df_history['HIGH_PRICE'] = df_history['High'].astype(float)
@@ -76,7 +189,7 @@ class HistoricalDataEngine:
         df_history['ADJ_CLOSE'] = df_history['Close'].astype(float)
         df_history['TTL_TRD_QNTY'] = df_history['Volume'].fillna(0).astype(int)
         df_history['VOLUME'] = df_history['TTL_TRD_QNTY']
-        
+
         div_col = 'Dividends' if 'Dividends' in df_history.columns else None
         split_col = 'Stock Splits' if 'Stock Splits' in df_history.columns else None
         df_history['DIVIDENDS'] = df_history[div_col].fillna(0.0).astype(float) if div_col else 0.0
@@ -87,90 +200,137 @@ class HistoricalDataEngine:
 
         # Keep ordered and sorted
         df_history = df_history.sort_values('DATE').reset_index(drop=True)
-        return df_history
+        return self._drop_provisional_bar(df_history)
 
+    @staticmethod
+    def _drop_provisional_bar(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Yahoo returns today's in-progress bar while the session runs. Storing it would freeze an intraday price
+        in as that day's close, so a bar for a not-yet-final session is dropped (live prices come from the
+        quote layer instead).
+        """
+        if df is None or df.empty:
+            return df
+        today = market_calendar.now_ist().date()
+        if df['DATE'].iloc[-1].date() == today and not market_calendar.is_session_complete(today):
+            return df.iloc[:-1].reset_index(drop=True)
+        return df
+
+    # ---- helpers -------------------------------------------------------------------------------
+    def _load_cached_df(self, symbol: str) -> pd.DataFrame:
+        """Full cached window (HISTORY_WINDOW candles) for a symbol straight from SQLite."""
+        records = self.cache_manager.get_cached_candles(symbol, limit_days=HISTORY_WINDOW)
+        if not records:
+            return pd.DataFrame()
+        df = pd.DataFrame(records)
+        df['DATE'] = pd.to_datetime(df['DATE'])
+        df = df.sort_values('DATE').reset_index(drop=True)
+        # Also hides a provisional bar stored by older versions
+        return self._drop_provisional_bar(df)
+
+    def _is_up_to_date(self, symbol: str, latest_dt: datetime) -> bool:
+        """Stored candles reach the last completed session, or the vendor was asked very recently."""
+        if latest_dt.date() >= market_calendar.last_completed_session():
+            return True
+        return (time.time() - self._last_sync_attempt.get(symbol, 0.0)) < RECHECK_SECONDS
+
+    def _remember(self, symbol: str, df: pd.DataFrame) -> pd.DataFrame:
+        self.df_cache[symbol] = df
+        self._df_loaded_at[symbol] = time.time()
+        return df
+
+    @staticmethod
+    def _df_to_records(symbol: str, df: pd.DataFrame) -> List[Dict[str, Any]]:
+        dates = df['DATE'].dt.strftime('%Y-%m-%d')
+        return [
+            {
+                "symbol": symbol, "date": d,
+                "open": float(o), "high": float(h), "low": float(l), "close": float(c),
+                "adj_close": float(a), "volume": int(v), "dividends": float(dv), "splits": float(sp),
+            }
+            for d, o, h, l, c, a, v, dv, sp in zip(
+                dates, df['OPEN_PRICE'], df['HIGH_PRICE'], df['LOW_PRICE'], df['CLOSE_PRICE'],
+                df['ADJ_CLOSE'], df['VOLUME'], df['DIVIDENDS'], df['SPLITS']
+            )
+        ]
+
+    @staticmethod
+    def _history_readjusted(cached_df: pd.DataFrame, df_new: pd.DataFrame) -> bool:
+        """
+        True when appending df_new onto the stored history would mix price bases: a split in the new window,
+        no overlapping dates to compare, or overlapping closes that moved (dividend/split re-adjustment of the
+        whole series by auto_adjust).
+        """
+        if (df_new['SPLITS'] != 0).any():
+            return True
+        old = cached_df.set_index(cached_df['DATE'].dt.strftime('%Y-%m-%d'))['CLOSE_PRICE']
+        new = df_new.set_index(df_new['DATE'].dt.strftime('%Y-%m-%d'))['CLOSE_PRICE']
+        common = old.index.intersection(new.index)
+        if len(common) == 0:
+            return True
+        old_c, new_c = old[common], new[common]
+        rel = (new_c - old_c).abs() / old_c.abs().clip(lower=1e-9)
+        return bool((rel > ADJUSTMENT_TOLERANCE).any())
+
+    def _full_refresh(self, symbol: str, period: str, fallback: pd.DataFrame) -> pd.DataFrame:
+        df_fresh = self.fetch_from_source(symbol, period=period)
+        if df_fresh.empty:
+            if not fallback.empty:
+                return self._remember(symbol, fallback)
+            return pd.DataFrame()
+        # replace_symbol: drop old rows so every stored candle shares one adjustment basis
+        self.cache_manager.save_historical_candles(self._df_to_records(symbol, df_fresh), replace_symbol=symbol)
+        return self._remember(symbol, self._load_cached_df(symbol))
+
+    # ---- public API ----------------------------------------------------------------------------
     def sync_symbol_data(self, symbol: str, period: str = "5y", force: bool = False) -> pd.DataFrame:
         """
         Syncs symbol candles:
-        - If cached in SQLite and fresh (<24h), returns cached DataFrame.
-        - Otherwise, downloads adjusted data and writes to SQLite database.
+        - Cached and up to date (reaches the last completed NSE session): no network, returns cached DataFrame.
+        - Cached but behind: downloads only the missing days (plus a 7-day overlap) and appends them. If the
+          overlap shows the history was re-adjusted (split/dividend) it falls back to a full re-download.
+        - Not cached (or force): downloads the full period.
         """
         symbol = symbol.upper().strip()
-        
-        if not force:
-            cached_records = self.cache_manager.get_cached_candles(symbol, limit_days=1500)
-            if cached_records:
-                latest_date_str = cached_records[-1].get("DATE", "")
-                try:
-                    latest_dt = datetime.strptime(latest_date_str[:10], "%Y-%m-%d")
-                    # If latest candle is within 3 days (accounting for weekends), consider fresh
-                    if (datetime.now() - latest_dt).days <= 3:
-                        df_cached = pd.DataFrame(cached_records)
-                        df_cached['DATE'] = pd.to_datetime(df_cached['DATE'])
-                        self.df_cache[symbol] = df_cached
-                        return df_cached
-                except Exception:
-                    pass
+        cached_df = self._load_cached_df(symbol)
 
-        # Fetch fresh data from reliable source
-        df_fresh = self.fetch_from_source(symbol, period=period)
-        if df_fresh.empty:
-            # Fallback to existing cache if available
-            cached_records = self.cache_manager.get_cached_candles(symbol, limit_days=1500)
-            if cached_records:
-                df_cached = pd.DataFrame(cached_records)
-                df_cached['DATE'] = pd.to_datetime(df_cached['DATE'])
-                self.df_cache[symbol] = df_cached
-                return df_cached
-            return pd.DataFrame()
+        if not force and not cached_df.empty:
+            latest_dt = cached_df['DATE'].iloc[-1].to_pydatetime()
+            if self._is_up_to_date(symbol, latest_dt):
+                return self._remember(symbol, cached_df)
 
-        # Prepare records for SQLite
-        records = []
-        for _, row in df_fresh.iterrows():
-            dt_str = row['DATE'].strftime('%Y-%m-%d')
-            records.append({
-                "symbol": symbol,
-                "date": dt_str,
-                "open": float(row['OPEN_PRICE']),
-                "high": float(row['HIGH_PRICE']),
-                "low": float(row['LOW_PRICE']),
-                "close": float(row['CLOSE_PRICE']),
-                "adj_close": float(row['ADJ_CLOSE']),
-                "volume": int(row['VOLUME']),
-                "dividends": float(row.get('DIVIDENDS', 0.0)),
-                "splits": float(row.get('SPLITS', 0.0))
-            })
+            self._last_sync_attempt[symbol] = time.time()
+            start = (latest_dt - timedelta(days=INCREMENTAL_OVERLAP_DAYS)).strftime('%Y-%m-%d')
+            df_new = self.fetch_from_source(symbol, start=start)
+            if df_new.empty:
+                # Source unavailable: serve what we have rather than nothing
+                return self._remember(symbol, cached_df)
+            if self._history_readjusted(cached_df, df_new):
+                return self._full_refresh(symbol, period, fallback=cached_df)
+            self.cache_manager.save_historical_candles(self._df_to_records(symbol, df_new))
+            return self._remember(symbol, self._load_cached_df(symbol))
 
-        self.cache_manager.save_historical_candles(records)
-        self.df_cache[symbol] = df_fresh
-        return df_fresh
+        return self._full_refresh(symbol, period, fallback=cached_df)
 
     def load_symbol_history(self, symbol: str, limit_days: int = 500) -> pd.DataFrame:
         """
-        Loads symbol history:
-        1. Checks in-memory cache.
-        2. Checks SQLite database.
+        Loads symbol history (most recent `limit_days` candles):
+        1. In-memory frame (reloaded from SQLite after 15 min so a long-running dashboard sees new candles).
+        2. SQLite database.
         3. If missing, fetches from source, saves to SQLite, and returns.
+        The in-memory frame always holds the full window, never just the last request's slice.
         """
         symbol = symbol.upper().strip()
-        if symbol in self.df_cache:
-            df = self.df_cache[symbol]
-            return df.tail(limit_days).reset_index(drop=True)
-
-        # Check SQLite
-        cached_records = self.cache_manager.get_cached_candles(symbol, limit_days=limit_days)
-        if cached_records:
-            df = pd.DataFrame(cached_records)
-            df['DATE'] = pd.to_datetime(df['DATE'])
-            df = df.sort_values('DATE').reset_index(drop=True)
-            self.df_cache[symbol] = df
-            return df
-
-        # Fallback to fetching fresh
-        df = self.sync_symbol_data(symbol, period="5y")
-        if not df.empty:
-            return df.tail(limit_days).reset_index(drop=True)
-        return pd.DataFrame()
+        df = self.df_cache.get(symbol)
+        if df is None or (time.time() - self._df_loaded_at.get(symbol, 0.0)) > DF_CACHE_TTL_SECONDS:
+            loaded = self._load_cached_df(symbol)
+            if not loaded.empty:
+                df = self._remember(symbol, loaded)
+            elif df is None:
+                df = self.sync_symbol_data(symbol, period="5y")
+                if df.empty:
+                    return pd.DataFrame()
+        return df.tail(limit_days).reset_index(drop=True)
 
     def get_historical_summary(self, symbol: str) -> Dict[str, Any]:
         """
@@ -221,33 +381,38 @@ class HistoricalDataEngine:
             "data_points": len(df)
         }
 
-    def sync_all_symbols(self, symbols: List[Dict[str, Any]], force: bool = False) -> Dict[str, bool]:
+    def sync_all_symbols(self, symbols: List[Dict[str, Any]], force: bool = False, max_workers: int = 6) -> Dict[str, bool]:
         """
-        Synchronizes historical data for all symbols and caches to SQLite.
+        Synchronizes historical data for all symbols and caches to SQLite (parallel, incremental).
         """
-        results = {}
+        results: Dict[str, bool] = {}
         total = len(symbols)
         print(f"📥 Syncing reliable historical data for {total} symbols...")
-        
-        for idx, item in enumerate(symbols, 1):
+
+        def _sync(item):
             sym = item.get("symbol", "").upper().strip()
-            name = item.get("name", sym)
             t0 = time.time()
             try:
                 df = self.sync_symbol_data(sym, period="5y", force=force)
-                rows = len(df)
-                elapsed = time.time() - t0
-                if rows > 0:
+                return sym, df, time.time() - t0, None
+            except Exception as e:
+                return sym, None, time.time() - t0, e
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, min(max_workers, total or 1))) as pool:
+            futures = [pool.submit(_sync, item) for item in symbols]
+            for idx, fut in enumerate(concurrent.futures.as_completed(futures), 1):
+                sym, df, elapsed, err = fut.result()
+                if err is not None:
+                    print(f"  [{idx:2d}/{total:2d}] ❌ {sym:<10} | Error: {err}")
+                    results[sym] = False
+                elif df is not None and len(df) > 0:
                     latest_d = df.iloc[-1]['DATE'].strftime('%Y-%m-%d')
-                    print(f"  [{idx:2d}/{total:2d}] ✅ {sym:<10} | {rows:4d} candles synced | Latest: {latest_d} ({elapsed:.2f}s)")
+                    print(f"  [{idx:2d}/{total:2d}] ✅ {sym:<10} | {len(df):4d} candles synced | Latest: {latest_d} ({elapsed:.2f}s)")
                     results[sym] = True
                 else:
                     print(f"  [{idx:2d}/{total:2d}] ⚠️ {sym:<10} | No candles returned ({elapsed:.2f}s)")
                     results[sym] = False
-            except Exception as e:
-                print(f"  [{idx:2d}/{total:2d}] ❌ {sym:<10} | Error: {e}")
-                results[sym] = False
-                
+
         return results
 
     def export_to_excel(self, symbols: List[Dict[str, Any]], excel_path: str = HISTORICAL_EXCEL_PATH) -> str:
