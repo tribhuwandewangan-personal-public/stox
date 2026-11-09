@@ -46,36 +46,36 @@ export class ApiService {
   /**
    * GET /api/status: Server status, queue, macro.
    */
-  static async getStatus(): Promise<any> {
+  static getStatus(): Promise<any> {
     return fetchJson('/status');
   }
 
   /**
    * GET /api/stocks: All stocks with analysis and quotes.
    */
-  static async getStocks(): Promise<Stock[]> {
-    const resp = await fetchJson<any>('/stocks');
-    return resp || [];
+  static getStocks(): Promise<Stock[]> {
+    const resp = fetchJson<any>('/stocks');
+    return resp.then((r: any) => r || []);
   }
 
   /**
    * GET /api/quotes: Current live quotes.
    */
-  static async getQuotes(): Promise<QuotesResponse> {
+  static getQuotes(): Promise<QuotesResponse> {
     return fetchJson<QuotesResponse>('/quotes');
   }
 
   /**
    * GET /api/accuracy: Prediction accuracy report.
    */
-  static async getAccuracy(): Promise<AccuracyReport> {
+  static getAccuracy(): Promise<AccuracyReport> {
     return fetchJson<AccuracyReport>('/accuracy');
   }
 
   /**
    * GET /api/history?symbol=XXX&days=90: Chart data for a stock.
    */
-  static async getHistory(symbol: string, days: number = 90): Promise<ChartData> {
+  static getHistory(symbol: string, days: number = 90): Promise<ChartData> {
     const params = new URLSearchParams({ symbol, days: String(days) });
     return fetchJson<ChartData>(`/history?${params}`);
   }
@@ -83,7 +83,7 @@ export class ApiService {
   /**
    * GET /api/events?symbol=XXX: Events for a stock or macro catalysts.
    */
-  static async getEvents(symbol?: string): Promise<any> {
+  static getEvents(symbol?: string): Promise<any> {
     if (symbol) {
       return fetchJson(`/events?symbol=${encodeURIComponent(symbol)}`);
     }
@@ -93,16 +93,15 @@ export class ApiService {
   /**
    * GET /api/search-symbol?q=ABC: Search for symbols.
    */
-  static async searchSymbol(query: string): Promise<SearchResult[]> {
+  static searchSymbol(query: string): Promise<SearchResult[]> {
     const params = new URLSearchParams({ q: query });
-    const resp = await fetchJson<any>(`/search-symbol?${params}`);
-    return resp.results || [];
+    return fetchJson<any>(`/search-symbol?${params}`).then((resp: any) => resp.results || []);
   }
 
   /**
    * POST /api/trigger: Manually trigger analysis of a stock.
    */
-  static async triggerAnalysis(symbol: string): Promise<any> {
+  static triggerAnalysis(symbol: string): Promise<any> {
     return fetchJson('/trigger', withCsrfHeaders({
       method: 'POST',
       body: JSON.stringify({ symbol })
@@ -112,7 +111,7 @@ export class ApiService {
   /**
    * POST /api/add-symbol: Add a symbol to the watchlist.
    */
-  static async addSymbol(symbol: string, name: string, sector: string, exchange: string = 'NSE'): Promise<any> {
+  static addSymbol(symbol: string, name: string, sector: string, exchange: string = 'NSE'): Promise<any> {
     return fetchJson('/add-symbol', withCsrfHeaders({
       method: 'POST',
       body: JSON.stringify({ symbol, name, sector, exchange })
@@ -122,7 +121,7 @@ export class ApiService {
   /**
    * POST /api/remove-symbol: Remove a symbol from the watchlist.
    */
-  static async removeSymbol(symbol: string): Promise<any> {
+  static removeSymbol(symbol: string): Promise<any> {
     return fetchJson('/remove-symbol', withCsrfHeaders({
       method: 'POST',
       body: JSON.stringify({ symbol })
