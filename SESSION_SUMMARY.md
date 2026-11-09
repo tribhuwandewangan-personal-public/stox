@@ -1,235 +1,101 @@
-# Session Summary: Angular 22 Conversion — Phases 1 & 2 Complete
+# Session Summary: Phase 3 Level 2 Components
 
 **Date:** 2026-11-10  
-**Status:** ✅ Phases 1–2 complete, Phase 3 planned and ready to start  
-**Tests:** 93/93 passing (Python backend)
+**Duration:** ~2 hours (components written + documentation)  
+**Commits:** 4 commits (components, CSS, testing guide, handoff update)  
+**Status:** ✅ Components written, ready for testing phase
 
 ---
 
-## What Was Accomplished
+## 🎯 What Was Completed
 
-### Phase 1: Backend Service Extraction (Commit 9492fb4)
+### Components Written (580 LOC)
 
-✅ **api/services.py** — Handler-independent service functions
-- Extracted: NaNSafeEncoder, safe_json_dumps, _load_symbols_list, _patterns_from_cached_candles, get_all_stock_data, get_stocks_response_body, get_history_response_body
-- Reusable by both legacy http.server handler and new Starlette app
-- Zero HTTP framework dependencies
+1. **StockCardComponent** (180 LOC)
+   - Standalone, reusable card for single stock
+   - Displays: symbol, name, sector, price, change %, verdict badge
+   - Pattern badges (up to 2, bearish styling)
+   - Event badge (if upcoming catalysts)
+   - Sparkline mini chart integrated
+   - Responsive hover effects
 
-✅ **tools/events_bus.py** — Thread-safe pub/sub for domain events
-- subscribe/publish API
-- Decouples QuotePoller, Scheduler, trigger from HTTP framework
-- Used for WebSocket broadcast
+2. **StockGridComponent** (70 LOC)
+   - 4-column responsive grid using CSS Grid
+   - `@for` loop with trackBy on symbol (performance optimization)
+   - Responsive: 4col → 2col (768px) → 1col (480px)
+   - Stock selection emission to parent
 
-✅ **Event publish hooks added**
-- QuoteService.refresh() → events_bus.publish(QUOTES, ...)
-- Scheduler._analyse() → events_bus.publish(ANALYSIS_DONE, ...)
-- Dashboard trigger endpoint → same
+3. **SidebarComponent** (220 LOC)
+   - **Search:** Reactive filter on symbol/name, live grid updates
+   - **Sector filters:** Chips from computed sectors, click to filter
+   - **Verdict tabs:** All 6 verdicts with real-time counts
+   - **Stock list:** First 10 stocks with prices
+   - **Clear filters:** Button to reset all
+   - Mobile-friendly (drawer-style on 768px)
+   - Uses FormsModule for `[(ngModel)]` binding
 
-✅ **Starlette app foundation** (api/ directory)
-- security.py: Host header + WebSocket Origin validation
-- routes.py: 10 REST endpoints (thin wrappers around services)
-- ws.py: WebSocket endpoint, ConnectionManager, ping/pong, snapshot
-- main.py: App factory, lifespan, middleware, event loop integration
-- Event loop integration: asyncio.run_coroutine_threadsafe() for thread→async
+4. **SparklineComponent** (80 LOC)
+   - Canvas-based mini chart (40px fixed height)
+   - Auto-scales to data min/max
+   - ResizeObserver for responsive sizing
+   - Line + area fill visualization
+   - Efficient rendering, no external chart library
 
-✅ **Backward compatibility**
-- dashboard_server.py refactored to import api.services
-- Legacy handler still works (nothing broken)
-- All 93 unit tests pass
+5. **DashboardComponent** (30 LOC)
+   - Integrates grid + sidebar layout
+   - Flex container with responsive direction
+   - Stock selection event handling
+   - Ready for Level 3 modal integration
 
-### Phase 2: Angular 22 Scaffold + Core Services (Commit b1c71b4)
+### Integration & Setup
 
-✅ **TypeScript models** (stock.model.ts)
-- API contract interfaces (Stock, SynthOutput, Quote, AccuracyReport, etc.)
-- Single source of truth for types
+- ✅ All components use `stocksStore` signals for reactive filtering
+- ✅ TypeScript strict mode, no compilation errors
+- ✅ CSS variables added (`--accent-amber`, `--text-secondary`)
+- ✅ All components are Angular 22 standalone
 
-✅ **Pure utility functions**
-- price.ts: bestPrice, fmtPrice, fmtChg, calcPct, calcPrice, calcRiskReward
-- verdict.ts: verdictToBucket, verdictInfo, getStockBucket, countByBucket
-- Replaces 8 copies in legacy HTML (now unified)
+### Documentation Created
 
-✅ **HTTP API service** (api.service.ts)
-- Static methods for REST endpoints
-- Automatic CSRF headers (X-Stox-Request: 1)
-- Fetch wrapper with error handling
+1. **PHASE_3_LEVEL_2_TESTING.md** (323 lines)
+   - Complete manual testing checklist
+   - Debugging guide with common issues
+   - Performance targets and accessibility checks
 
-✅ **WebSocket service** (ws.service.ts) — sophisticated reconnection
-- Automatic reconnection: exponential backoff (1s → 30s)
-- Ping/pong keep-alive (Heroku 55s timeout)
-- Fallback to polling (/api/stocks every 20s) when unavailable
-- Event subscriptions (on/off), state listeners
-- Cross-browser (ws: and wss:)
-
-✅ **Reactive state store** (stocks.store.ts)
-- Angular 22 signals (no Redux/NgRx overhead)
-- Fine-grained reactivity: stocks, loading, error, filter signals
-- Computed properties: sectors, verdictCounts, filteredStocks, selectedStock
-- Actions: setStocks, setSectorFilter, setSearchFilter, etc.
-- Automatic sorting by verdict bucket, symbol
-
-✅ **Angular configuration**
-- angular.json, tsconfig.json, package.json
-- proxy.conf.json: dev server (/api, /ws → :8765)
-- styles.css: dark theme (matches legacy exactly)
-
-✅ **Planning & documentation**
-- PHASE_3_COMPONENTS.md: detailed component checklist
-- frontend/README.md: architecture, workflow, security
-- Phase 3 sprint plan (8 days, 5 component levels)
+2. **Updated NEXT_SESSION_HANDOFF.md**
+   - Testing priorities and instructions
+   - Definition of done criteria
 
 ---
 
-## Test Results
-
-**Python Backend:** 93/93 passing ✅
-- No regressions from Phase 1 changes
-- All service extraction verified
-- Event publishing working
-
-**TypeScript:** Types verified (not yet built)
-
-**End-to-End:** Planned for Phase 3
-
----
-
-## Git Commits
-
-- 9492fb4: Phase 1: Backend service extraction and Starlette app foundation
-- b1c71b4: Phase 2: Angular 22 scaffold and core services foundation
-- 08bd0a1: Add frontend README and gitignore
-- 42d780f: Add Phase 3 component porting plan and checklist
-
----
-
-## Files Created This Session
-
-### Backend
-- `api/__init__.py`, `api/services.py`, `api/security.py`, `api/routes.py`, `api/ws.py`, `api/main.py`
-- `tools/events_bus.py`
-
-### Frontend
-- `frontend/angular.json`, `tsconfig.json`, `package.json`, `proxy.conf.json`, `.gitignore`
-- `frontend/src/index.html`, `main.ts`, `app.ts`, `styles.css`
-- `frontend/src/app/core/models/stock.model.ts`
-- `frontend/src/app/core/services/api.service.ts`, `ws.service.ts`
-- `frontend/src/app/core/stores/stocks.store.ts`
-- `frontend/src/app/core/utils/price.ts`, `verdict.ts`
-
-### Documentation
-- `PHASE_3_COMPONENTS.md`
-- `frontend/README.md`
-
----
-
-## Architecture Overview
-
-```
-Backend (Python):
-  dashboard_server.py (legacy handler)
-    ↓
-  api/services.py (reusable functions)
-    ↓
-  Starlette app (api/main.py) + WebSocket (api/ws.py)
-    ↓
-  tools/events_bus.py (thread-safe pub/sub)
-    ↓
-  QuotePoller, Scheduler (publish events)
-
-Frontend (Angular 22):
-  app.ts (root)
-    ↓
-  api.service.ts (HTTP) + ws.service.ts (WebSocket)
-    ↓
-  stocks.store.ts (signals state)
-    ↓
-  Components (shell, grid, modal, calculator - Phase 3)
-    ↓
-  Utils (price.ts, verdict.ts) + Models (stock.model.ts)
-```
-
----
-
-## Next Steps: Phase 3
-
-**Ready to start:** Component porting (8-day sprint, detailed checklist in PHASE_3_COMPONENTS.md)
-
-### Level 1 (Days 1–2): Shell
-- HeaderComponent, BulletinComponent, SidebarComponent
-
-### Level 2 (Days 3–4): Main Grid
-- StockGridComponent, StockCardComponent, SparklineComponent
-
-### Level 3 (Days 5–6): Modals
-- StockDetailModal, CandleChartComponent, PatternDetailsComponent
-
-### Level 4 (Days 7–8): Forms
-- PctCalculatorComponent, AddSymbolComponent, AccuracyComponent, WorkflowComponent
-
-Each component completion = 1 commit (tight feedback loop).
-
----
-
-## Critical Success Factors
-
-✅ Service extraction working: legacy handler still functional  
-✅ Event loop integration solved: threads can broadcast to WebSocket clients  
-✅ State management lightweight: signals instead of Redux  
-✅ WebSocket resilient: reconnection + polling fallback  
-✅ Type safety: single source of truth for API contract  
-✅ No breaking changes: all 93 tests pass, backward compatible
-
----
-
-## Constraints (Still Honored)
-
-✅ No money spent  
-✅ No Heroku resources created  
-✅ Local development only  
-✅ Temp copies for runs (never touch real storage/cache.db)
-
----
-
-## How to Continue
-
-1. Read `PHASE_3_COMPONENTS.md` (detailed checklist)
-2. Start Level 1: HeaderComponent
-   - Import from stores/services
-   - Bind to market state, queue, engine label
-   - Test with Vitest
-   - Commit
-3. Repeat for each component
-4. After Level 4: integration test + screenshot comparison
-5. Once parity verified: retire `static/index.html`
-
----
-
-## Metrics
+## 📊 Code Metrics
 
 | Metric | Value |
 |--------|-------|
-| Lines of code added | ~3,200 |
-| Backend | ~1,100 |
-| Frontend | ~1,400 |
-| Documentation | ~700 |
-| Python tests passing | 93/93 (100%) |
-| Commits (this session) | 4 |
-| Time estimate (Phase 3) | 5–7 days |
-| Time estimate (Phase 4) | 2–3 days |
+| Components Written | 5 |
+| Total LOC | 580 |
+| CSS Styles | ~400 LOC (embedded) |
+| Documentation | ~500 LOC |
+| Commits | 4 |
 
 ---
 
-## Current State
+## ✅ Git Commits
 
-- Branch: `main`
-- All changes committed and in git history
-- Ready for review and Phase 3 component porting
-- No local uncommitted changes
+1. **d5cb8ee** — Phase 3 L2: Components (grid, sidebar, sparkline)
+2. **d8b7806** — CSS variables (amber, text-secondary)
+3. **72f80a5** — Testing guide (PHASE_3_LEVEL_2_TESTING.md)
+4. **8c4ef6c** — Handoff update (NEXT_SESSION_HANDOFF.md)
 
 ---
 
-## Notes for Next Session
+## 🚀 Next Session: Testing Phase
 
-- Frontend build: `npm install && npm run build:prod` (output: `frontend/dist/stox/browser/`)
-- Backend + WebSocket: `python dashboard_server.py` (or `uvicorn api.main:app` once Starlette is wired)
-- Dev server proxy: `ng serve` (localhost:4200) routes `/api`, `/ws` to :8765
-- All 93 tests still pass; add to this number with Phase 3 component tests
+1. Run: `npm start` (frontend dev server)
+2. Test: Manual checklist in PHASE_3_LEVEL_2_TESTING.md
+3. Fix: Any runtime issues
+4. Add: Unit tests (Vitest)
+5. Commit: When all tests pass
+
+---
+
+**Status: ✅ Components complete, ready for browser testing. All documentation ready. No blockers.**
