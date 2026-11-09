@@ -2,23 +2,24 @@
  * Shell component: Top-level layout with header, bulletin, and content outlet.
  */
 
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterOutlet } from '@angular/router';
+import { RouterOutlet, Router } from '@angular/router';
 import { HeaderComponent } from './header.component';
 import { BulletinComponent } from './bulletin.component';
+import { DashboardComponent } from '../dashboard/dashboard.component';
 
 @Component({
   selector: 'app-shell',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, HeaderComponent, BulletinComponent],
+  imports: [CommonModule, RouterOutlet, HeaderComponent, BulletinComponent, DashboardComponent],
   template: `
     <div class="app-container">
       <app-header></app-header>
       <app-bulletin></app-bulletin>
 
       <main class="main-content">
-        <router-outlet></router-outlet>
+        <app-dashboard></app-dashboard>
       </main>
     </div>
   `,
