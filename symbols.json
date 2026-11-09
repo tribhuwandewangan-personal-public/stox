@@ -1,6 +1,6 @@
 {
   "description": "List of NSE stock symbols for multi-agent RAG analysis and prediction",
-  "updated_at": "2026-11-07",
+  "updated_at": "2026-11-09",
   "default_timeframe_days": 1825,
   "symbols": [
     {
@@ -351,6 +351,18 @@
       "name": "Zen Technologies Limited",
       "sector": "Aerospace & Defence",
       "sub_sector": "Simulators & Anti-Drone Systems",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "BELRISE",
+      "name": "BELRISE INDUSTRIES LTD",
+      "sector": "Consumer Cyclical",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "KOTAKBANK",
+      "name": "KOTAK MAHINDRA BANK LTD",
+      "sector": "Financial Services",
       "exchange": "NSE"
     }
   ]
