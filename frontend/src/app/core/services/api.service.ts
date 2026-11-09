@@ -81,6 +81,13 @@ export class ApiService {
   }
 
   /**
+   * GET /api/chart?symbol=XXX: Get candlestick data for modal.
+   */
+  static getChartData(symbol: string): Promise<ChartData> {
+    return this.getHistory(symbol, 100);
+  }
+
+  /**
    * GET /api/events?symbol=XXX: Events for a stock or macro catalysts.
    */
   static getEvents(symbol?: string): Promise<any> {
@@ -127,4 +134,13 @@ export class ApiService {
       body: JSON.stringify({ symbol })
     }));
   }
+
+  /**
+   * POST /api/re-analyze: Trigger re-analysis of a specific stock.
+   */
+  static reAnalyzeStock(symbol: string): Promise<any> {
+    return this.triggerAnalysis(symbol);
+  }
 }
+
+export const apiService = ApiService;

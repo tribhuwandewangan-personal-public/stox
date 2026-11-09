@@ -1,23 +1,32 @@
 /**
- * Dashboard component: Main content area with grid and sidebar.
+ * Dashboard component: Main content area with grid, sidebar, and modal.
  */
 
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { StockGridComponent } from './stock-grid.component';
 import { SidebarComponent } from './sidebar.component';
+import { StockDetailModalComponent } from './stock-detail-modal.component';
 import { Stock } from '../../core/models/stock.model';
 import { stocksStore } from '../../core/stores/stocks.store';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, StockGridComponent, SidebarComponent],
+  imports: [
+    CommonModule,
+    StockGridComponent,
+    SidebarComponent,
+    StockDetailModalComponent
+  ],
   template: `
     <div class="dashboard-container">
       <app-sidebar></app-sidebar>
       <app-stock-grid (selectStock)="onStockSelect($event)"></app-stock-grid>
     </div>
+
+    <!-- Stock detail modal (Level 3) -->
+    <app-stock-detail-modal></app-stock-detail-modal>
   `,
   styles: [`
     .dashboard-container {
@@ -37,6 +46,5 @@ import { stocksStore } from '../../core/stores/stocks.store';
 export class DashboardComponent {
   onStockSelect(stock: Stock): void {
     stocksStore.selectSymbol(stock.symbol);
-    // Level 3: Open modal here
   }
 }
