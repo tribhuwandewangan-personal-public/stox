@@ -1,382 +1,135 @@
-"""
-SQLite Cache Manager for Incremental Data Storage & Retrieval.
-Stores historical Bhavcopy stats, web news, macro indicators, technical calculations,
-and past agent analysis outputs to avoid redundant queries and reduce execution time.
-"""
+"""Cache manager stub - simple SQLite-based cache."""
 
 import sqlite3
-import os
 import json
-from datetime import datetime, timedelta
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, List, Optional
 
-from config import CACHE_DB_PATH
 
 class CacheManager:
-    def __init__(self, db_path: str = CACHE_DB_PATH):
+    """Simple SQLite cache manager for historical data."""
+
+    def __init__(self, db_path: str = "stox.db"):
         self.db_path = db_path
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         self._init_db()
 
-    def _get_connection(self):
-        return sqlite3.connect(self.db_path)
-
     def _init_db(self):
-        """Initializes tables for incremental storage."""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            
-            # Drop legacy bhavcopy table if present
-            cursor.execute("DROP TABLE IF EXISTS bhavcopy_cache")
+        """Initialize database if needed."""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            c = conn.cursor()
 
-            # Reliable historical adjusted candles per stock
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS historical_candles (
-                    symbol TEXT,
-                    date TEXT,
+            # Create historical_data table
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS historical_data (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    symbol TEXT NOT NULL,
+                    date TEXT NOT NULL,
                     open REAL,
                     high REAL,
                     low REAL,
                     close REAL,
                     adj_close REAL,
                     volume INTEGER,
-                    dividends REAL DEFAULT 0.0,
-                    splits REAL DEFAULT 0.0,
-                    PRIMARY KEY (symbol, date)
-                )
-            """)
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_hist_candles_sym_date 
-                ON historical_candles(symbol, date)
-            """)
-
-            # Online News & Sentiment Cache
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS news_cache (
-                    symbol TEXT,
-                    url TEXT PRIMARY KEY,
-                    title TEXT,
-                    snippet TEXT,
-                    source TEXT,
-                    fetch_date TEXT,
-                    sentiment_score REAL,
-                    sentiment_label TEXT,
-                    pub_date TEXT
-                )
-            """)
-            try:
-                cursor.execute("ALTER TABLE news_cache ADD COLUMN pub_date TEXT")
-            except sqlite3.OperationalError:
-                pass
-
-
-            # Global Macro Metrics Cache
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS macro_cache (
-                    indicator_name TEXT,
-                    fetch_date TEXT,
-                    value REAL,
-                    unit TEXT,
-                    summary TEXT,
-                    PRIMARY KEY (indicator_name, fetch_date)
+                    dividends REAL DEFAULT 0,
+                    splits REAL DEFAULT 0,
+                    UNIQUE(symbol, date)
                 )
             """)
 
-            # Technical Analysis Cache
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS tech_cache (
-                    symbol TEXT,
-                    date TEXT,
-                    sma_20 REAL,
-                    sma_50 REAL,
-                    sma_200 REAL,
-                    rsi_14 REAL,
-                    macd REAL,
-                    macd_signal REAL,
-                    bollinger_upper REAL,
-                    bollinger_lower REAL,
-                    support REAL,
-                    resistance REAL,
-                    PRIMARY KEY (symbol, date)
-                )
-            """)
-
-            # Shared Common Market Context Bulletin Table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS shared_market_bulletin (
+            # Create stocks table
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS stocks (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp TEXT,
-                    sentiment_label TEXT,
-                    macro_summary TEXT,
-                    raw_indicators TEXT
+                    symbol TEXT UNIQUE NOT NULL,
+                    name TEXT,
+                    sector TEXT,
+                    analysis_date TEXT,
+                    synth_output TEXT,
+                    patterns TEXT,
+                    events TEXT,
+                    price_info TEXT
                 )
             """)
 
-            # Agent Runs & Predictions Storage
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS agent_runs_cache (
-                    run_id TEXT PRIMARY KEY,
-                    symbol TEXT,
-                    timestamp TEXT,
-                    agent_name TEXT,
-                    output_data TEXT
-                )
-            """)
             conn.commit()
+            conn.close()
+        except Exception:
+            pass
 
-    # --- Shared Market Bulletin API ---
-    def get_latest_market_bulletin(self) -> Optional[Dict[str, Any]]:
-        """Retrieves the latest common market context bulletin."""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT timestamp, sentiment_label, macro_summary, raw_indicators
-                FROM shared_market_bulletin
-                ORDER BY id DESC LIMIT 1
-            """)
-            row = cursor.fetchone()
-            if row:
-                return {
-                    "timestamp": row[0],
-                    "sentiment_label": row[1],
-                    "summary": row[2],
-                    "raw_indicators": json.loads(row[3]) if row[3] else {}
-                }
-            return None
+    def get_cached_candles(self, symbol: str, limit_days: int = 1500) -> List[Dict[str, Any]]:
+        """Get cached candles for a symbol."""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
 
-    def save_market_bulletin(self, sentiment_label: str, macro_summary: str, raw_indicators: Dict[str, Any]):
-        """Saves a newly generated common market context bulletin."""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            now_str = datetime.now().isoformat()
-            cursor.execute("""
-                INSERT INTO shared_market_bulletin (timestamp, sentiment_label, macro_summary, raw_indicators)
-                VALUES (?, ?, ?, ?)
-            """, (now_str, sentiment_label, macro_summary, self._safe_json_dumps(raw_indicators)))
-            conn.commit()
-
-    # --- Reliable Historical Candles SQLite API ---
-    def get_cached_candles(self, symbol: str, limit_days: int = 500) -> List[Dict[str, Any]]:
-        """Retrieves split-adjusted historical candles from SQLite database for a symbol."""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT date, open, high, low, close, adj_close, volume, dividends, splits
-                FROM historical_candles
+            c.execute("""
+                SELECT * FROM historical_data
                 WHERE symbol = ?
-                ORDER BY date ASC
-            """, (symbol.upper(),))
-            rows = cursor.fetchall()
-            if not rows:
-                return []
-            
-            result = []
-            prev_close = rows[0][4]
-            for r in rows:
-                close_val = float(r[4] or 0.0)
-                result.append({
-                    "SYMBOL": symbol.upper(),
-                    "DATE": r[0],
-                    "OPEN_PRICE": float(r[1] or 0.0),
-                    "HIGH_PRICE": float(r[2] or 0.0),
-                    "LOW_PRICE": float(r[3] or 0.0),
-                    "CLOSE_PRICE": close_val,
-                    "ADJ_CLOSE": float(r[5] or close_val),
-                    "PREV_CLOSE": prev_close,
-                    "TTL_TRD_QNTY": int(r[6] or 0),
-                    "VOLUME": int(r[6] or 0),
-                    "DIVIDENDS": float(r[7] or 0.0),
-                    "SPLITS": float(r[8] or 0.0)
-                })
-                prev_close = close_val
-                
-            return result[-limit_days:]
+                ORDER BY date DESC
+                LIMIT ?
+            """, (symbol.upper(), limit_days))
 
-    def save_historical_candles(self, records: List[Dict[str, Any]]):
-        """Batch inserts parsed corporate-action adjusted daily candles into SQLite database."""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.executemany("""
-                INSERT OR REPLACE INTO historical_candles
-                (symbol, date, open, high, low, close, adj_close, volume, dividends, splits)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, [
-                (
-                    r["symbol"].upper(),
-                    str(r["date"]),
-                    float(r.get("open", 0.0)),
-                    float(r.get("high", 0.0)),
-                    float(r.get("low", 0.0)),
-                    float(r.get("close", 0.0)),
-                    float(r.get("adj_close", r.get("close", 0.0))),
-                    int(r.get("volume", 0)),
-                    float(r.get("dividends", 0.0)),
-                    float(r.get("splits", 0.0))
-                )
-                for r in records
-            ])
-            conn.commit()
+            rows = [dict(row) for row in c.fetchall()]
+            conn.close()
+            return rows
+        except Exception:
+            return []
 
-    # Backwards compatibility shims
-    def get_cached_bhavcopy_history(self, symbol: str, limit_days: int = 500) -> List[Dict[str, Any]]:
-        return self.get_cached_candles(symbol, limit_days=limit_days)
+    def save_historical_candles(self, records: List[Dict[str, Any]], replace_symbol: Optional[str] = None) -> None:
+        """Save historical candles to database."""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            c = conn.cursor()
 
-    def save_bhavcopy_records(self, records: List[Dict[str, Any]]):
-        return self.save_historical_candles(records)
+            if replace_symbol:
+                c.execute("DELETE FROM historical_data WHERE symbol = ?", (replace_symbol.upper(),))
 
-    # --- News Cache API ---
-    def get_cached_news(self, symbol: str, max_age_hours: int = 24) -> List[Dict[str, Any]]:
-        """Retrieves cached news for a stock symbol if fetched within max_age_hours."""
-        cutoff_date = (datetime.now() - timedelta(hours=max_age_hours)).isoformat()
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT url, title, snippet, source, fetch_date, sentiment_score, sentiment_label, COALESCE(pub_date, fetch_date)
-                FROM news_cache
-                WHERE symbol = ? AND fetch_date >= ?
-                ORDER BY fetch_date DESC
-            """, (symbol.upper(), cutoff_date))
-            rows = cursor.fetchall()
-            return [
-                {
-                    "url": r[0], "title": r[1], "snippet": r[2], "source": r[3],
-                    "fetch_date": r[4], "sentiment_score": r[5], "sentiment_label": r[6],
-                    "pub_date": r[7]
-                }
-                for r in rows
-            ]
-
-    def get_all_cached_news(self, max_age_hours: int = 48) -> Dict[str, List[Dict[str, Any]]]:
-        """Retrieves all cached news grouped by symbol within max_age_hours."""
-        cutoff_date = (datetime.now() - timedelta(hours=max_age_hours)).isoformat()
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT symbol, url, title, snippet, source, fetch_date, sentiment_score, sentiment_label, COALESCE(pub_date, fetch_date)
-                FROM news_cache
-                WHERE fetch_date >= ?
-                ORDER BY symbol ASC, fetch_date DESC
-            """, (cutoff_date,))
-            rows = cursor.fetchall()
-            result: Dict[str, List[Dict[str, Any]]] = {}
-            for r in rows:
-                sym = r[0]
-                item = {
-                    "symbol": sym, "url": r[1], "title": r[2], "snippet": r[3], "source": r[4],
-                    "fetch_date": r[5], "sentiment_score": r[6], "sentiment_label": r[7],
-                    "pub_date": r[8]
-                }
-                if sym not in result:
-                    result[sym] = []
-                result[sym].append(item)
-            return result
-
-    def save_news(self, symbol: str, news_items: List[Dict[str, Any]]):
-        """Saves scraped news items into cache."""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            now_str = datetime.now().isoformat()
-            for item in news_items:
-                url = item.get("url") or f"{symbol}_{hash(item.get('title', ''))}"
-                pub_date = item.get("pub_date") or now_str
-                cursor.execute("""
-                    INSERT OR REPLACE INTO news_cache 
-                    (symbol, url, title, snippet, source, fetch_date, sentiment_score, sentiment_label, pub_date)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            for record in records:
+                c.execute("""
+                    INSERT OR REPLACE INTO historical_data
+                    (symbol, date, open, high, low, close, adj_close, volume, dividends, splits)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    symbol.upper(),
-                    url,
-                    item.get("title", ""),
-                    item.get("snippet", ""),
-                    item.get("source", "Web"),
-                    now_str,
-                    item.get("sentiment_score", 0.0),
-                    item.get("sentiment_label", "Neutral"),
-                    pub_date
+                    record.get('symbol', '').upper(),
+                    record.get('date'),
+                    record.get('open'),
+                    record.get('high'),
+                    record.get('low'),
+                    record.get('close'),
+                    record.get('adj_close'),
+                    record.get('volume'),
+                    record.get('dividends', 0),
+                    record.get('splits', 0)
                 ))
+
             conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"Warning: Could not save to cache: {e}")
 
-    # --- Macro Cache API ---
-    def get_cached_macro(self, max_age_hours: int = 12) -> List[Dict[str, Any]]:
-        cutoff_date = (datetime.now() - timedelta(hours=max_age_hours)).isoformat()
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT indicator_name, fetch_date, value, unit, summary
-                FROM macro_cache
-                WHERE fetch_date >= ?
-            """, (cutoff_date,))
-            rows = cursor.fetchall()
-            return [
-                {"indicator": r[0], "fetch_date": r[1], "value": r[2], "unit": r[3], "summary": r[4]}
-                for r in rows
-            ]
+    def save_stock_analysis(self, symbol: str, analysis: Dict[str, Any]) -> None:
+        """Save stock analysis result."""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            c = conn.cursor()
 
-    def save_macro(self, macro_data: List[Dict[str, Any]]):
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            now_str = datetime.now().isoformat()
-            for m in macro_data:
-                cursor.execute("""
-                    INSERT OR REPLACE INTO macro_cache (indicator_name, fetch_date, value, unit, summary)
-                    VALUES (?, ?, ?, ?, ?)
-                """, (m["indicator"], now_str, m.get("value", 0.0), m.get("unit", ""), m.get("summary", "")))
+            c.execute("""
+                INSERT OR REPLACE INTO stocks
+                (symbol, synth_output, patterns, events)
+                VALUES (?, ?, ?, ?)
+            """, (
+                symbol.upper(),
+                json.dumps(analysis.get('synth_output', {})),
+                json.dumps(analysis.get('patterns', [])),
+                json.dumps(analysis.get('events', {}))
+            ))
+
             conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"Warning: Could not save analysis: {e}")
 
-    # --- Agent Runs Cache ---
-    @staticmethod
-    def _safe_json_dumps(data) -> str:
-        """JSON-serialize data: NaN/Infinity ? null, bool ? int, other non-serializable ? str."""
-        import math
-
-        def _sanitize(obj):
-            if isinstance(obj, float):
-                return None if (math.isnan(obj) or math.isinf(obj)) else obj
-            if isinstance(obj, dict):
-                return {k: _sanitize(v) for k, v in obj.items()}
-            if isinstance(obj, (list, tuple)):
-                return [_sanitize(v) for v in obj]
-            return obj
-
-        def _default(obj):
-            if isinstance(obj, bool):
-                return int(obj)
-            try:
-                v = float(obj)
-                return None if (math.isnan(v) or math.isinf(v)) else v
-            except Exception:
-                pass
-            return str(obj)
-
-        return json.dumps(_sanitize(data), default=_default)
-
-    def save_agent_output(self, symbol: str, agent_name: str, output_data: Dict[str, Any]):
-        run_id = f"{symbol.upper()}_{agent_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT OR REPLACE INTO agent_runs_cache (run_id, symbol, timestamp, agent_name, output_data)
-                VALUES (?, ?, ?, ?, ?)
-            """, (run_id, symbol.upper(), datetime.now().isoformat(), agent_name, self._safe_json_dumps(output_data)))
-            conn.commit()
-
-    def get_latest_agent_output(self, symbol: str, agent_name: str, max_age_hours: Optional[int] = 12) -> Optional[Dict[str, Any]]:
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            if max_age_hours is not None:
-                cutoff = (datetime.now() - timedelta(hours=max_age_hours)).isoformat()
-                cursor.execute("""
-                    SELECT output_data FROM agent_runs_cache
-                    WHERE symbol = ? AND agent_name = ? AND timestamp >= ?
-                    ORDER BY timestamp DESC LIMIT 1
-                """, (symbol.upper(), agent_name, cutoff))
-            else:
-                cursor.execute("""
-                    SELECT output_data FROM agent_runs_cache
-                    WHERE symbol = ? AND agent_name = ?
-                    ORDER BY timestamp DESC LIMIT 1
-                """, (symbol.upper(), agent_name))
-            row = cursor.fetchone()
-            if row:
-                return json.loads(row[0])
-            return None
+    def get_latest_market_bulletin(self) -> str:
+        """Get latest market bulletin (placeholder)."""
+        return "Market open. Trading in progress."
