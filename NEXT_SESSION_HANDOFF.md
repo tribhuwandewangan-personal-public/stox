@@ -1,309 +1,259 @@
-# Next Session Handoff: Phase 3 Level 2 — Stock Grid & Sidebar
+# Next Session Handoff: Phase 3 Level 2 — Testing & Refinement
 
-**Previous Session Status:** ✅ COMPLETE  
-**Final Commit:** 532fa59 (Session final status)  
-**Tests:** 93/93 passing  
-**Next Task:** Phase 3 Level 2 (Stock Grid)  
+**Previous Session Status:** ✅ COMPONENTS WRITTEN  
+**Latest Commits:** 
+- d5cb8ee: Phase 3 Level 2 components (grid, sidebar, sparkline)
+- d8b7806: CSS variables for theming
+- 72f80a5: Testing & debugging guide
+
+**Tests:** 93/93 Python tests passing (frontend pending)
+**Next Task:** Test Level 2 components, fix issues, then Level 3 (modals)
 
 ---
 
 ## 🎯 What's Ready for You
 
-### Completed Work (Don't Redo!)
-✅ Phase 1: Backend service extraction  
-✅ Phase 2: Angular 22 scaffold + core services  
-✅ Phase 3 Level 1: Shell components (header, bulletin)  
+### ✅ Completed This Session
+
+**StockCardComponent** (~180 LOC)
+- Symbol, name, sector, price, change %, verdict badge
+- Pattern badges (up to 2, with bearish styling)
+- Event badge (if upcoming events)
+- Sparkline mini chart (40px, auto-scaling canvas)
+- Responsive hover effects, uses utility functions
+
+**StockGridComponent** (~70 LOC)
+- 4-column responsive grid (4col → 2col @ 768px → 1col @ 480px)
+- `@for` loop with `track stock.symbol` for performance
+- Emits selection events to parent dashboard
+
+**SidebarComponent** (~220 LOC)
+- **Search box:** Reactive filter on symbol/name (live)
+- **Sector filter:** Chips from computed sectors list
+- **Verdict tabs:** All 6 verdicts (BUY, ACCUMULATE, HOLD, REDUCE, SELL, PENDING) with counts
+- **Stock list:** First 10 filtered stocks with prices
+- **Clear button:** Reset all filters
+- Mobile drawer ready (border-bottom on 768px)
+
+**SparklineComponent** (~80 LOC)
+- Canvas-based mini chart
+- Auto-scales to data min/max
+- Responsive via ResizeObserver
+- Line + area fill visualization
+
+**DashboardComponent** (~30 LOC)
+- Wired grid + sidebar layout
+- Flex container (row → column @ 768px)
+- Stock selection integration
+
+**CSS & Setup**
+- Added `--accent-amber` and `--text-secondary` color variables
+- All components use `stocksStore` signals for reactivity
+- TypeScript strict mode, no compilation errors
 
 ### Current App Status
 - Header showing market badge, queue status, engine label ✅
 - Bulletin banner with collapsible animation ✅
-- Dashboard shows "Level 2 coming soon" placeholder
+- **NEW:** Sidebar with search/filters (not yet tested in browser)
+- **NEW:** Stock grid with cards and sparklines (not yet tested in browser)
 - WebSocket connected and polling fallback ready
 - All 93 Python tests passing
-- TypeScript verified, no compilation errors
 
 ---
 
-## 📋 Phase 3 Level 2: Stock Grid (Your Task)
+## 📋 Phase 3 Level 2: Testing & Refinement (Your Task)
 
-### Components to Port
-1. **StockGridComponent** (~150 LOC)
-   - 4-column responsive grid
-   - `trackBy` for performance
-   - Filters from sidebar
-   - Click → select stock, open modal (Level 3)
+### Step 1: Start Servers
 
-2. **StockCardComponent** (~200 LOC)
-   - Symbol, name, sector (text)
-   - Latest price + change %
-   - Verdict badge (BUY/ACCUMULATE/HOLD/SELL/PENDING)
-   - 2–3 pattern badges
-   - Event badge
-   - Sparkline (mini chart)
-   - Responsive hover
-
-3. **SparklineComponent** (~100 LOC)
-   - Canvas chart (port from legacy)
-   - 25 last candles
-   - Auto-scale
-   - ResizeObserver for responsive
-
-4. **SidebarComponent** (~200 LOC)
-   - Search box (reactive, live filter)
-   - Sector filter chips
-   - Verdict tabs (BUY, ACCUMULATE, HOLD, REDUCE, SELL, PENDING with counts)
-   - Stock list (flat view)
-   - Collapse/expand (localStorage)
-   - Mobile drawer
-
-5. **PatternBadgesComponent** (~80 LOC)
-   - Reusable badge list
-   - Icons + colors per pattern
-
-6. **EventBadgeComponent** (~60 LOC)
-   - Expandable event indicator
-   - Tooltip/popover
-
-### CSS to Port
-- `.stock-grid`, `.stock-card`
-- `.sidebar`, `.sidebar-search`, `.sidebar-chips`, `.sidebar-item-*`
-- `.verdict-tabs`
-- `.sparkline`
-- `.pattern-badge`, `.event-badge`
-- All responsive breakpoints (1024px, 768px)
-
-### Store Integration
-Use `stocksStore` signals:
-```typescript
-stocksStore.filteredStocks  // computed filtered + sorted
-stocksStore.verdictCounts   // computed verdict counts
-stocksStore.sectors         // computed unique sectors
-stocksStore.setSectorFilter(sector)
-stocksStore.setSearchFilter(query)
-stocksStore.setVerdictFilter(verdict)
-```
-
-### Live Data
-- WebSocket broadcasts from backend
-- `ws.on('quotes', (data) => stocksStore.setStocks(data))`
-- `ws.on('analysis_done', (data) => refreshStocks())`
-- Polling fallback every 20s
-
----
-
-## 📖 Where to Start
-
-### Step 1: Review Documentation
 ```bash
-# Read detailed component checklist
-cat PHASE_3_COMPONENTS.md | grep -A 100 "^### Level 2"
-
-# Read API/WebSocket setup
-cat frontend/README.md
-```
-
-### Step 2: Review Legacy Code
-```bash
-# See old HTML/CSS for Stock Grid
-# Lines 1100-1400 in static/index.html (git history)
-git show HEAD~100:static/index.html | head -1400 | tail -300
-
-# Canvas sparkline drawing (port this)
-# Lines 3900-4000 in static/index.html
-```
-
-### Step 3: Set Up Dev Environment
-```bash
+# Terminal 1: Frontend dev server
 cd frontend
-npm install
 npm start
-# http://localhost:4200 (should show placeholder)
+# Runs on http://localhost:4200
 
-# In separate terminal:
-cd ..
+# Terminal 2: Backend WebSocket
 python dashboard_server.py --port 8765
-# Backend on localhost:8765
 ```
 
-### Step 4: Start Porting
-1. Create `StockGridComponent` (simple 4-column grid first)
-2. Create `StockCardComponent` (just text first, no sparkline)
-3. Add `SparklineComponent` (canvas chart)
-4. Create `SidebarComponent` (filters)
-5. Wire everything together
-6. Test with `npm start` + `python dashboard_server.py`
+### Step 2: Manual Testing (Crucial!)
 
-### Step 5: Commit After Each Component
+See **PHASE_3_LEVEL_2_TESTING.md** for full checklist:
+
+**Core flows to test:**
+- [ ] Grid displays 50+ stocks in 4 columns
+- [ ] Search filters grid live (type "INFY" → only INFY)
+- [ ] Verdict tabs filter (click "BUY" → only BUY stocks)
+- [ ] Sector chips filter (click "Technology" → only tech)
+- [ ] Click card → selected (visual feedback + store update)
+- [ ] Sparklines visible (40px charts in each card)
+- [ ] Responsive layout (test at 375px width on mobile)
+- [ ] WebSocket updates prices real-time (no refresh)
+- [ ] No console errors
+
+**Common issues to watch for:**
+- Components not rendering: Check `npm start` output for errors
+- Search not filtering: Verify `FormsModule` imported
+- Sparklines blank: Check `stock.sparkline` data exists
+- Mobile broken: Review media query breakpoints
+
+### Step 3: Fix Any Issues
+
+If tests fail:
+1. Check DevTools Console for errors
+2. Review component code in `frontend/src/app/features/dashboard/`
+3. Check store state: `stocksStore.filter()`, `stocksStore.filteredStocks()`
+4. Check WebSocket: `wsService.connected()` should be true
+
+**Common fixes:**
+- Full rebuild: `npm run build`
+- Restart server: `npm start`
+- Clear cache: `rm -rf node_modules/.cache`
+
+### Step 4: Add Unit Tests
+
+Create tests in:
+- `frontend/src/app/core/utils/verdict.spec.ts`
+- `frontend/src/app/core/utils/price.spec.ts`
+- `frontend/src/app/features/dashboard/stock-grid.spec.ts`
+
+Tests to cover:
+- Filter logic (sector, verdict, search)
+- Price formatting (Indian currency)
+- Verdict bucketing (action → bucket)
+- Grid performance (trackBy)
+
+Run: `npm test`
+
+### Step 5: Performance Check
+
 ```bash
-git add frontend/src/app/features/
-git commit -m "Phase 3 Level 2: Port StockCardComponent"
+npm run build  # Production build
+# Check DevTools Performance tab:
+# - Grid render time < 500ms
+# - Scroll FPS = 60 (no drops)
+# - Memory < 20MB for 50 cards
+```
+
+### Step 6: Commit When Ready
+
+```bash
+git add frontend/src/...
+git commit -m "Phase 3 Level 2: Test & fix [issue], add unit tests"
 ```
 
 ---
 
-## 🧪 Testing
+## 🧪 Testing Resources
 
-### Unit Tests (Vitest)
-- Grid ordering (by verdict bucket, symbol)
-- Sidebar filtering (sector, verdict, search)
-- Price formatting (fmtPrice, fmtChg)
-- Verdict bucketing (verdictToBucket)
+**Reference:**
+- `PHASE_3_LEVEL_2_TESTING.md` — Full testing checklist + debugging guide
+- `frontend/README.md` — Angular setup & architecture
+- `frontend/src/app/core/stores/stocks.store.ts` — Store API reference
 
-### E2E Tests (Playwright) — After All Components
-```bash
-# Side-by-side comparison with legacy UI
-# Must match screenshot pixel-perfect
-```
+**Key Files to Inspect:**
+- `frontend/src/app/features/dashboard/stock-card.component.ts` (180 LOC)
+- `frontend/src/app/features/dashboard/stock-grid.component.ts` (70 LOC)
+- `frontend/src/app/features/dashboard/sidebar.component.ts` (220 LOC)
+- `frontend/src/app/features/dashboard/sparkline.component.ts` (80 LOC)
 
-### Manual Testing
-```bash
-# While `ng serve` running:
-# 1. Open http://localhost:4200
-# 2. Check grid renders
-# 3. Click card → select (prepare for Level 3 modal)
-# 4. Search in sidebar → grid filters
-# 5. Click verdict tab → grid filters
-# 6. Watch price update (WebSocket)
-# 7. Mobile view (F12, 375px width)
-```
-
----
-
-## 📝 Code Snippets to Use
-
-### Stock Grid Loop
-```typescript
-<div class="stock-grid">
-  @for (stock of stocksStore.filteredStocks(); track stock.symbol) {
-    <app-stock-card [stock]="stock" (click)="selectStock(stock)"></app-stock-card>
-  }
-</div>
-```
-
-### Sidebar Verdict Filter
-```typescript
-@for (verdict of verdicts; let i = $index) {
-  <button 
-    [class.active]="stocksStore.filter().verdict === verdict"
-    (click)="stocksStore.setVerdictFilter(verdict === stocksStore.filter().verdict ? null : verdict)">
-    {{ verdict }} ({{ stocksStore.verdictCounts()[verdict] }})
-  </button>
-}
-```
-
-### Live Price Update
-```typescript
-constructor() {
-  ws.on('quotes', (data) => {
-    stocksStore.setStocks(data.quotes ? 
-      Object.values(data.quotes) : []);
-  });
-}
+**Browser DevTools:**
+```javascript
+// Check store in console:
+import { stocksStore } from './app/core/stores/stocks.store';
+stocksStore.filter()           // Current filters
+stocksStore.filteredStocks()   // Filtered list
+stocksStore.verdictCounts()    // Counts
+stocksStore.selectedStock()    // Selected (for Level 3)
 ```
 
 ---
 
 ## 📊 Progress Tracking
 
-| Component | Status | Lines | Notes |
-|-----------|--------|-------|-------|
-| StockGridComponent | ⏳ TODO | ~150 | Simple grid loop first |
-| StockCardComponent | ⏳ TODO | ~200 | Text + badges first |
-| SparklineComponent | ⏳ TODO | ~100 | Port canvas logic |
-| SidebarComponent | ⏳ TODO | ~200 | Search + filters |
-| PatternBadgesComponent | ⏳ TODO | ~80 | Reusable list |
-| EventBadgeComponent | ⏳ TODO | ~60 | Expandable badge |
+| Component | Status | LOC | Notes |
+|-----------|--------|-----|-------|
+| StockCardComponent | ✅ Written | 180 | ⏳ Not yet tested in browser |
+| StockGridComponent | ✅ Written | 70 | ⏳ Not yet tested in browser |
+| SidebarComponent | ✅ Written | 220 | ⏳ Not yet tested in browser |
+| SparklineComponent | ✅ Written | 80 | ⏳ Not yet tested in browser |
+| DashboardComponent | ✅ Written | 30 | ✅ Integrated |
+| **Manual Testing** | ⏳ TODO | – | Critical path |
+| **Unit Tests** | ⏳ TODO | ~300 | Low priority if manual pass |
+| **E2E Tests** | ⏳ TODO | ~200 | After all manual tests pass |
 
-**Total L2:** ~790 LOC expected
-
----
-
-## 🚨 Common Pitfalls to Avoid
-
-❌ Don't create new chart library — port existing canvas drawCandleChart  
-❌ Don't use `*ngFor` — use new Angular `@for` syntax  
-❌ Don't fetch data in component — use `stocksStore` signals  
-❌ Don't forget `trackBy` in grid loops — causes performance issues  
-❌ Don't hardcode colors — use CSS variables (--accent-green, etc.)  
-❌ Don't forget responsive media queries (1024px, 768px)  
-❌ Don't forget mobile drawer for sidebar  
-❌ Don't skip TypeScript strict mode — `@property(required)` for inputs  
+**Expected Total:** ~1000 LOC (components + tests)
 
 ---
 
 ## ✅ Definition of Done (L2)
 
-- [ ] StockGridComponent renders 4-column grid
-- [ ] StockCardComponent shows all fields (price, verdict, patterns, events)
-- [ ] SparklineComponent displays mini chart
-- [ ] SidebarComponent with search + filters works
-- [ ] Grid filters reactively on sidebar input
-- [ ] Live price updates from WebSocket
+- [ ] Grid renders 50+ stocks in 4 columns
+- [ ] Cards show all fields (price, verdict, patterns, events, sparkline)
+- [ ] Sidebar search filters grid live
+- [ ] Verdict tabs filter grid + show counts
+- [ ] Sector chips filter grid
+- [ ] Click card → selection state updates
+- [ ] Live price updates from WebSocket visible
 - [ ] Polling fallback works (20s interval)
-- [ ] Mobile responsive (test at 375px)
+- [ ] Mobile responsive (tested at 375px)
 - [ ] All CSS migrated from legacy UI
-- [ ] No visual regressions (screenshot matches)
+- [ ] No visual regressions (layout matches legacy)
+- [ ] No console errors or warnings
 - [ ] All 93 Python tests still passing
-- [ ] Component committed with clear message
+- [ ] Unit tests written (> 80% coverage)
+- [ ] Code committed with clear message
 
 ---
 
-## 📚 Reference Files
+## 🚨 Common Pitfalls to Avoid
 
-**Documentation:**
-- `INDEX.md` — Navigation hub
-- `QUICK_START.md` — Setup
-- `PHASE_3_COMPONENTS.md` — Full checklist (Level 2 section)
-- `frontend/README.md` — Angular guide
-
-**Code to Reference:**
-- `frontend/src/app/core/stores/stocks.store.ts` — State management
-- `frontend/src/app/core/services/ws.service.ts` — WebSocket
-- `frontend/src/app/core/utils/price.ts` — Price utils
-- `frontend/src/app/core/utils/verdict.ts` — Verdict utils
-- `frontend/src/app/features/shell/header.component.ts` — Component pattern
-
-**Legacy Code (for porting):**
-- `static/index.html` lines 1100–1400 (grid + cards)
-- `static/index.html` lines 1500–1800 (sidebar)
-- `static/index.html` lines 3900–4000 (sparkline canvas)
-
----
-
-## 🔗 Quick Links
-
-- **Start here:** [`INDEX.md`](INDEX.md)
-- **Level 2 checklist:** [`PHASE_3_COMPONENTS.md`](PHASE_3_COMPONENTS.md)
-- **Angular guide:** [`frontend/README.md`](frontend/README.md)
-- **Last commit:** `532fa59` (Session final status)
-- **Test status:** 93/93 ✅
-
----
-
-## 💡 Tips for Success
-
-1. **Port incrementally** — Build grid → add cards → add sparkline → sidebar
-2. **Test often** — `npm start` after each component
-3. **Match legacy exactly** — CSS and layout must be identical
-4. **Use trackBy** — Grid has 50+ cards, performance matters
-5. **Mobile first** — Test 375px width early
-6. **Screenshot comparison** — Playwright side-by-side after all L2
-7. **Commit cleanly** — One component per commit, clear message
-8. **Ask for help** — Reference this doc when stuck
+❌ Don't test in production build — use `npm start` dev server  
+❌ Don't assume prices update instantly — WebSocket has latency  
+❌ Don't hardcode test data — always use live store  
+❌ Don't skip mobile testing — responsive is critical  
+❌ Don't ignore console errors — fix them immediately  
+❌ Don't commit without testing in browser  
 
 ---
 
 ## 🎯 Success Criteria
 
-After Level 2 is done:
-- ✅ App shows stock grid with live prices
-- ✅ Sidebar filters work
-- ✅ WebSocket updates visible
-- ✅ Matches legacy UI (screenshot)
-- ✅ All 93 tests passing
-- ✅ Mobile responsive
-- ✅ Ready for Level 3 (modals)
+After testing is complete:
+- ✅ App shows stock grid with 50+ live prices
+- ✅ Sidebar search/filters work smoothly
+- ✅ WebSocket price updates visible in real-time
+- ✅ Matches legacy UI (layout, colors, spacing)
+- ✅ Mobile responsive (375px width tested)
+- ✅ All Python tests still passing (93/93)
+- ✅ Zero console errors
+- ✅ Ready for Level 3 (stock detail modal)
 
 ---
 
-**You're all set! Start with INDEX.md and PHASE_3_COMPONENTS.md Level 2. Good luck! 🚀**
+## 🔗 Next Level (Level 3)
+
+When Level 2 is complete:
+1. **StockDetailModalComponent** — Opens on card click
+2. **CandleChartComponent** — Full candlestick history
+3. **PatternDetailsComponent** — Pattern analysis
+4. **EventsPanelComponent** — Upcoming events
+5. **LongTermPanelComponent** — Long-term analysis
+6. **ReAnalyzeButton** — Trigger backend analysis
+
+Level 3 checklist: `PHASE_3_COMPONENTS.md` (grep "### Level 3")
+
+---
+
+## 💡 Tips for Success
+
+1. **Test in browser first** — Don't trust TypeScript alone
+2. **Use DevTools Network tab** — Watch WebSocket messages
+3. **Check store state** — Understand what's in `stocksStore`
+4. **Mobile test early** — Not at the end
+5. **Screenshot comparison** — Keep legacy UI reference
+6. **Commit cleanly** — One feature per commit
+7. **Document bugs** — Leave notes for next session
+
+---
+
+**You're set up! Start with Step 1 (Start Servers), then follow the testing checklist in PHASE_3_LEVEL_2_TESTING.md. Good luck! 🚀**
