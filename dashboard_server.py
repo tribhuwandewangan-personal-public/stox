@@ -10,55 +10,18 @@ import json
 import math
 import os
 import sys
+import time
 import urllib.parse
-from datetime import datetime
+from collections import OrderedDict
+from datetime import datetime, timedelta
 import threading
-import sqlite3
-
-
-class NaNSafeEncoder(json.JSONEncoder):
-    """
-    JSON encoder that converts NaN/Infinity floats to null and handles numpy scalars.
-    Python's json module emits bare NaN/Infinity by default, which is invalid JSON,
-    and fails on numpy scalars like np.bool_. This encoder fixes that globally for the dashboard.
-    """
-    def iterencode(self, obj, _one_shot=False):
-        # Pre-sanitize the object tree before encoding
-        return super().iterencode(self._sanitize(obj), _one_shot)
-
-    def _sanitize(self, obj):
-        if hasattr(obj, 'item') and callable(obj.item):
-            try:
-                obj = obj.item()
-            except Exception:
-                pass
-
-        if isinstance(obj, float):
-            if math.isnan(obj) or math.isinf(obj):
-                return None
-            return obj
-        elif isinstance(obj, dict):
-            return {k: self._sanitize(v) for k, v in obj.items()}
-        elif isinstance(obj, (list, tuple)):
-            return [self._sanitize(v) for v in obj]
-        return obj
-
-    def default(self, o):
-        if hasattr(o, 'item') and callable(o.item):
-            return o.item()
-        if hasattr(o, '__bool__'):
-            return bool(o)
-        return str(o)
-
-def safe_json_dumps(obj) -> bytes:
-    """Serialize obj to JSON bytes, replacing NaN/Infinity with null."""
-    return json.dumps(obj, cls=NaNSafeEncoder).encode("utf-8")
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from config import OLLAMA_MODEL, SYMBOLS_FILE_PATH, CACHE_DB_PATH
+from config import (ENGINE_LABEL, SYMBOLS_FILE_PATH, CACHE_DB_PATH, MAX_CONCURRENT_TRIGGERS, DASHBOARD_HOST,
+                    QUOTE_SOURCES, QUOTE_POLL_SECONDS, AUTO_SCHEDULE, MAX_SYMBOL_WORKERS)
 from storage.cache_manager import CacheManager
 from storage.queue_manager import ValkeyQueueManager
 from graph import MultiAgentWorkflow
@@ -66,7 +29,20 @@ from tools.historical_data_tools import HistoricalDataEngine
 from tools.tech_tools import TechnicalAnalysisEngine
 from tools.events_tools import EventsEngine
 from tools.long_term_strategy import long_term_engine
+from tools import market_calendar
+from tools.quote_tools import QuoteService, QuotePoller, build_quotes_response, build_price_info
+from tools.web_security import (LOOPBACK_NAMES, valid_symbol, host_header_ok, post_guard_error,
+                                resolve_within)
+from tools.outcome_tracker import compute_accuracy
+from tools.scheduler import Scheduler
 from tools.symbol_search_tools import search_internet_symbols, add_symbol_to_json, remove_symbol_from_json
+from api.services import (
+    safe_json_dumps, get_all_stock_data, get_stocks_response_body, get_history_response_body,
+    _load_symbols_list, NaNSafeEncoder, SYNTH_AGENT, TECH_AGENT, HIST_AGENT, NEWS_AGENT,
+    RISK_AGENT, FUND_AGENT, STALE_SYNTH_HOURS, STOCKS_CACHE_SECONDS, _stocks_lock, _stocks_cache,
+    _pattern_memo
+)
+from tools import events_bus
 
 PORT = int(os.getenv("DASHBOARD_PORT", "8765"))
 cache_mgr = CacheManager()
@@ -74,6 +50,12 @@ queue_mgr = ValkeyQueueManager()
 hist_engine = HistoricalDataEngine(cache_manager=cache_mgr)
 tech_engine = TechnicalAnalysisEngine(rag_engine=hist_engine, cache_manager=cache_mgr)
 events_engine = EventsEngine(cache_manager=cache_mgr)
+quote_service = QuoteService(cache_mgr, sources=QUOTE_SOURCES)
+quote_poller = QuotePoller(
+    quote_service,
+    symbols_loader=lambda: [x.get("symbol", "").upper() for x in _load_symbols_list() if x.get("symbol")],
+    poll_seconds=QUOTE_POLL_SECONDS,
+)
 _workflow_instance = None
 
 def get_workflow():
@@ -82,116 +64,17 @@ def get_workflow():
         _workflow_instance = MultiAgentWorkflow(cache_mgr)
     return _workflow_instance
 
-def get_all_stock_data():
-    symbols_list = []
-    if os.path.exists(SYMBOLS_FILE_PATH):
-        try:
-            with open(SYMBOLS_FILE_PATH, "r", encoding="utf-8") as f:
-                symbols_list = json.load(f).get("symbols", [])
-        except Exception as e:
-            print(f"⚠️ [Dashboard Warning] Could not parse {SYMBOLS_FILE_PATH}: {e}", flush=True)
-            symbols_list = []
+# --------------------------------------------------------------------------------------------- request security
+ENFORCE_HOST_CHECK = DASHBOARD_HOST in LOOPBACK_NAMES      # blocks DNS-rebinding when bound to loopback only
+MAX_BODY_BYTES = 64 * 1024
+_REPORT_DIRS = ("news_reports", "reports")
 
-    # Get live queue statuses from SQLite queue
-    queue_statuses = queue_mgr.get_symbol_statuses()
 
-    results = []
-    for s in symbols_list:
-        sym = s.get("symbol", "").upper()
-        name = s.get("name", "")
-        sector = s.get("sector", "")
-        q_status = queue_statuses.get(sym, "pending")
+# /api/trigger: bounded number of concurrent single-stock analyses, one per symbol at a time
+_trigger_slots = threading.BoundedSemaphore(MAX_CONCURRENT_TRIGGERS)
+_running_symbols = set()
+_running_lock = threading.Lock()
 
-        # Get latest synthesizer output: check fresh first (72h), then fall back to latest available
-        synth_output = cache_mgr.get_latest_agent_output(sym, "Master Prediction Synthesizer Agent", max_age_hours=72)
-        is_stale = False
-        if not synth_output:
-            synth_output = cache_mgr.get_latest_agent_output(sym, "Master Prediction Synthesizer Agent", max_age_hours=None)
-            if synth_output:
-                is_stale = True
-
-        tech_output = cache_mgr.get_latest_agent_output(sym, "Technical Analysis Agent", max_age_hours=None)
-        hist_output = cache_mgr.get_latest_agent_output(sym, "Historical Data RAG Agent", max_age_hours=None)
-        news_output = cache_mgr.get_latest_agent_output(sym, "News & Sentiment Agent", max_age_hours=None)
-        risk_output = cache_mgr.get_latest_agent_output(sym, "Risk & Volatility Agent", max_age_hours=None)
-        fund_output = cache_mgr.get_latest_agent_output(sym, "Fundamental Analyst Agent", max_age_hours=None)
-
-        # Get detected patterns
-        patterns = []
-        if tech_output and "detected_patterns" in tech_output:
-            patterns = tech_output.get("detected_patterns", [])
-        elif tech_output and "raw_indicators" in tech_output and "detected_patterns" in tech_output["raw_indicators"]:
-            patterns = tech_output["raw_indicators"].get("detected_patterns", [])
-        else:
-            try:
-                patterns = tech_engine.detect_chart_patterns(hist_engine.load_symbol_history(sym, limit_days=90))
-            except Exception:
-                patterns = []
-
-        # Get upcoming events
-        events = {}
-        if fund_output and "upcoming_events" in fund_output:
-            events = fund_output.get("upcoming_events", {})
-        else:
-            try:
-                events = events_engine.fetch_stock_events(sym)
-            except Exception:
-                events = {}
-
-        # Quick sparkline data for inline visual chart (last 25 candles)
-        sparkline = []
-        try:
-            cached_candles = cache_mgr.get_cached_candles(sym, limit_days=25)
-            sparkline = [round(float(c.get("CLOSE_PRICE", 0)), 2) for c in cached_candles]
-        except Exception:
-            sparkline = []
-
-        # Compute Long-Term Strategy & Multi-Year Compounder Evaluation
-        last_price = 100.0
-        if tech_output and "raw_indicators" in tech_output and tech_output["raw_indicators"].get("last_price"):
-            last_price = float(tech_output["raw_indicators"]["last_price"])
-        elif sparkline:
-            last_price = float(sparkline[-1])
-
-        short_verdict = "HOLD"
-        if synth_output and "structured_signal" in synth_output:
-            short_verdict = synth_output["structured_signal"].get("action_verdict", "HOLD")
-
-        long_term_signal = long_term_engine.evaluate_long_term_stock(
-            symbol=sym,
-            name=name,
-            sector=sector,
-            last_price=last_price,
-            short_verdict=short_verdict
-        )
-
-        # Enrich structured_signal with long-term metrics
-        if synth_output and "structured_signal" in synth_output:
-            synth_output["structured_signal"]["long_term_signal"] = long_term_signal
-            synth_output["structured_signal"]["long_term_target"] = long_term_signal["long_term_target"]
-            synth_output["structured_signal"]["long_term_verdict"] = long_term_signal["long_term_verdict"]
-            synth_output["structured_signal"]["long_term_horizon"] = long_term_signal["long_term_horizon"]
-            synth_output["structured_signal"]["suggested_long_term_peers"] = long_term_signal["suggested_long_term_peers"]
-
-        results.append({
-            "long_term_signal": long_term_signal,
-            "symbol": sym,
-            "name": name,
-            "sector": sector,
-            "queue_status": q_status,
-            "is_stale": is_stale,
-            "has_analysis": synth_output is not None,
-            "synth_output": synth_output,
-            "tech_output": tech_output,
-            "hist_output": hist_output,
-            "news_output": news_output,
-            "risk_output": risk_output,
-            "fund_output": fund_output,
-            "patterns": patterns,
-            "events": events,
-            "sparkline": sparkline
-        })
-    return results
 
 def generate_markdown_viewer_html(title: str, md_content: str, raw_url: str) -> str:
     safe_md = md_content.replace("</script>", "<\\/script>")
@@ -369,14 +252,31 @@ def generate_markdown_viewer_html(title: str, md_content: str, raw_url: str) -> 
     return template.replace("{{TITLE}}", title).replace("{{RAW_URL}}", raw_url).replace("{{CONTENT}}", safe_md)
 
 class DashboardHandler(http.server.SimpleHTTPRequestHandler):
+    def _send_json(self, code: int, obj, cors: bool = False):
+        body = obj if isinstance(obj, (bytes, bytearray)) else safe_json_dumps(obj)
+        self.send_response(code)
+        self.send_header("Content-type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        if cors:
+            self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _host_ok(self) -> bool:
+        if host_header_ok(self.headers.get("Host"), ENFORCE_HOST_CHECK):
+            return True
+        self.send_error(403, "Forbidden host")
+        return False
+
     def do_OPTIONS(self):
-        self.send_response(200)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Accept")
+        # No CORS: this dashboard is same-origin only, so cross-site preflights are refused
+        self.send_response(405)
+        self.send_header("Content-Length", "0")
         self.end_headers()
 
     def do_GET(self):
+        if not self._host_ok():
+            return
         parsed_path = urllib.parse.urlparse(self.path)
         path = parsed_path.path
 
@@ -387,7 +287,7 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                 macro_items = cache_mgr.get_cached_macro(max_age_hours=24)
 
                 resp_data = {
-                    "model": OLLAMA_MODEL,
+                    "model": ENGINE_LABEL,
                     "timestamp": datetime.now().isoformat(),
                     "queue_status": q_status,
                     "bulletin": shared_bulletin,
@@ -397,7 +297,6 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header("Content-type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
-                self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
                 self.wfile.write(body)
             except Exception as e:
@@ -411,21 +310,23 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
 
         elif path == "/api/stocks":
             try:
-                stocks_data = get_all_stock_data()
-                body = safe_json_dumps(stocks_data)
-                self.send_response(200)
-                self.send_header("Content-type", "application/json")
-                self.send_header("Content-Length", str(len(body)))
-                self.send_header("Access-Control-Allow-Origin", "*")
-                self.end_headers()
-                self.wfile.write(body)
+                self._send_json(200, get_stocks_response_body(cache_mgr, queue_mgr, hist_engine, tech_engine, events_engine))
             except Exception as e:
-                err_body = safe_json_dumps({"error": str(e), "stocks": []})
-                self.send_response(500)
-                self.send_header("Content-type", "application/json")
-                self.send_header("Content-Length", str(len(err_body)))
-                self.end_headers()
-                self.wfile.write(err_body)
+                self._send_json(500, {"error": str(e), "stocks": []}, cors=False)
+            return
+
+        elif path == "/api/quotes":
+            try:
+                self._send_json(200, build_quotes_response(cache_mgr, quote_poller))
+            except Exception as e:
+                self._send_json(500, {"error": str(e)})
+            return
+
+        elif path == "/api/accuracy":
+            try:
+                self._send_json(200, compute_accuracy(cache_mgr))
+            except Exception as e:
+                self._send_json(500, {"error": str(e)})
             return
 
         elif path == "/favicon.ico":
@@ -437,6 +338,9 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
         elif path.startswith("/api/history"):
             query = urllib.parse.parse_qs(parsed_path.query)
             sym = query.get("symbol", [""])[0].upper().strip()
+            if sym and not valid_symbol(sym):
+                self._send_json(400, {"error": "Invalid symbol", "candles": []})
+                return
             raw_days = query.get("days", ["90"])[0]
             try:
                 days = int(''.join(c for c in str(raw_days) if c.isdigit())) or 90
@@ -444,23 +348,23 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                 days = 90
 
             try:
-                chart_data = tech_engine.get_chart_data(sym, limit_days=days) if sym else {"error": "Missing symbol", "candles": []}
+                if sym:
+                    body = get_history_response_body(sym, days, cache_mgr, tech_engine)
+                else:
+                    body = safe_json_dumps({"error": "Missing symbol", "candles": []})
             except Exception as e:
                 print(f"Error fetching chart data for {sym}: {e}", flush=True)
-                chart_data = {"symbol": sym, "candles": [], "error": str(e)}
+                body = safe_json_dumps({"symbol": sym, "candles": [], "error": str(e)})
 
-            body = safe_json_dumps(chart_data)
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
-            self.wfile.write(body)
+            self._send_json(200, body)
             return
 
         elif path.startswith("/api/events"):
             query = urllib.parse.parse_qs(parsed_path.query)
-            sym = query.get("symbol", [""])[0].upper()
+            sym = query.get("symbol", [""])[0].upper().strip()
+            if sym and not valid_symbol(sym):
+                self._send_json(400, {"error": "Invalid symbol"})
+                return
 
             events_data = events_engine.fetch_stock_events(sym) if sym else {"upcoming_macro_catalysts": events_engine.get_upcoming_macro_events()}
             body = safe_json_dumps(events_data)
@@ -486,11 +390,21 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
         elif path == "/" or path == "/index.html":
             html_path = os.path.join(PROJECT_ROOT, "static", "index.html")
             if os.path.exists(html_path):
+                stat = os.stat(html_path)
+                etag = f'"{stat.st_mtime_ns}-{stat.st_size}"'
+                if self.headers.get("If-None-Match") == etag:
+                    self.send_response(304)
+                    self.send_header("ETag", etag)
+                    self.send_header("Cache-Control", "no-cache")
+                    self.end_headers()
+                    return
                 with open(html_path, "rb") as f:
                     content = f.read()
                 self.send_response(200)
                 self.send_header("Content-type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(content)))
+                self.send_header("ETag", etag)
+                self.send_header("Cache-Control", "no-cache")   # always revalidate, but 304 skips the 170KB body
                 self.end_headers()
                 self.wfile.write(content)
             else:
@@ -509,10 +423,12 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                 norm_path = "/news_reports/" + path[len("/news/"):]
 
             rel_path = norm_path.lstrip("/")
-            target_file = os.path.abspath(os.path.join(PROJECT_ROOT, rel_path))
-            is_inside_root = target_file.lower().startswith(os.path.abspath(PROJECT_ROOT).lower())
-            
-            if is_inside_root and os.path.exists(target_file) and os.path.isfile(target_file):
+            top_dir, _, inner_path = rel_path.partition("/")
+            target_file = None
+            if top_dir in _REPORT_DIRS and inner_path:
+                target_file = resolve_within(os.path.join(PROJECT_ROOT, top_dir), inner_path)
+
+            if target_file:
                 query = urllib.parse.parse_qs(parsed_path.query)
                 is_raw = query.get("raw", ["0"])[0] == "1"
                 accept_header = self.headers.get("Accept", "")
@@ -544,8 +460,8 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
 
         else:
             # Serve static files if exist
-            static_filepath = os.path.join(PROJECT_ROOT, "static", path.lstrip("/"))
-            if os.path.exists(static_filepath) and os.path.isfile(static_filepath):
+            static_filepath = resolve_within(os.path.join(PROJECT_ROOT, "static"), path)
+            if static_filepath:
                 self.send_response(200)
                 if path.endswith(".css"):
                     self.send_header("Content-type", "text/css")
@@ -557,78 +473,113 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
             else:
                 self.send_error(404, "File Not Found")
 
+    def _read_json_body(self):
+        """Parsed JSON object from the request body, or None (a 400 has then already been sent)."""
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            if length < 0 or length > MAX_BODY_BYTES:
+                raise ValueError("body size")
+            data = json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
+            if not isinstance(data, dict):
+                raise ValueError("body must be a JSON object")
+            return data
+        except Exception:
+            self._send_json(400, {"status": "error", "message": "Invalid request body"})
+            return None
+
     def do_POST(self):
+        if not self._host_ok():
+            return
         parsed_path = urllib.parse.urlparse(self.path)
+        guard = post_guard_error(self.headers)
+        if guard:
+            self._send_json(guard[0], {"status": "error", "message": guard[1]})
+            return
         if parsed_path.path == "/api/trigger":
-            content_length = int(self.headers.get('Content-Length', 0))
-            body = self.rfile.read(content_length)
-            req_data = json.loads(body.decode('utf-8')) if body else {}
-            symbol = req_data.get("symbol", "").upper()
+            req_data = self._read_json_body()
+            if req_data is None:
+                return
+            symbol = str(req_data.get("symbol", "")).upper().strip()
+            if not symbol:
+                self._send_json(400, {"status": "error", "message": "Missing symbol"}, cors=False)
+                return
+            if not valid_symbol(symbol):
+                self._send_json(400, {"status": "error", "message": "Invalid symbol"}, cors=False)
+                return
 
             # Find company name and sector
             c_name, c_sec = "", ""
-            if os.path.exists(SYMBOLS_FILE_PATH):
-                try:
-                    with open(SYMBOLS_FILE_PATH, "r", encoding="utf-8") as f:
-                        for s_item in json.load(f).get("symbols", []):
-                            if s_item.get("symbol", "").upper() == symbol:
-                                c_name = s_item.get("name", "")
-                                c_sec = s_item.get("sector", "")
-                                break
-                except Exception:
-                    pass
+            for s_item in _load_symbols_list():
+                if s_item.get("symbol", "").upper() == symbol:
+                    c_name = s_item.get("name", "")
+                    c_sec = s_item.get("sector", "")
+                    break
+
+            with _running_lock:
+                if symbol in _running_symbols:
+                    self._send_json(200, {"status": "already_running", "symbol": symbol,
+                                          "message": f"{symbol} is already being analyzed."}, cors=False)
+                    return
+                if not _trigger_slots.acquire(blocking=False):
+                    self._send_json(429, {"status": "busy", "symbol": symbol,
+                                          "message": f"{MAX_CONCURRENT_TRIGGERS} analyses are already running. Try again shortly."}, cors=False)
+                    return
+                _running_symbols.add(symbol)
 
             def run_single():
-                with sqlite3.connect(cache_mgr.db_path) as conn:
-                    cursor = conn.cursor()
-                    cursor.execute("UPDATE persistent_stock_queue SET status = 'in_progress' WHERE symbol = ?", (symbol,))
-                    conn.commit()
                 try:
-                    get_workflow().run_analysis(symbol, company_name=c_name, sector=c_sec, force_refresh=True)
-                    queue_mgr.mark_completed(symbol)
-                except Exception as e:
-                    print(f"⚠️ Error in single stock analysis for {symbol}: {e}")
-                    with sqlite3.connect(cache_mgr.db_path) as conn:
-                        cursor = conn.cursor()
-                        cursor.execute("UPDATE persistent_stock_queue SET status = 'pending' WHERE symbol = ?", (symbol,))
-                        conn.commit()
+                    with cache_mgr._get_connection() as conn:
+                        conn.execute("UPDATE persistent_stock_queue SET status = 'in_progress' WHERE symbol = ?", (symbol,))
+                    try:
+                        get_workflow().run_analysis(symbol, company_name=c_name, sector=c_sec, force_refresh=True)
+                        queue_mgr.mark_completed(symbol)
+                        # Publish analysis completion event for WebSocket broadcast
+                        events_bus.publish(events_bus.ANALYSIS_DONE, {
+                            "symbol": symbol,
+                            "timestamp": datetime.now().isoformat()
+                        })
+                    except Exception as e:
+                        print(f"⚠️ Error in single stock analysis for {symbol}: {e}")
+                        with cache_mgr._get_connection() as conn:
+                            conn.execute("UPDATE persistent_stock_queue SET status = 'pending' WHERE symbol = ?", (symbol,))
+                finally:
+                    with _running_lock:
+                        _running_symbols.discard(symbol)
+                    _trigger_slots.release()
 
             threading.Thread(target=run_single, daemon=True).start()
 
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            self.wfile.write(safe_json_dumps({"status": "triggered", "symbol": symbol}))
+            self._send_json(200, {"status": "triggered", "symbol": symbol}, cors=False)
             return
 
         elif parsed_path.path == "/api/add-symbol":
-            content_length = int(self.headers.get('Content-Length', 0))
-            body = self.rfile.read(content_length)
-            req_data = json.loads(body.decode('utf-8')) if body else {}
-            sym = req_data.get("symbol", "").upper().strip()
-            name = req_data.get("name", "").strip()
-            sector = req_data.get("sector", "").strip()
-            exchange = req_data.get("exchange", "NSE").strip()
+            req_data = self._read_json_body()
+            if req_data is None:
+                return
+            sym = str(req_data.get("symbol", "")).upper().strip()
+            name = str(req_data.get("name", "")).strip()[:120]
+            sector = str(req_data.get("sector", "")).strip()[:80]
+            exchange = str(req_data.get("exchange", "NSE")).strip()[:10]
+            if not valid_symbol(sym):
+                self._send_json(400, {"status": "error", "message": "Invalid symbol"})
+                return
 
-            res = add_symbol_to_json(symbol=sym, name=name, sector=sector, exchange=exchange)
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            self.wfile.write(safe_json_dumps(res))
+            self._send_json(200, add_symbol_to_json(symbol=sym, name=name, sector=sector, exchange=exchange))
             return
 
         elif parsed_path.path == "/api/remove-symbol":
-            content_length = int(self.headers.get('Content-Length', 0))
-            body = self.rfile.read(content_length)
-            req_data = json.loads(body.decode('utf-8')) if body else {}
-            sym = req_data.get("symbol", "").upper().strip()
+            req_data = self._read_json_body()
+            if req_data is None:
+                return
+            sym = str(req_data.get("symbol", "")).upper().strip()
+            if not valid_symbol(sym):
+                self._send_json(400, {"status": "error", "message": "Invalid symbol"})
+                return
 
-            res = remove_symbol_from_json(symbol=sym)
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            self.wfile.write(safe_json_dumps(res))
+            self._send_json(200, remove_symbol_from_json(symbol=sym))
             return
+
+        self._send_json(404, {"status": "error", "message": "Unknown endpoint"})
 
 class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     daemon_threads = True
@@ -649,11 +600,22 @@ def start_dashboard_server(port=None, open_browser=True):
     if port is None:
         port = PORT
     os.makedirs(os.path.join(PROJECT_ROOT, "static"), exist_ok=True)
+    quote_poller.start()
+    if AUTO_SCHEDULE:
+        Scheduler(
+            cache_mgr,
+            workflow_getter=get_workflow,
+            symbols_loader=_load_symbols_list,
+            max_workers=MAX_SYMBOL_WORKERS,
+            on_symbol_done=queue_mgr.mark_completed,
+        ).start()
+        print("🗓️ [Scheduler] Auto-schedule ON (pre-market refresh 08:45 IST, post-close analysis 16:00 IST). "
+              "Disable with AUTO_SCHEDULE=0.", flush=True)
     for p in [port, port + 1, port + 2]:
         try:
-            with ThreadedTCPServer(("", p), DashboardHandler) as httpd:
+            with ThreadedTCPServer((DASHBOARD_HOST, p), DashboardHandler) as httpd:
                 server_url = f"http://localhost:{p}"
-                print(f"🌐 [Realtime Dashboard Server] Running live at {server_url}", flush=True)
+                print(f"🌐 [Realtime Dashboard Server] Running live at {server_url} (bound to {DASHBOARD_HOST})", flush=True)
                 if open_browser:
                     open_browser_delayed(server_url, delay=0.5)
                 httpd.serve_forever()
