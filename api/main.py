@@ -11,6 +11,8 @@ Replaces the stdlib http.server handler with a modern async framework:
 
 import os
 import sys
+import asyncio
+import threading
 from datetime import datetime
 from typing import Callable, Any
 
@@ -108,11 +110,20 @@ async def lifespan(app: Starlette):
         print("🗓️ [Scheduler] Auto-schedule ON (pre-market 08:45 IST, post-close 16:00 IST)", flush=True)
 
     # Subscribe to events_bus for WebSocket broadcast
+    event_loop = asyncio.get_event_loop()
+
     def event_handler(event_type: str, payload: dict):
         """Broadcast events from backend threads to WebSocket clients."""
-        # In production, we'd use run_coroutine_threadsafe() to schedule this on the event loop
-        # For now, this is a placeholder
-        pass
+        async def broadcast():
+            await ws_manager.broadcast({
+                "type": event_type,
+                "payload": payload,
+                "timestamp": datetime.now().isoformat()
+            })
+
+        # Schedule the coroutine on the event loop (safe from threads)
+        if event_loop.is_running():
+            asyncio.run_coroutine_threadsafe(broadcast(), event_loop)
 
     events_bus.subscribe(event_handler)
 

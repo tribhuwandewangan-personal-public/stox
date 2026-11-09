@@ -1,0 +1,40 @@
+{
+  "name": "stox",
+  "version": "1.0.0",
+  "description": "NSE Stock Predictor - Angular 22 Frontend",
+  "scripts": {
+    "ng": "ng",
+    "start": "ng serve",
+    "build": "ng build",
+    "build:prod": "ng build --configuration production",
+    "test": "ng test",
+    "lint": "ng lint"
+  },
+  "private": true,
+  "dependencies": {
+    "@angular/animations": "^22.2.6",
+    "@angular/common": "^22.2.6",
+    "@angular/compiler": "^22.2.6",
+    "@angular/core": "^22.2.6",
+    "@angular/forms": "^22.2.6",
+    "@angular/platform-browser": "^22.2.6",
+    "@angular/platform-browser-dynamic": "^22.2.6",
+    "@angular/cdk": "^22.2.6",
+    "rxjs": "^7.8.0",
+    "tslib": "^2.6.0",
+    "zone.js": "^0.15.0",
+    "@fontsource/inter": "^5.0.0",
+    "@fontsource/outfit": "^5.0.0",
+    "@fontsource/jetbrains-mono": "^5.0.0"
+  },
+  "devDependencies": {
+    "@angular-devkit/build-angular": "^22.2.6",
+    "@angular/cli": "^22.2.6",
+    "@angular/compiler-cli": "^22.2.6",
+    "typescript": "~6.0.0",
+    "vitest": "^2.1.0",
+    "@vitest/ui": "^2.1.0",
+    "@angular/build": "^22.2.6",
+    "httpx": "^1.0.0"
+  }
+}
