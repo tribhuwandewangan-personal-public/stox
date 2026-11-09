@@ -12,8 +12,10 @@
   --accent-green: #10b981;
   --accent-purple: #8b5cf6;
   --accent-red: #ef4444;
+  --accent-amber: #f59e0b;
   --text-main: #f3f4f6;
   --text-muted: #9ca3af;
+  --text-secondary: #d1d5db;
 }
 
 * {
