@@ -79,6 +79,28 @@ class TechnicalAnalysisEngine:
         vol_ma20 = vol.rolling(window=20).mean()
         df['RVOL'] = vol / (vol_ma20 + 1e-5)
 
+        # 20-day Up/Down Volume Ratio (William O'Neil / CANSLIM institutional accumulation standard)
+        diff_close = close.diff()
+        up_vol = vol.where(diff_close > 0, 0.0)
+        down_vol = vol.where(diff_close < 0, 0.0)
+        sum_up_20 = up_vol.rolling(window=20).sum()
+        sum_down_20 = down_vol.rolling(window=20).sum()
+        df['UP_DOWN_VOL_RATIO_20'] = np.where(sum_down_20 > 0, sum_up_20 / (sum_down_20 + 1e-5), 1.0)
+
+        # Structural Support & Resistance Lookbacks (Multi-week Swings)
+        high_s = df['HIGH_PRICE'] if 'HIGH_PRICE' in df else close
+        low_s = df['LOW_PRICE'] if 'LOW_PRICE' in df else close
+        df['SWING_HIGH_20'] = high_s.rolling(window=20).max()
+        df['SWING_LOW_20'] = low_s.rolling(window=20).min()
+        df['SWING_HIGH_60'] = high_s.rolling(window=60).max() if len(df) >= 60 else high_s.rolling(window=len(df)).max()
+        df['SWING_LOW_60'] = low_s.rolling(window=60).min() if len(df) >= 60 else low_s.rolling(window=len(df)).min()
+
+        # 52-Week High & Low and Proximity Percentage
+        w52_len = min(250, len(df))
+        df['HIGH_52W'] = high_s.rolling(window=w52_len).max()
+        df['LOW_52W'] = low_s.rolling(window=w52_len).min()
+        df['PCT_FROM_52W_HIGH'] = (close - df['HIGH_52W']) / np.where(df['HIGH_52W'] > 0, df['HIGH_52W'], 1.0) * 100
+
         # Average True Range (ATR 14)
         if 'HIGH_PRICE' in df and 'LOW_PRICE' in df:
             prev_close = close.shift(1)
@@ -258,6 +280,15 @@ class TechnicalAnalysisEngine:
         sma_50_slope = _safe_float(latest.get('SMA_50_SLOPE', 0.0)) or 0.0
         atr_14_val = _safe_float(latest.get('ATR_14', latest_close * 0.025)) or (latest_close * 0.025)
         rvol_val = _safe_float(latest.get('RVOL', 1.0)) or 1.0
+        ud_vol_ratio = _safe_float(latest.get('UP_DOWN_VOL_RATIO_20', 1.0)) or 1.0
+
+        swing_h20 = _safe_float(latest.get('SWING_HIGH_20', r1)) or r1
+        swing_l20 = _safe_float(latest.get('SWING_LOW_20', s1)) or s1
+        swing_h60 = _safe_float(latest.get('SWING_HIGH_60', r2)) or r2
+        swing_l60 = _safe_float(latest.get('SWING_LOW_60', s2)) or s2
+        h_52w = _safe_float(latest.get('HIGH_52W', swing_h60)) or swing_h60
+        l_52w = _safe_float(latest.get('LOW_52W', swing_l60)) or swing_l60
+        pct_52w = _safe_float(latest.get('PCT_FROM_52W_HIGH', 0.0)) or 0.0
 
         signals = []
         if latest_close > sma_50_val:
@@ -268,6 +299,14 @@ class TechnicalAnalysisEngine:
 
         if rvol_val >= 1.25:
             signals.append(f"Volume Surge (RVOL {rvol_val:.1f}x)")
+
+        if ud_vol_ratio >= 1.25:
+            signals.append(f"Institutional Accumulation (20d U/D Vol Ratio {ud_vol_ratio:.2f}x)")
+        elif ud_vol_ratio <= 0.75:
+            signals.append(f"Institutional Distribution (20d U/D Vol Ratio {ud_vol_ratio:.2f}x)")
+
+        if pct_52w >= -5.0:
+            signals.append(f"Near 52-Week High ({pct_52w:+.1f}% - Leader Relative Strength)")
 
         if latest_close > sma_200_val:
             signals.append("Above 200-day SMA (Long-term Bullish Trend)")
@@ -299,6 +338,7 @@ class TechnicalAnalysisEngine:
             "sma_50_slope": _safe_float(sma_50_slope),
             "atr_14": _safe_float(atr_14_val),
             "rvol": _safe_float(rvol_val),
+            "up_down_vol_ratio": _safe_float(ud_vol_ratio),
             "rsi_14": _safe_float(rsi_val),
             "macd": _safe_float(macd_val),
             "macd_signal": _safe_float(macd_sig),
@@ -311,6 +351,13 @@ class TechnicalAnalysisEngine:
             "support_1": _safe_float(s1),
             "resistance_2": _safe_float(r2),
             "support_2": _safe_float(s2),
+            "swing_high_20": _safe_float(swing_h20),
+            "swing_low_20": _safe_float(swing_l20),
+            "swing_high_60": _safe_float(swing_h60),
+            "swing_low_60": _safe_float(swing_l60),
+            "high_52w": _safe_float(h_52w),
+            "low_52w": _safe_float(l_52w),
+            "pct_from_52w_high": _safe_float(pct_52w),
             "technical_signals": signals,
             "detected_patterns": patterns
         }

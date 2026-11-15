@@ -215,6 +215,46 @@ class VerdictInvariantTests(unittest.TestCase):
         self.assertIn("high leverage", note_weak)
         self.assertIn("tight liquidity", note_weak)
 
+    def test_contrary_pattern_dampens_score_and_flags_caution(self):
+        from agents.synthesizer_agent import _pattern_signal
+        bull_pat = {"name": "Cup & Handle", "direction": "Bullish", "quality_score": 90}
+        bear_pat = {"name": "Bearish RSI Momentum Divergence", "direction": "Bearish", "quality_score": 85}
+
+        # Solo bullish pattern
+        q_solo, note_solo = _pattern_signal(bull_pat)
+        self.assertEqual(q_solo, 0.90)
+
+        # Bullish pattern countered by bearish divergence
+        q_counter, note_counter = _pattern_signal(bull_pat, [bull_pat, bear_pat])
+        self.assertLess(q_counter, q_solo)
+        self.assertIn("Caution", note_counter)
+        self.assertIn("Bearish RSI", note_counter)
+
+    def test_institutional_volume_accumulation_and_distribution(self):
+        from agents.synthesizer_agent import _volume_signal
+        # Institutional accumulation
+        val_acc, note_acc = _volume_signal(rvol=1.3, ud_ratio=1.45)
+        self.assertGreater(val_acc, 0.4)
+        self.assertIn("institutional accumulation", note_acc)
+
+        # Institutional distribution
+        val_dist, note_dist = _volume_signal(rvol=0.7, ud_ratio=0.60)
+        self.assertLess(val_dist, 0)
+        self.assertIn("institutional distribution", note_dist)
+
+    def test_overhead_resistance_check_in_verdict(self):
+        # When price is 99.5 and resistance is 100.0 (within 0.5%)
+        tech = make_tech(99.5, 92, 85, 55)
+        tech["swing_high_20"] = 100.0
+        sig = Synth.compute_quantitative_verdict("T", "T", 99.5, tech, {}, [BULL], {}, None)
+        self.assertIn("testing immediate overhead resistance", sig["key_rationale"])
+        self.assertIn("breakout above Rs. 100.00", sig["actionable_recommendation"])
+
+    def test_bearish_divergence_warning_in_verdict(self):
+        bear_div = {"name": "Bearish RSI Momentum Divergence", "direction": "Bearish", "quality_score": 85}
+        sig = Synth.compute_quantitative_verdict("T", "T", 100.0, make_tech(100, 92, 85, 55), {}, [BULL, bear_div], {}, None)
+        self.assertIn("Bearish RSI Divergence detected", sig["key_rationale"])
+
     def test_invalid_price_yields_no_levels(self):
         for bad in (None, "N/A", float("nan"), 0, -5):
             sig = Synth.compute_quantitative_verdict("T", "T", bad, {}, {}, [BULL], {}, None)

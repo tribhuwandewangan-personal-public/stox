@@ -60,17 +60,34 @@ def _clamp(x: float, lo: float = -1.0, hi: float = 1.0) -> float:
 # --------------------------------------------------------------------------------------------------
 # Evidence scoring
 # --------------------------------------------------------------------------------------------------
-def _pattern_signal(top_pattern: Optional[dict]) -> Tuple[float, str]:
+def _pattern_signal(top_pattern: Optional[dict], all_patterns: Optional[List[dict]] = None) -> Tuple[float, str]:
     if not top_pattern:
         return 0.0, "no confirmed chart pattern"
     name = top_pattern.get("name", "pattern")
     direction = top_pattern.get("direction", "Neutral")
     quality = _to_float(top_pattern.get("quality_score"))
     quality = _clamp((quality if quality is not None else 70.0) / 100.0, 0.0, 1.0)
+
+    # Cross-check contrary patterns among all detected formations
+    contrary_warnings = []
+    if all_patterns and len(all_patterns) > 1:
+        for p in all_patterns[1:4]:
+            p_dir = p.get("direction")
+            p_name = p.get("name", "")
+            p_qual = _to_float(p.get("quality_score")) or 70.0
+            if direction == "Bullish" and p_dir == "Bearish" and p_qual >= 75:
+                # E.g. Bearish RSI Divergence or Double Top countering a bullish pattern
+                quality = max(0.1, quality - 0.35)
+                contrary_warnings.append(f"countered by {p_name} ({p_qual:.0f}/100)")
+            elif direction == "Bearish" and p_dir == "Bullish" and p_qual >= 75:
+                quality = max(0.1, quality - 0.35)
+                contrary_warnings.append(f"countered by {p_name} ({p_qual:.0f}/100)")
+
+    warning_str = f" [Caution: {', '.join(contrary_warnings)}]" if contrary_warnings else ""
     if direction == "Bullish":
-        return quality, f"bullish {name} ({quality * 100:.0f}/100)"
+        return quality, f"bullish {name} ({quality * 100:.0f}/100){warning_str}"
     if direction == "Bearish":
-        return -quality, f"bearish {name} ({quality * 100:.0f}/100)"
+        return -quality, f"bearish {name} ({quality * 100:.0f}/100){warning_str}"
     return 0.0, f"neutral {name}"
 
 
@@ -110,22 +127,39 @@ def _trend_signal(lp: float, sma50: Optional[float], sma200: Optional[float],
     return value, desc
 
 
-def _volume_signal(rvol: Optional[float]) -> Optional[Tuple[float, str]]:
-    """RVOL (Relative Volume) signal — confirms whether a move has participation.
-    +0.6 : RVOL >= 1.5  (strong breakout volume)
-    +0.3 : RVOL >= 1.2  (above-average participation)
-      0.0: RVOL 0.8–1.2 (normal, neutral)
-    -0.3 : RVOL < 0.8   (low-volume drift — weak, fading move)
+def _volume_signal(rvol: Optional[float], ud_ratio: Optional[float] = None) -> Optional[Tuple[float, str]]:
+    """Volume confirmation: combines intraday RVOL surge with 20-day Up/Down accumulation ratio.
+    - RVOL: detects instant breakout/breakdown force
+    - U/D Ratio: institutional accumulation (CANSLIM / O'Neil standard)
     """
-    if rvol is None:
+    if rvol is None and ud_ratio is None:
         return None
-    if rvol >= 1.5:
-        return 0.6, f"strong volume surge (RVOL {rvol:.2f}x)"
-    if rvol >= 1.2:
-        return 0.3, f"above-average volume (RVOL {rvol:.2f}x)"
-    if rvol >= 0.8:
-        return None   # neutral — exclude rather than add noise
-    return -0.3, f"low-volume drift (RVOL {rvol:.2f}x)"
+
+    val = 0.0
+    parts = []
+
+    if rvol is not None:
+        if rvol >= 1.5:
+            val += 0.5
+            parts.append(f"strong volume surge (RVOL {rvol:.2f}x)")
+        elif rvol >= 1.2:
+            val += 0.25
+            parts.append(f"above-average volume (RVOL {rvol:.2f}x)")
+        elif rvol < 0.8:
+            val -= 0.25
+            parts.append(f"low-volume drift (RVOL {rvol:.2f}x)")
+
+    if ud_ratio is not None:
+        if ud_ratio >= 1.25:
+            val += 0.3
+            parts.append(f"institutional accumulation (20d U/D vol {ud_ratio:.2f}x)")
+        elif ud_ratio <= 0.75:
+            val -= 0.3
+            parts.append(f"institutional distribution (20d U/D vol {ud_ratio:.2f}x)")
+
+    if not parts:
+        return None
+    return _clamp(val), "; ".join(parts)
 
 
 def _momentum_signal(rsi: Optional[float]) -> Optional[Tuple[float, str]]:
@@ -256,11 +290,12 @@ def score_evidence(
     raw_tech: dict,
     top_pattern: Optional[dict],
     context: Optional[dict] = None,
+    all_patterns: Optional[list] = None,
 ) -> Dict[str, Any]:
     """Weighted evidence score. Returns score, per-signal breakdown, agreement and coverage."""
     ctx = context or {}
     signals: Dict[str, Optional[Tuple[float, str]]] = {
-        "pattern": _pattern_signal(top_pattern),
+        "pattern": _pattern_signal(top_pattern, all_patterns=all_patterns),
         "trend": _trend_signal(
             lp,
             _to_float(raw_tech.get("sma_50")),
@@ -268,7 +303,10 @@ def score_evidence(
             _to_float(raw_tech.get("sma_50_slope")),
         ),
         "momentum": _momentum_signal(_to_float(raw_tech.get("rsi_14"))),
-        "volume": _volume_signal(_to_float(raw_tech.get("rvol"))),
+        "volume": _volume_signal(
+            _to_float(raw_tech.get("rvol")),
+            _to_float(raw_tech.get("up_down_vol_ratio")),
+        ),
         "news": _news_signal(ctx.get("news")),
         "macro": _macro_signal(ctx.get("macro")),
         "fundamental": _fundamental_signal(ctx.get("fundamental")),
@@ -424,7 +462,7 @@ class MasterPredictionSynthesizerAgent:
         earnings_clause = f" {earnings_str}." if earnings_str else ""
 
         # Step 1: weighted evidence -> verdict + confidence
-        ev = score_evidence(lp, raw_tech, top_pattern, context)
+        ev = score_evidence(lp, raw_tech, top_pattern, context, all_patterns=detected_patterns)
         verdict = _verdict_from_score(ev["score"])
         if verdict != "HOLD" and ev["support_points"] < MIN_SUPPORT_POINTS:
             verdict = "HOLD"   # a single weak signal (e.g. trend alone) is not enough to act on
@@ -481,6 +519,20 @@ class MasterPredictionSynthesizerAgent:
 
             rationale = f"{verdict} bias for {symbol}. {basis} Upside target near Rs. {target}.{earnings_clause}"
             action = f"Initiate position in {entry} range targeting Rs. {target} with risk stop at Rs. {sl}."
+
+            # Overhead Structural Resistance Check (Prevent buying blindly into resistance ceiling)
+            swing_h20 = _to_float(raw_tech.get("swing_high_20")) or _to_float(raw_tech.get("resistance_1"))
+            if swing_h20 and swing_h20 > lp:
+                dist_to_res = (swing_h20 - lp) / lp
+                if dist_to_res <= 0.012:
+                    rationale += f" Note: Price is testing immediate overhead resistance at Rs. {swing_h20:.2f} (within {dist_to_res*100:.1f}%); breakout confirmation needed."
+                    action = f"Initiate on confirmed breakout above Rs. {swing_h20:.2f} or accumulate on pullbacks towards Rs. {sl:.2f} targeting Rs. {target}."
+
+            # Bearish RSI Momentum Divergence Warning
+            if detected_patterns:
+                has_bear_div = any("Bearish RSI" in str(p.get("name", "")) for p in detected_patterns)
+                if has_bear_div:
+                    rationale += " Warning: Bearish RSI Divergence detected — momentum is diverging from price; strictly observe stop loss."
 
         elif verdict == "SELL":
             # Bearish: target is downside support (below price), stop is above price
