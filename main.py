@@ -164,7 +164,7 @@ def build_quick_picks_section(symbols_list: list, results_dict: dict, cache_mgr)
             _sl  = float(str(sl).replace("Rs.", "").replace(",", "").strip())
             _tgt = float(str(target).split("-")[0].replace("Rs.", "").replace(",", "").strip())
 
-            # Directional sanity: skip stocks with inverted stop loss (LLM hallucination)
+            # Directional sanity: skip stocks with inverted stop loss
             if _sl >= _lp:   # stop loss must be BELOW price for BUY
                 continue
             if _tgt <= _lp:  # target must be ABOVE price for BUY
@@ -172,11 +172,26 @@ def build_quick_picks_section(symbols_list: list, results_dict: dict, cache_mgr)
 
             risk   = _lp - _sl          # always positive after guard above
             reward = _tgt - _lp
+            risk_pct = risk / _lp
+            reward_pct = reward / _lp
+
+            # Hardened Quick Picks Risk Management:
+            # 1. Reject fragile/tight stops (< 3.2% risk gets noise-stopped) and wide stops (> 8.5%)
+            if risk_pct < 0.032 or risk_pct > 0.085:
+                continue
+            # 2. Reject insufficient upside (< 5.5%)
+            if reward_pct < 0.055:
+                continue
+
             rr     = round(reward / risk, 2)
-            upside = f"+{round((_tgt - _lp) / _lp * 100, 1)}%"
+            # 3. Enforce verified minimum 1:1.8 Reward:Risk ratio
+            if rr < 1.8:
+                continue
+
+            upside = f"+{round(reward_pct * 100, 1)}%"
 
             # Cap absurd R:R — indicates bad data
-            if rr > 20:
+            if rr > 10.0:
                 continue
         except Exception:
             upside = "N/A"

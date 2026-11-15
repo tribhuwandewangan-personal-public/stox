@@ -4824,8 +4824,18 @@ body{background:#090d16;color:#f3f4f6;font-family:'Inter',sans-serif;min-height:
 
         // ── Directional sanity: skip if stop loss is ABOVE price (bad data) ──
         if (lp > 0 && sl >= lp) return;
-        // ── Also skip if target is BELOW price for a BUY ──
+        // ── Also skip if target is BELOW or equal to price for a BUY ──
         if (lp > 0 && tgt > 0 && tgt <= lp) return;
+
+        // ── Hardened risk/reward filters (must match Python backend thresholds) ──
+        const riskPct  = lp > 0 && sl > 0 ? (lp - sl) / lp : 0;
+        const rewardPct = lp > 0 && tgt > 0 ? (tgt - lp) / lp : 0;
+        // Stop too tight (< 3.2%) = fragile, will be hit by intraday noise
+        if (riskPct > 0 && riskPct < 0.032) return;
+        // Stop too wide (> 8.5%) = oversized risk per trade
+        if (riskPct > 0.085) return;
+        // Insufficient upside (< 5.5%) = not worth the risk
+        if (rewardPct > 0 && rewardPct < 0.055) return;
 
         let rr = 0, upside = 'N/A';
         if (lp > 0 && sl > 0 && sl < lp && tgt > lp) {
@@ -4835,8 +4845,10 @@ body{background:#090d16;color:#f3f4f6;font-family:'Inter',sans-serif;min-height:
           upside = '+' + ((tgt - lp) / lp * 100).toFixed(1) + '%';
         }
 
-        // Cap absurd R:R (> 20x usually means bad data slipped through)
-        if (rr > 20) return;
+        // Minimum R:R of 1.8x — same gate as Python backend
+        if (rr > 0 && rr < 1.8) return;
+        // Cap absurd R:R (> 10x usually means bad data slipped through)
+        if (rr > 10) return;
 
         picks.push({
           sym: s.symbol,
@@ -4857,7 +4869,7 @@ body{background:#090d16;color:#f3f4f6;font-family:'Inter',sans-serif;min-height:
       if (top.length === 0) { banner.style.display = 'none'; return; }
 
       tbody.innerHTML = top.map((p, i) => {
-        const rrClass = p.rr >= 2.5 ? 'qp-rr-high' : p.rr >= 1.5 ? 'qp-rr-mid' : 'qp-rr-low';
+        const rrClass = p.rr >= 2.5 ? 'qp-rr-high' : p.rr >= 1.8 ? 'qp-rr-mid' : 'qp-rr-low';
         return `<tr>
           <td class="qp-rank">${i + 1}</td>
           <td><button class="qp-sym-btn" onclick="openStockModalDirect('${p.sym}', event)">${p.sym} &#8599;</button></td>

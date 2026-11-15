@@ -23,10 +23,19 @@ def compute_rr(lp, sl_raw, tgt_raw):
         _lp  = float(lp)
         _sl  = float(str(sl_raw).replace("Rs.", "").replace(",", "").strip())
         _tgt = float(str(tgt_raw).split("-")[0].replace("Rs.", "").replace(",", "").strip())
-        risk   = max(0.01, _lp - _sl)
-        reward = max(0.0,  _tgt - _lp)
-        rr     = round(reward / risk, 2)
-        upside = f"+{round((_tgt - _lp) / _lp * 100, 1)}%"
+        if _sl >= _lp or _tgt <= _lp:
+            return 0.0, "N/A"
+        risk   = _lp - _sl
+        reward = _tgt - _lp
+        risk_pct = risk / _lp
+        reward_pct = reward / _lp
+        # Hardened filtering: reject fragile stops (<3.2%) and wide stops (>8.5%)
+        if risk_pct < 0.032 or risk_pct > 0.085 or reward_pct < 0.055:
+            return 0.0, "N/A"
+        rr = round(reward / risk, 2)
+        if rr < 1.8 or rr > 10.0:
+            return 0.0, "N/A"
+        upside = f"+{round(reward_pct * 100, 1)}%"
         return rr, upside
     except Exception:
         return 0.0, "N/A"
@@ -60,6 +69,8 @@ def build_quick_picks(symbols_list, cache_mgr):
             continue
 
         rr, upside = compute_rr(lp, sl, target)
+        if rr < 1.8:
+            continue
 
         picks.append({
             "sym": sym, "cname": cname, "sec": sec,

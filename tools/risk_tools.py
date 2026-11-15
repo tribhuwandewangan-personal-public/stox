@@ -36,11 +36,36 @@ class RiskManagementEngine:
         drawdown = (close - rolling_max) / rolling_max
         max_drawdown = round(float(drawdown.min()) * 100, 2)
 
-        # Stop-Loss Bounds (2 * Daily Volatility or 3% minimum)
+        # True Structural Risk Management (Average True Range & Swing Pivots)
         last_price = float(close.iloc[-1])
-        suggested_stop_loss = round(last_price * (1 - max(0.03, daily_vol * 2)), 2)
-        suggested_target_1 = round(last_price * (1 + max(0.06, daily_vol * 4)), 2)
-        risk_reward_ratio = round((suggested_target_1 - last_price) / (last_price - suggested_stop_loss + 1e-5), 2)
+        high = df['HIGH_PRICE']
+        low = df['LOW_PRICE']
+        prev_close = close.shift(1)
+        tr = pd.concat([high - low, (high - prev_close).abs(), (low - prev_close).abs()], axis=1).max(axis=1)
+        atr_14 = float(tr.tail(14).mean()) if len(tr) >= 14 else float(last_price * 0.025)
+
+        # 15-day Structural Swing Support (Low)
+        recent_lows = low.tail(15)
+        swing_low = float(recent_lows.min()) if not recent_lows.empty else last_price * 0.95
+
+        # Structural Stop Loss: Below swing low with buffer, or 1.8x ATR below price
+        raw_sl = min(swing_low * 0.995, last_price - (1.8 * atr_14))
+        risk_dist = last_price - raw_sl
+        risk_pct = risk_dist / last_price
+
+        # Enforce healthy noise buffer: minimum 3.8% risk to prevent intraday noise shakeout, max 7.5%
+        if risk_pct < 0.038:
+            suggested_stop_loss = round(last_price * 0.962, 2)
+        elif risk_pct > 0.075:
+            suggested_stop_loss = round(last_price * 0.925, 2)
+        else:
+            suggested_stop_loss = round(raw_sl, 2)
+
+        risk_amount = max(0.01, last_price - suggested_stop_loss)
+
+        # Structural Target: Enforce minimum 1:2.0 Risk-to-Reward Ratio for profitable swing trading
+        suggested_target_1 = round(last_price + max(2.0 * risk_amount, 2.5 * atr_14), 2)
+        risk_reward_ratio = round((suggested_target_1 - last_price) / risk_amount, 2)
 
         # Risk Classification
         risk_level = "Moderate Risk"

@@ -69,8 +69,23 @@ class TechnicalAnalysisEngine:
 
         # Moving Averages
         df['SMA_20'] = close.rolling(window=20).mean()
+        df['EMA_20'] = close.ewm(span=20, adjust=False).mean()
         df['SMA_50'] = close.rolling(window=50).mean()
         df['SMA_200'] = close.rolling(window=200).mean() if len(close) >= 200 else close.rolling(window=len(close)).mean()
+        df['SMA_50_SLOPE'] = (df['SMA_50'] - df['SMA_50'].shift(10)) / df['SMA_50'].shift(10).replace(0, 1) * 100
+
+        # Volume MA & RVOL
+        vol = df['VOLUME'] if 'VOLUME' in df else pd.Series(1, index=df.index)
+        vol_ma20 = vol.rolling(window=20).mean()
+        df['RVOL'] = vol / (vol_ma20 + 1e-5)
+
+        # Average True Range (ATR 14)
+        if 'HIGH_PRICE' in df and 'LOW_PRICE' in df:
+            prev_close = close.shift(1)
+            tr = pd.concat([df['HIGH_PRICE'] - df['LOW_PRICE'], (df['HIGH_PRICE'] - prev_close).abs(), (df['LOW_PRICE'] - prev_close).abs()], axis=1).max(axis=1)
+            df['ATR_14'] = tr.rolling(window=14).mean()
+        else:
+            df['ATR_14'] = close * 0.025
 
         # RSI (14), Wilder smoothing (the definition charting platforms use)
         df['RSI_14'] = wilder_rsi(close, 14)
@@ -239,11 +254,20 @@ class TechnicalAnalysisEngine:
         # Detect advanced patterns
         patterns = self.detect_chart_patterns(df)
 
+        ema_20_val = _safe_float(latest.get('EMA_20', sma_20_val)) or latest_close
+        sma_50_slope = _safe_float(latest.get('SMA_50_SLOPE', 0.0)) or 0.0
+        atr_14_val = _safe_float(latest.get('ATR_14', latest_close * 0.025)) or (latest_close * 0.025)
+        rvol_val = _safe_float(latest.get('RVOL', 1.0)) or 1.0
+
         signals = []
         if latest_close > sma_50_val:
-            signals.append("Above 50-day SMA (Short-term Bullish)")
+            slope_txt = " (Rising)" if sma_50_slope > 0.2 else (" (Declining)" if sma_50_slope < -0.2 else "")
+            signals.append(f"Above 50-day SMA{slope_txt} (Short-term Bullish)")
         else:
             signals.append("Below 50-day SMA (Short-term Bearish)")
+
+        if rvol_val >= 1.25:
+            signals.append(f"Volume Surge (RVOL {rvol_val:.1f}x)")
 
         if latest_close > sma_200_val:
             signals.append("Above 200-day SMA (Long-term Bullish Trend)")
@@ -268,9 +292,13 @@ class TechnicalAnalysisEngine:
         return {
             "symbol": symbol,
             "last_price": latest_close,
+            "ema_20": _safe_float(ema_20_val),
             "sma_20": _safe_float(sma_20_val),
             "sma_50": _safe_float(sma_50_val),
             "sma_200": _safe_float(sma_200_val),
+            "sma_50_slope": _safe_float(sma_50_slope),
+            "atr_14": _safe_float(atr_14_val),
+            "rvol": _safe_float(rvol_val),
             "rsi_14": _safe_float(rsi_val),
             "macd": _safe_float(macd_val),
             "macd_signal": _safe_float(macd_sig),

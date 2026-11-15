@@ -492,29 +492,29 @@ class QuantitativePatternEngine:
                             trough_val = float(sub_close[trough_idx])
                             left_rim = float(sub_close[0])
 
-                            if r2 >= 0.55 and curr_close > trough_val * 1.01:
+                            mid_third_start, mid_third_end = int(lookback * 0.33), int(lookback * 0.67)
+                            center_vol = np.mean(sub_vol[mid_third_start:mid_third_end])
+                            outer_vol = (np.mean(sub_vol[:mid_third_start]) + np.mean(sub_vol[mid_third_end:])) / 2.0
+                            vol_bowl = center_vol < outer_vol
+
+                            # Hardened validation: require strong quadratic fit (R2 >= 0.72), volume drying in base,
+                            # and price having recovered to the right rim (not languishing at the bottom)
+                            if r2 >= 0.72 and vol_bowl and curr_close >= left_rim * 0.96 and curr_close > trough_val * 1.03:
                                 bowl_depth = max(left_rim, curr_close) - trough_val
                                 target = round(float(curr_close + bowl_depth * 0.85), 2)
                                 stop_loss = round(float(trough_val + bowl_depth * 0.25), 2)
                                 pivot_rim = round(float(left_rim), 2)
-                                # If left_rim is far away (>15%), entry trigger is recent local breakout level
                                 if abs(curr_close - pivot_rim) / curr_close > 0.15:
                                     pivot_rim = round(float(curr_close * 1.02), 2)
                                 is_breakout = curr_close >= pivot_rim
 
-                                # Bullish target sanity
-                                if target <= curr_close:
-                                    target = round(float(curr_close + (curr_close - stop_loss) * 1.8), 2)
+                                # Bullish target sanity & minimum 1.8 R:R
+                                if target <= curr_close or (target - curr_close) / max(0.01, curr_close - stop_loss) < 1.8:
+                                    target = round(float(curr_close + (curr_close - stop_loss) * 2.0), 2)
 
-                                mid_third_start, mid_third_end = int(lookback * 0.33), int(lookback * 0.67)
-                                center_vol = np.mean(sub_vol[mid_third_start:mid_third_end])
-                                outer_vol = (np.mean(sub_vol[:mid_third_start]) + np.mean(sub_vol[mid_third_end:])) / 2.0
-                                vol_bowl = center_vol < outer_vol
-
-                                score = 75
-                                if r2 >= 0.70: score += 10
-                                if vol_bowl: score += 10
-                                if is_breakout: score += 5
+                                score = 65
+                                if r2 >= 0.80: score += 10
+                                if is_breakout: score += 15
 
                                 status = "Confirmed Rim Breakout" if is_breakout else "Rounding Accumulation Base"
                                 rr = round(abs(target - curr_close) / max(1.0, abs(curr_close - stop_loss)), 2)

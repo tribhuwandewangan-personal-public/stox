@@ -12,6 +12,13 @@ from datetime import datetime, timedelta
 from pathlib import Path
 import sys
 
+_TOOLS_DIR = str(Path(__file__).resolve().parent)
+_ROOT_DIR = str(Path(__file__).resolve().parent.parent)
+if _TOOLS_DIR not in sys.path:
+    sys.path.insert(0, _TOOLS_DIR)
+if _ROOT_DIR not in sys.path:
+    sys.path.insert(0, _ROOT_DIR)
+
 from backtest_framework import BacktestEngine, BacktestComparator, BacktestMetrics
 
 def main():
@@ -79,25 +86,40 @@ def main():
     # Print aggregate
     if aggregate_metrics.total_trades > 0:
         aggregate_metrics.win_rate = (aggregate_metrics.winning_trades / aggregate_metrics.total_trades) * 100
+
+        # Compute avg win / avg loss from all trades to determine profit factor
+        winning = [t for t in all_trades if t.pnl_pct > 0]
+        losing  = [t for t in all_trades if t.pnl_pct <= 0]
+        avg_win  = sum(t.pnl_pct for t in winning) / len(winning) if winning else 0.0
+        avg_loss = abs(sum(t.pnl_pct for t in losing) / len(losing)) if losing else 1.0
+        profit_factor = round((avg_win * len(winning)) / (avg_loss * len(losing)), 2) if losing else float('inf')
+        # Breakeven win rate given this avg win / avg loss (Kelly-style)
+        breakeven_wr = round(avg_loss / (avg_win + avg_loss) * 100, 1) if (avg_win + avg_loss) > 0 else 50.0
+
         print(f"\n{'-'*70}")
         print(f"AGGREGATE ({len(symbols)} symbols):")
         print(f"  Total Trades:   {aggregate_metrics.total_trades}")
-        print(f"  Win Rate:       {aggregate_metrics.win_rate:.1f}%")
-        print(f"  Winning:        {aggregate_metrics.winning_trades}")
-        print(f"  Losing:         {aggregate_metrics.losing_trades}")
+        print(f"  Win Rate:       {aggregate_metrics.win_rate:.1f}%  (breakeven @ {breakeven_wr:.1f}%)")
+        print(f"  Winning:        {aggregate_metrics.winning_trades}  avg +{avg_win:.2f}%")
+        print(f"  Losing:         {aggregate_metrics.losing_trades}  avg -{avg_loss:.2f}%")
+        print(f"  Profit Factor:  {profit_factor:.2f}")
         print(f"  Total P&L:      {aggregate_metrics.total_pnl:.2f}")
 
-        # Interpretation
+        # Interpretation — factoring in R:R, not just win rate
         print(f"\n{'-'*70}")
         print(f"INTERPRETATION:")
-        if aggregate_metrics.win_rate > 60:
-            print(f"  ✅ STRONG: {aggregate_metrics.win_rate:.1f}% win rate is excellent for trading")
-        elif aggregate_metrics.win_rate > 55:
-            print(f"  ✅ GOOD: {aggregate_metrics.win_rate:.1f}% win rate is acceptable for trading")
-        elif aggregate_metrics.win_rate > 50:
-            print(f"  ⚠️  WEAK: {aggregate_metrics.win_rate:.1f}% win rate is risky but could work with good risk management")
+        wr = aggregate_metrics.win_rate
+        pf = profit_factor
+        if wr > 60 and pf > 1.5:
+            print(f"  ✅ STRONG: {wr:.1f}% win rate + {pf:.2f} profit factor — excellent for trading")
+        elif wr >= breakeven_wr and pf >= 1.2:
+            print(f"  ✅ GOOD: {wr:.1f}% win rate is above breakeven ({breakeven_wr:.1f}%) with {pf:.2f} profit factor")
+        elif wr >= breakeven_wr:
+            print(f"  ⚠️  MARGINAL: {wr:.1f}% win rate is barely above breakeven ({breakeven_wr:.1f}%) — tighten filters")
+        elif pf > 1.0:
+            print(f"  ⚠️  WEAK: {wr:.1f}% win rate is below breakeven ({breakeven_wr:.1f}%) but profit factor {pf:.2f} > 1 — still profitable due to R:R asymmetry")
         else:
-            print(f"  ❌ POOR: {aggregate_metrics.win_rate:.1f}% win rate is not profitable - DO NOT TRADE")
+            print(f"  ❌ POOR: {wr:.1f}% win rate + {pf:.2f} profit factor — DO NOT TRADE with current parameters")
 
         if aggregate_metrics.total_pnl > 0:
             print(f"  ✅ Backtest PROFITABLE: +{aggregate_metrics.total_pnl:.2f}")
@@ -120,6 +142,10 @@ def main():
             "winning_trades": aggregate_metrics.winning_trades,
             "losing_trades": aggregate_metrics.losing_trades,
             "win_rate": aggregate_metrics.win_rate,
+            "avg_win_pct": round(avg_win, 3),
+            "avg_loss_pct": round(-avg_loss, 3),
+            "profit_factor": profit_factor,
+            "breakeven_win_rate": breakeven_wr,
             "total_pnl": aggregate_metrics.total_pnl
         },
         "symbol_results": {

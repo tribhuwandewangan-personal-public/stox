@@ -23,15 +23,16 @@ from storage.cache_manager import CacheManager
 # --------------------------------------------------------------------------------------------------
 EVIDENCE_WEIGHTS = {
     "pattern": 3.0,      # confirmed chart pattern direction x quality score
-    "trend": 2.0,        # price vs SMA-50 and SMA-200
+    "trend": 2.0,        # price vs SMA-50/200; Stage-2 regime bonus
     "momentum": 1.0,     # RSI-14 regime
+    "volume": 0.8,       # RVOL — volume confirmation of a move
     "news": 1.0,         # net headline sentiment
     "macro": 1.0,        # global backdrop for Indian equities
     "fundamental": 1.0,  # P/E valuation label + ROE
     "historical": 0.5,   # 30-day price momentum
 }
-BUY_THRESHOLD = 0.45
-ACCUMULATE_THRESHOLD = 0.20
+BUY_THRESHOLD = 0.50        # raised from 0.45 — requires stronger multi-signal conviction
+ACCUMULATE_THRESHOLD = 0.28  # raised from 0.20 — reduces marginal "accumulate on dips" noise
 SELL_THRESHOLD = -0.30
 DEFENSIVE_HOLD_THRESHOLD = -0.10   # HOLD below this (or with a bearish pattern) is "no fresh entry"
 SIGNIFICANT_SIGNAL = 0.15          # |value| needed to count a signal as agreeing / disagreeing
@@ -73,7 +74,13 @@ def _pattern_signal(top_pattern: Optional[dict]) -> Tuple[float, str]:
     return 0.0, f"neutral {name}"
 
 
-def _trend_signal(lp: float, sma50: Optional[float], sma200: Optional[float]) -> Optional[Tuple[float, str]]:
+def _trend_signal(lp: float, sma50: Optional[float], sma200: Optional[float],
+                   sma50_slope: Optional[float] = None) -> Optional[Tuple[float, str]]:
+    """Stage-2 aware trend filter.
+    - Base: price vs SMA-50 and SMA-200 (each contributes ±1.0, averaged)
+    - Bonus +0.3 when SMA-50 > SMA-200 AND SMA-50 slope > 0  (classic Stage-2 uptrend)
+    - Penalty -0.2 when SMA-50 < SMA-200 (Stage-4 / distribution phase)
+    """
     parts = []
     if sma50 is not None and sma50 > 0:
         parts.append(("SMA-50", 1.0 if lp > sma50 else -1.0))
@@ -89,7 +96,36 @@ def _trend_signal(lp: float, sma50: Optional[float], sma200: Optional[float]) ->
         text.append("above " + "/".join(above))
     if below:
         text.append("below " + "/".join(below))
-    return value, "price " + " and ".join(text)
+    desc = "price " + " and ".join(text)
+
+    # Stage-2 regime adjustment
+    if sma50 is not None and sma200 is not None and sma50 > 0 and sma200 > 0:
+        if sma50 > sma200 and (sma50_slope is not None and sma50_slope > 0):
+            value = _clamp(value + 0.3)
+            desc += "; Stage-2 uptrend (SMA-50 > SMA-200, rising)"
+        elif sma50 < sma200:
+            value = _clamp(value - 0.2)
+            desc += "; Stage-4 distribution (SMA-50 < SMA-200)"
+
+    return value, desc
+
+
+def _volume_signal(rvol: Optional[float]) -> Optional[Tuple[float, str]]:
+    """RVOL (Relative Volume) signal — confirms whether a move has participation.
+    +0.6 : RVOL >= 1.5  (strong breakout volume)
+    +0.3 : RVOL >= 1.2  (above-average participation)
+      0.0: RVOL 0.8–1.2 (normal, neutral)
+    -0.3 : RVOL < 0.8   (low-volume drift — weak, fading move)
+    """
+    if rvol is None:
+        return None
+    if rvol >= 1.5:
+        return 0.6, f"strong volume surge (RVOL {rvol:.2f}x)"
+    if rvol >= 1.2:
+        return 0.3, f"above-average volume (RVOL {rvol:.2f}x)"
+    if rvol >= 0.8:
+        return None   # neutral — exclude rather than add noise
+    return -0.3, f"low-volume drift (RVOL {rvol:.2f}x)"
 
 
 def _momentum_signal(rsi: Optional[float]) -> Optional[Tuple[float, str]]:
@@ -171,8 +207,14 @@ def score_evidence(
     ctx = context or {}
     signals: Dict[str, Optional[Tuple[float, str]]] = {
         "pattern": _pattern_signal(top_pattern),
-        "trend": _trend_signal(lp, _to_float(raw_tech.get("sma_50")), _to_float(raw_tech.get("sma_200"))),
+        "trend": _trend_signal(
+            lp,
+            _to_float(raw_tech.get("sma_50")),
+            _to_float(raw_tech.get("sma_200")),
+            _to_float(raw_tech.get("sma_50_slope")),
+        ),
         "momentum": _momentum_signal(_to_float(raw_tech.get("rsi_14"))),
+        "volume": _volume_signal(_to_float(raw_tech.get("rvol"))),
         "news": _news_signal(ctx.get("news")),
         "macro": _macro_signal(ctx.get("macro")),
         "fundamental": _fundamental_signal(ctx.get("fundamental")),
@@ -338,6 +380,7 @@ class MasterPredictionSynthesizerAgent:
         basis = _explain_evidence(ev, verdict)
 
         # Step 2: levels strictly aligned with the verdict
+        rr_ratio = 1.0
         if verdict in ("BUY", "ACCUMULATE"):
             # Bullish: target MUST be above price, stop MUST be below price
             if raw_p_target and lp < raw_p_target <= lp * 1.6:
@@ -348,6 +391,22 @@ class MasterPredictionSynthesizerAgent:
                 sl = round(raw_p_sl, 2)
             else:
                 sl = suggested_sl
+
+            # Hardened Risk-to-Reward & Noise Floor:
+            # Stop loss must be at least 3.5% below lp to prevent market noise shakeout
+            if sl > round(lp * 0.965, 2):
+                sl = round(lp * 0.962, 2)
+            # Stop loss should not exceed 8.0% risk for swing trades
+            if sl < round(lp * 0.92, 2):
+                sl = round(lp * 0.925, 2)
+
+            risk_dist = max(0.01, lp - sl)
+            # Target must guarantee at least 1:1.80 Risk-to-Reward ratio
+            min_target = round(lp + 1.8 * risk_dist, 2)
+            if target < min_target:
+                target = min_target
+
+            rr_ratio = round((target - lp) / risk_dist, 2)
 
             # Tight, realistic entry range near current market price
             if raw_p_entry and 0.95 * lp <= raw_p_entry <= 1.04 * lp:
@@ -409,6 +468,7 @@ class MasterPredictionSynthesizerAgent:
             "short_term_target": f"Rs. {target}",
             "short_term_horizon": "1-3 Weeks (Swing/Momentum)",
             "stop_loss": f"Rs. {sl}",
+            "risk_reward_ratio": f"1:{rr_ratio:.2f}",
             "holding_horizon": "Medium-Term (1-3 Months)" if verdict in ("BUY", "ACCUMULATE") else "Short-Term (1-3 Weeks)",
             "long_term_signal": lt_eval,
             "long_term_target": lt_eval["long_term_target"],
