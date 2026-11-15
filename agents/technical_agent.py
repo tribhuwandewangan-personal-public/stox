@@ -29,6 +29,27 @@ class TechnicalAnalysisAgent:
         signals = ", ".join(tech_data.get("technical_signals", []))
         patterns = tech_data.get("detected_patterns", [])
 
+        # Institutional volume flow footprint (20D Up/Down Volume Ratio)
+        ud_ratio = tech_data.get("up_down_vol_ratio")
+        ud_str = ""
+        if ud_ratio is not None:
+            if ud_ratio >= 1.25:
+                ud_str = f" | Inst. Volume: Accumulation ({ud_ratio:.2f}x U/D)"
+            elif ud_ratio <= 0.75:
+                ud_str = f" | Inst. Volume: Distribution ({ud_ratio:.2f}x U/D)"
+            else:
+                ud_str = f" | Inst. Volume: Neutral ({ud_ratio:.2f}x U/D)"
+
+        # Multi-week structural swing levels
+        sh20 = tech_data.get("swing_high_20")
+        sl20 = tech_data.get("swing_low_20")
+        swing_str = ""
+        if sh20 and sl20:
+            swing_str = f" | 20D Swing Range: [Rs.{sl20:.2f} - Rs.{sh20:.2f}]"
+
+        pct_52w = tech_data.get("pct_from_52w_high")
+        pct_52w_str = f" | 52W High Gap: {pct_52w:.1f}%" if pct_52w is not None else ""
+
         if patterns:
             p_summary = "; ".join([f"{p['name']} [Score: {p.get('quality_score', 'N/A')}/100, Status: {p.get('status', 'Active')}, Target: Rs.{p.get('target_price', 'N/A')}]: {p['description']}" for p in patterns])
             patterns_line = f"Detected Chart Patterns: {p_summary}"
@@ -37,7 +58,7 @@ class TechnicalAnalysisAgent:
 
         analysis_text = (
             f"Last Price: Rs.{last_price} | RSI(14): {rsi} | SMA50: Rs.{sma50} | SMA200: Rs.{sma200} | "
-            f"Bollinger Bands: [{bb_lower} - {bb_upper}] (%B: {pct_b}) | "
+            f"Bollinger Bands: [{bb_lower} - {bb_upper}] (%B: {pct_b}){ud_str}{swing_str}{pct_52w_str} | "
             f"{patterns_line} | "
             f"Key Technical Signals: {signals}"
         )

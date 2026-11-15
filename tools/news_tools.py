@@ -585,8 +585,8 @@ class NewsSentimentEngine:
 
         # Quick Index Table
         s_md.append("\n## 📑 Stock Quick Navigation & Sentiment Heatmap\n")
-        s_md.append("| Symbol | Company Name | Sector | Articles | Top Sources | Overall Signal |")
-        s_md.append("| :--- | :--- | :--- | :---: | :--- | :---: |")
+        s_md.append("| Symbol | Company Name | Sector | Articles | Primary Activity | Top Sources | Overall Signal |")
+        s_md.append("| :--- | :--- | :--- | :---: | :--- | :--- | :---: |")
 
         for s in symbols:
             sym = s.get("symbol", "").upper()
@@ -595,6 +595,14 @@ class NewsSentimentEngine:
             sources_present = list(dict.fromkeys(it.get("source", "Web") for it in items))[:3]
             sources_str = ", ".join(sources_present) if sources_present else "N/A"
             avg_score = sum(it.get("sentiment_score", 0.0) for it in items) / max(1, len(items))
+
+            # Determine dominant business activity category badge
+            cat_counts = {}
+            for it in items:
+                cb = it.get("category_badge") or "🏢 [Corporate]"
+                cat_counts[cb] = cat_counts.get(cb, 0) + 1
+            primary_cat = sorted(cat_counts.items(), key=lambda x: -x[1])[0][0] if cat_counts else "🏢 [Corporate]"
+
             if avg_score > 0.15:
                 sig = f"🟢 Bullish ({avg_score:+.2f})"
             elif avg_score < -0.15:
@@ -603,7 +611,7 @@ class NewsSentimentEngine:
                 sig = f"⚪ Neutral ({avg_score:+.2f})"
 
             anchor = f"{sym.lower()}---{d['name'].lower().replace(' ', '-').replace('&', '').replace('(', '').replace(')', '').replace('.', '')}"
-            s_md.append(f"| [**{sym}**](#{anchor}) | {d['name']} | {d['sector']} | {len(items)} | {sources_str} | {sig} |")
+            s_md.append(f"| [**{sym}**](#{anchor}) | {d['name']} | {d['sector']} | {len(items)} | {primary_cat} | {sources_str} | {sig} |")
 
         s_md.append("\n---\n")
 
@@ -640,8 +648,9 @@ class NewsSentimentEngine:
                     snip = it.get("snippet", "")
                     lbl = it.get("sentiment_label", "Neutral")
                     badge = "🟢 Bullish" if "Bullish" in lbl else ("🔴 Bearish" if "Bearish" in lbl else "⚪ Neutral")
+                    cat_badge = it.get("category_badge", "🏢 [Corporate]")
 
-                    s_md.append(f"{idx}. **[{src}]** {title_link} *({pub})*")
+                    s_md.append(f"{idx}. {cat_badge} **[{src}]** {title_link} *({pub})*")
                     if snip and snip != title:
                         s_md.append(f"   > {snip[:220]}...")
                     s_md.append(f"   > **Signal**: {badge} (Score: {it.get('sentiment_score', 0.0):+.2f})\n")

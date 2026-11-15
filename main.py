@@ -196,6 +196,26 @@ def build_quick_picks_section(symbols_list: list, results_dict: dict, cache_mgr)
         except Exception:
             upside = "N/A"
 
+        # Check institutional flow if available
+        flow_str = "Neutral"
+        tech_out = None
+        if sym in results_dict and "technical" in results_dict[sym]["result"].get("agent_outputs", {}):
+            tech_out = results_dict[sym]["result"]["agent_outputs"]["technical"]
+        elif cache_mgr:
+            tech_out = cache_mgr.get_latest_agent_output(sym, "Technical Analysis Agent", max_age_hours=168)
+
+        if tech_out and "raw_indicators" in tech_out:
+            ud_val = tech_out["raw_indicators"].get("up_down_vol_ratio")
+            if ud_val is not None:
+                try:
+                    ud_f = float(ud_val)
+                    if ud_f >= 1.25:
+                        flow_str = f"Accumulation ({ud_f:.1f}x)"
+                    elif ud_f <= 0.75:
+                        flow_str = f"Distribution ({ud_f:.1f}x)"
+                except Exception:
+                    pass
+
         picks.append({
             "sym":     sym,
             "cname":   cname,
@@ -207,6 +227,7 @@ def build_quick_picks_section(symbols_list: list, results_dict: dict, cache_mgr)
             "lp":      lp,
             "upside":  upside,
             "rr":      rr,
+            "flow":    flow_str,
             "pattern": pattern,
             "horizon": horizon,
         })
@@ -222,15 +243,15 @@ def build_quick_picks_section(symbols_list: list, results_dict: dict, cache_mgr)
     lines.append("\n## ⚡ Today's Quick Picks")
     lines.append("> **For busy days** — HIGH-confidence BUY signals only, ranked by Reward:Risk ratio.")
     lines.append("> Entry, target and stop-loss are all you need. No need to read individual stock sections.\n")
-    lines.append("| # | Symbol | Company | Sector | Last Price | Entry Range | Target | Stop Loss | Upside | R:R | Pattern |")
-    lines.append("|---|---|---|---|---|---|---|---|---|---|---|")
+    lines.append("| # | Symbol | Company | Sector | Last Price | Entry Range | Target | Stop Loss | Upside | R:R | Inst. Flow | Pattern |")
+    lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|")
 
     for i, p in enumerate(top_picks, 1):
         rr_disp = f"{p['rr']:.1f}x" if p["rr"] else "N/A"
         lines.append(
             f"| {i} | **{p['sym']}** | {p['cname']} | {p['sec']} "
             f"| Rs. {p['lp']} | {p['entry']} | {p['target']} "
-            f"| {p['sl']} | {p['upside']} | {rr_disp} | {p['pattern']} |"
+            f"| {p['sl']} | {p['upside']} | {rr_disp} | {p['flow']} | {p['pattern']} |"
         )
 
     lines.append("")

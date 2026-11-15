@@ -674,6 +674,56 @@ class MasterPredictionSynthesizerAgent:
                 rr_ratio = f"{reward_amt / risk_amt:.1f}x"
             upside_pct_st = f"{(tgt - last_price) / last_price * 100:+.1f}%"
 
+        # Fundamental & Solvency Profile
+        raw_fund = agent_outputs.get("fundamental", {}).get("raw_fundamentals", {})
+        pe_val = raw_fund.get("pe_ratio")
+        peg_val = raw_fund.get("peg_ratio")
+        val_assessment = raw_fund.get("valuation_assessment", "")
+        de_val = raw_fund.get("debt_to_equity")
+        cr_val = raw_fund.get("current_ratio")
+        cash_status = raw_fund.get("net_cash_status")
+        order_catalyst = raw_fund.get("order_book_catalyst")
+
+        fund_profile_parts = []
+        if pe_val and pe_val != "N/A":
+            peg_str = f" (PEG: {peg_val})" if (peg_val and peg_val != "N/A") else ""
+            val_str = f" [{val_assessment}]" if val_assessment and val_assessment != "Unavailable" else ""
+            fund_profile_parts.append(f"P/E: {pe_val}{peg_str}{val_str}")
+        if de_val and de_val != "N/A":
+            fund_profile_parts.append(f"D/E: {de_val}")
+        if cr_val and cr_val != "N/A":
+            fund_profile_parts.append(f"Current Ratio: {cr_val}")
+        if cash_status and cash_status != "N/A":
+            fund_profile_parts.append(str(cash_status))
+        fund_profile_display = " • ".join(fund_profile_parts) if fund_profile_parts else "Fundamental telemetry pending"
+
+        # Institutional Volume & Structural Swing Levels
+        ud_ratio = _to_float(raw_tech.get("up_down_vol_ratio"))
+        if ud_ratio is not None:
+            if ud_ratio >= 1.25:
+                inst_flow_display = f"🟢 Institutional Accumulation ({ud_ratio:.2f}x 20D U/D)"
+            elif ud_ratio <= 0.75:
+                inst_flow_display = f"🔴 Institutional Distribution ({ud_ratio:.2f}x 20D U/D)"
+            else:
+                inst_flow_display = f"⚪ Neutral Volume Flow ({ud_ratio:.2f}x 20D U/D)"
+        else:
+            inst_flow_display = "Neutral Volume Flow"
+
+        sh20 = _to_float(raw_tech.get("swing_high_20"))
+        sl20 = _to_float(raw_tech.get("swing_low_20"))
+        pct_52w = _to_float(raw_tech.get("pct_from_52w_high"))
+        swing_parts = []
+        if sl20 and sh20:
+            swing_parts.append(f"Rs. {sl20:.2f} (Support) — Rs. {sh20:.2f} (Resistance)")
+        if pct_52w is not None:
+            swing_parts.append(f"{pct_52w:.1f}% from 52W High")
+        swing_levels_display = " • ".join(swing_parts) if swing_parts else "Consolidation Range"
+
+        # Verified Business News Catalysts
+        news_analysis = agent_outputs.get("news_sentiment", {}).get("analysis", "")
+        order_line = f"**📦 Order Pipeline / Backlog**: {order_catalyst}\n" if order_catalyst else ""
+        news_line = f"**📰 Verified Business Activity**: {news_analysis}\n" if news_analysis else ""
+
         report_text = f"""### 🎯 SHORT-TERM VERDICT: {parsed.get('action_verdict', 'HOLD')} | Confidence: {parsed.get('confidence_rating', 'LOW (0%)')}
 | Field | Details |
 |---|---|
@@ -683,13 +733,16 @@ class MasterPredictionSynthesizerAgent:
 | **Upside Potential** | {upside_pct_st} |
 | **Reward : Risk** | {rr_ratio} |
 | **Holding Horizon** | {parsed.get('holding_horizon', 'Short-Term (1-3 Weeks)')} |
+| **Institutional Flow** | {inst_flow_display} |
+| **20D Swing Levels** | {swing_levels_display} |
+| **Valuation & Balance Sheet** | {fund_profile_display} |
 | **Chart Patterns** | {parsed.get('chart_patterns') or patterns_text} |
 | **Upcoming Events** | {parsed.get('upcoming_events_note') or events_text} |
 | **Data Coverage** | {parsed.get('data_coverage_pct', 0)}% of evidence inputs available |
 
 **📌 Key Rationale**: {parsed.get('key_rationale', '')}
 **⚡ Action Plan**: {parsed.get('actionable_recommendation', '')}
-*Confidence is a rule-based measure of signal agreement and data coverage, not a calibrated probability.*
+{order_line}{news_line}*Confidence is a rule-based measure of signal agreement and data coverage, not a calibrated probability.*
 
 ---
 ### 📈 LONG-TERM OUTLOOK ({lt_horizon})

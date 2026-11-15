@@ -255,6 +255,104 @@ class VerdictInvariantTests(unittest.TestCase):
         sig = Synth.compute_quantitative_verdict("T", "T", 100.0, make_tech(100, 92, 85, 55), {}, [BULL, bear_div], {}, None)
         self.assertIn("Bearish RSI Divergence detected", sig["key_rationale"])
 
+    def test_technical_agent_text_includes_institutional_volume_and_swing_levels(self):
+        from agents.technical_agent import TechnicalAnalysisAgent
+        class FakeTechEngine:
+            def analyze_symbol(self, sym):
+                return {
+                    "last_price": 2500.0,
+                    "rsi_14": 58.2,
+                    "sma_50": 2420.0,
+                    "sma_200": 2200.0,
+                    "bollinger_upper": 2580.0,
+                    "bollinger_lower": 2350.0,
+                    "bollinger_pct_b": 0.65,
+                    "up_down_vol_ratio": 1.42,
+                    "swing_high_20": 2550.0,
+                    "swing_low_20": 2380.0,
+                    "pct_from_52w_high": -4.5,
+                    "technical_signals": ["Bullish Trend", "RSI Momentum"],
+                    "detected_patterns": []
+                }
+        out = TechnicalAnalysisAgent(FakeTechEngine()).run("RELIANCE")
+        self.assertIn("Inst. Volume: Accumulation (1.42x U/D)", out["analysis"])
+        self.assertIn("20D Swing Range: [Rs.2380.00 - Rs.2550.00]", out["analysis"])
+        self.assertIn("52W High Gap: -4.5%", out["analysis"])
+
+    def test_synthesizer_report_includes_fundamentals_and_structural_levels(self):
+        agent_outputs = {
+            "technical": {
+                "raw_indicators": {
+                    "last_price": 100.0,
+                    "sma_50": 92.0,
+                    "sma_200": 85.0,
+                    "rsi_14": 55.0,
+                    "up_down_vol_ratio": 1.35,
+                    "swing_high_20": 105.0,
+                    "swing_low_20": 94.0,
+                    "pct_from_52w_high": -3.2,
+                },
+                "detected_patterns": [BULL]
+            },
+            "fundamental": {
+                "raw_fundamentals": {
+                    "pe_ratio": 22.5,
+                    "peg_ratio": 1.15,
+                    "valuation_assessment": "Fairly Valued",
+                    "debt_to_equity": 12.0,
+                    "current_ratio": 1.8,
+                    "net_cash_status": "Net Cash Positive (Debt-Free)",
+                    "order_book_catalyst": "Bags Rs 1,200 Cr EPC order"
+                },
+                "upcoming_events": {}
+            },
+            "news_sentiment": {
+                "analysis": "Business activity is overall Positive with 3 new contract wins."
+            }
+        }
+        res = Synth().run("TEST", "Test Ltd", agent_outputs)
+        report = res["final_report"]
+        self.assertIn("**Institutional Flow**", report)
+        self.assertIn("Institutional Accumulation", report)
+        self.assertIn("**20D Swing Levels**", report)
+        self.assertIn("**Valuation & Balance Sheet**", report)
+        self.assertIn("PEG: 1.15", report)
+        self.assertIn("Net Cash Positive", report)
+        self.assertIn("Order Pipeline / Backlog", report)
+        self.assertIn("Verified Business Activity", report)
+
+    def test_quick_picks_includes_institutional_flow(self):
+        from main import build_quick_picks_section
+        symbols_list = [{"symbol": "BEL", "name": "Bharat Electronics", "sector": "Defence"}]
+        results_dict = {
+            "BEL": {
+                "name": "Bharat Electronics",
+                "sector": "Defence",
+                "result": {
+                    "last_price": 300.0,
+                    "structured_signal": {
+                        "action_verdict": "BUY",
+                        "confidence_rating": "HIGH (88%)",
+                        "when_to_buy_entry": "Rs. 295.00 - 302.00",
+                        "when_to_sell_target": "Rs. 330.00",
+                        "stop_loss": "Rs. 285.00",
+                        "chart_patterns": "Cup & Handle",
+                        "holding_horizon": "1-3 Weeks"
+                    },
+                    "agent_outputs": {
+                        "technical": {
+                            "raw_indicators": {
+                                "up_down_vol_ratio": 1.45
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        md = build_quick_picks_section(symbols_list, results_dict, None)
+        self.assertIn("Inst. Flow", md)
+        self.assertIn("Accumulation (1.4x)", md)
+
     def test_invalid_price_yields_no_levels(self):
         for bad in (None, "N/A", float("nan"), 0, -5):
             sig = Synth.compute_quantitative_verdict("T", "T", bad, {}, {}, [BULL], {}, None)
