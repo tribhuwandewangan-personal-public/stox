@@ -166,6 +166,27 @@ class VerdictInvariantTests(unittest.TestCase):
         b = score_evidence(100.0, make_tech(100, 92, 85, 55), BULL, {"fundamental": {"available": False}})
         self.assertEqual(a["score"], b["score"])
 
+    def test_peg_ratio_rewards_garp_and_penalizes_expensive_growth(self):
+        from agents.synthesizer_agent import _fundamental_signal
+        # High growth with premium P/E alone receives negative penalty (-0.3)
+        pure_premium = {"available": True, "valuation_assessment": "High Growth / Premium Valuation"}
+        val_pure, _ = _fundamental_signal(pure_premium)
+        self.assertLess(val_pure, 0)
+
+        # High growth with PEG < 1.0 (GARP justified) turns positive
+        garp = {"available": True, "valuation_assessment": "High Growth / Premium Valuation", "peg_ratio": 0.85}
+        val_garp, note_garp = _fundamental_signal(garp)
+        self.assertGreater(val_garp, 0)
+        self.assertIn("attractive growth at discount", note_garp)
+
+        # Low P/E with poor growth / negative PEG is dampened compared to genuine value
+        true_value = {"available": True, "valuation_assessment": "Undervalued / Value Opportunity"}
+        val_true, _ = _fundamental_signal(true_value)
+        trap_value = {"available": True, "valuation_assessment": "Undervalued / Value Opportunity", "peg_ratio": -1.2}
+        val_trap, note_trap = _fundamental_signal(trap_value)
+        self.assertLess(val_trap, val_true)
+        self.assertIn("growth concern", note_trap)
+
     def test_invalid_price_yields_no_levels(self):
         for bad in (None, "N/A", float("nan"), 0, -5):
             sig = Synth.compute_quantitative_verdict("T", "T", bad, {}, {}, [BULL], {}, None)

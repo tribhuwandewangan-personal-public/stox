@@ -20,6 +20,7 @@ class FundamentalAgent:
         events_data = self.events_engine.fetch_stock_events(symbol)
         
         pe = fund_data.get("pe_ratio", "N/A")
+        peg = fund_data.get("peg_ratio", "N/A")
         roe = fund_data.get("roe_pct", "N/A")
         val = fund_data.get("valuation_assessment", "Unavailable")
         earnings_dt = events_data.get("earnings_date") or "TBD"
@@ -32,7 +33,8 @@ class FundamentalAgent:
         events_summary = f"{earnings_part} | Dividend: {div_amt} (Ex-Date: {div_dt}) | Catalyst: {corp_action}"
         if fund_data.get("available", True):
             roe_txt = f"{roe}%" if roe != "N/A" else "N/A"
-            analysis_text = f"P/E Ratio: {pe} | ROE: {roe_txt} | Valuation: {val} | Upcoming Events: {events_summary}"
+            peg_part = f" | PEG: {peg}" if peg != "N/A" else ""
+            analysis_text = f"P/E Ratio: {pe}{peg_part} | ROE: {roe_txt} | Valuation: {val} | Upcoming Events: {events_summary}"
         else:
             analysis_text = f"Fundamentals unavailable from market feed | Upcoming Events: {events_summary}"
 

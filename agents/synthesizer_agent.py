@@ -168,15 +168,46 @@ def _fundamental_signal(fund: Optional[dict]) -> Optional[Tuple[float, str]]:
     if not fund or not fund.get("available", False):
         return None
     val = str(fund.get("valuation_assessment", ""))
+    peg = _to_float(fund.get("peg_ratio"))
     value, notes = 0.0, []
+
+    # 1. P/E valuation, calibrated by PEG when available
     if val.startswith("Undervalued"):
-        value += 0.6
-        notes.append("undervalued on P/E")
+        if peg is not None and (peg < 0 or peg > 2.5):
+            value += 0.2
+            notes.append("low P/E with growth concern")
+        else:
+            value += 0.6
+            notes.append("undervalued on P/E")
     elif val.startswith("High Growth"):
-        value -= 0.3
-        notes.append("premium P/E")
+        if peg is not None and 0 < peg <= 1.5:
+            # High growth justifies premium multiple (GARP)
+            value += 0.1
+            notes.append("premium P/E backed by high growth")
+        else:
+            value -= 0.3
+            notes.append("premium P/E")
     elif val.startswith("Fairly"):
         notes.append("fair P/E")
+
+    # 2. PEG Ratio assessment (Growth at a Reasonable Price)
+    if peg is not None:
+        if 0 < peg < 1.0:
+            value += 0.4
+            notes.append(f"PEG {peg:.2f} (attractive growth at discount)")
+        elif 1.0 <= peg <= 1.5:
+            value += 0.15
+            notes.append(f"PEG {peg:.2f} (fair growth valuation)")
+        elif 1.5 < peg <= 2.2:
+            notes.append(f"PEG {peg:.2f} (moderate growth premium)")
+        elif peg > 2.5:
+            value -= 0.35
+            notes.append(f"PEG {peg:.2f} (growth overvalued / high valuation risk)")
+        elif peg < 0:
+            value -= 0.3
+            notes.append("negative PEG (declining earnings)")
+
+    # 3. ROE Quality Check
     roe = _to_float(fund.get("roe_pct"))
     if roe is not None:
         if roe >= 15:
@@ -185,6 +216,7 @@ def _fundamental_signal(fund: Optional[dict]) -> Optional[Tuple[float, str]]:
         elif roe < 8:
             value -= 0.2
             notes.append(f"weak ROE {roe:.0f}%")
+
     if not notes:
         return None
     return _clamp(value), "valuation: " + ", ".join(notes)

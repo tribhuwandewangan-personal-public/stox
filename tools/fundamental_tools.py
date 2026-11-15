@@ -31,6 +31,8 @@ class FundamentalAnalysisEngine:
             "symbol": symbol,
             "available": False,
             "pe_ratio": "N/A",
+            "peg_ratio": "N/A",
+            "earnings_growth_pct": "N/A",
             "pb_ratio": "N/A",
             "roe_pct": "N/A",
             "debt_to_equity": "N/A",
@@ -88,6 +90,14 @@ class FundamentalAnalysisEngine:
                     continue
 
                 pe_val = _num(pe_ratio)
+                peg_val = _num(info.get("pegRatio"))
+                eg_val = _num(info.get("earningsGrowth"), 100)
+
+                # Fallback: calculate PEG from P/E and earningsGrowth if pegRatio is not provided directly
+                if peg_val == "N/A" and isinstance(pe_val, (int, float)) and pe_val > 0:
+                    if isinstance(eg_val, (int, float)) and eg_val > 2.0:
+                        peg_val = round(pe_val / eg_val, 2)
+
                 val_status = "Fairly Valued"
                 if pe_val == "N/A" or pe_val <= 0:
                     # Negative / missing earnings: a P/E-based valuation label would be meaningless
@@ -101,6 +111,8 @@ class FundamentalAnalysisEngine:
                     "symbol": symbol_clean,
                     "available": True,
                     "pe_ratio": pe_val,
+                    "peg_ratio": peg_val,
+                    "earnings_growth_pct": eg_val,
                     "pb_ratio": _num(info.get("priceToBook")),
                     "roe_pct": _num(info.get("returnOnEquity"), 100),
                     "debt_to_equity": _num(info.get("debtToEquity")),
