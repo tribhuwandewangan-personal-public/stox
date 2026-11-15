@@ -1012,6 +1012,38 @@ class TestMacroRiskShieldEngine(unittest.TestCase):
         self.assertTrue(any("FOMC" in e["event"] for e in SCHEDULED_RISK_EVENTS))
         self.assertTrue(any("Budget" in e["event"] for e in SCHEDULED_RISK_EVENTS))
 
+    def test_no_order_placement_methods_exist_in_codebase(self):
+        """Enforce strict read-only invariant: no order placement or modification methods permitted."""
+        import glob
+        forbidden_patterns = [
+            ".place_order(",
+            ".modify_order(",
+            ".cancel_order(",
+            ".order_margins(",
+            "kite.place_order",
+            "kite.modify_order",
+            "kite.cancel_order",
+        ]
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        source_files = (
+            glob.glob(os.path.join(repo_root, "tools", "**", "*.py"), recursive=True) +
+            glob.glob(os.path.join(repo_root, "agents", "**", "*.py"), recursive=True) +
+            glob.glob(os.path.join(repo_root, "api", "**", "*.py"), recursive=True) +
+            [os.path.join(repo_root, "main.py"), os.path.join(repo_root, "dashboard_server.py")]
+        )
+
+        for filepath in source_files:
+            if not os.path.exists(filepath):
+                continue
+            with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read()
+            for pattern in forbidden_patterns:
+                self.assertNotIn(
+                    pattern,
+                    content,
+                    f"CRITICAL SAFETY VIOLATION: Forbidden order method '{pattern}' detected in {filepath}!"
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
