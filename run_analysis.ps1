@@ -18,7 +18,8 @@
 param(
     [switch]$Force,
     [switch]$Fast,       # Kept for backward compatibility (ignored)
-    [string]$Symbol = ""
+    [string]$Symbol = "",
+    [switch]$Portfolio   # Evaluates portfolio holdings and generates Portfolio Holdings Action report
 )
 
 # Trap script cancellation (Ctrl+C) to prevent PowerShell hanging
@@ -193,6 +194,23 @@ catch {
     }
     catch {
         Write-Host "Notice: Pipeline finished or was interrupted." -ForegroundColor DarkYellow
+    }
+}
+
+# Step 5: Portfolio Diagnostics & Holdings Action Report (if portfolio snapshot or token exists)
+if ($Portfolio -or (Test-Path "$ScriptDir\storage\my_holdings.json") -or (Test-Path "$ScriptDir\storage\kite_token.json")) {
+    Write-Host ""
+    Write-Host "[5/5] Generating Portfolio Holdings Diagnostics & Strategy Report..." -ForegroundColor Green
+    try {
+        uv run python "$ScriptDir\tools\kite_portfolio.py" --report
+    }
+    catch {
+        try {
+            python "$ScriptDir\tools\kite_portfolio.py" --report
+        }
+        catch {
+            Write-Host "Notice: Portfolio report generation skipped." -ForegroundColor DarkGray
+        }
     }
 }
 

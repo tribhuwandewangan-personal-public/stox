@@ -245,6 +245,18 @@ async def remove_symbol(request: Request) -> JSONResponse:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 
 
+async def portfolio(request: Request) -> JSONResponse:
+    """GET /api/portfolio: User's portfolio holdings with multi-agent long-term & swing diagnostics."""
+    try:
+        from tools.kite_portfolio import KitePortfolioEngine
+        cache_mgr = _managers.get("cache_mgr")
+        engine = KitePortfolioEngine(cache_manager=cache_mgr)
+        data = engine.evaluate_portfolio()
+        return JSONResponse(data)
+    except Exception as e:
+        return JSONResponse({"error": str(e), "summary": {}, "holdings": []}, status_code=500)
+
+
 async def favicon(request: Request) -> Response:
     """GET /favicon.ico: Empty response."""
     return Response(status_code=204)
@@ -259,6 +271,7 @@ routes = [
     Route("/api/history", endpoint=history, methods=["GET"]),
     Route("/api/events", endpoint=events, methods=["GET"]),
     Route("/api/search-symbol", endpoint=search_symbol, methods=["GET"]),
+    Route("/api/portfolio", endpoint=portfolio, methods=["GET"]),
     Route("/api/trigger", endpoint=trigger, methods=["POST"]),
     Route("/api/add-symbol", endpoint=add_symbol, methods=["POST"]),
     Route("/api/remove-symbol", endpoint=remove_symbol, methods=["POST"]),

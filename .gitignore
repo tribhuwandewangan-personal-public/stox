@@ -46,6 +46,16 @@ scratch/
 scratch_*.py
 *.tmp
 
-# Broker access token (can place orders) - never commit
+# Broker access token & private credentials (never commit)
 storage/kite_token.json
 *kite_token*.json
+storage/my_holdings.json
+*holdings*.json
+*holdings*.csv
+*portfolio*.json
+*portfolio*.csv
+*credentials*.json
+.env
+.env.*
+*.env
+*.secret

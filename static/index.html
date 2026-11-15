@@ -2233,6 +2233,10 @@
       </div>
     </div>
     <div class="header-badges">
+      <button class="nav-btn highlight" onclick="openPortfolioModal()" style="background:linear-gradient(135deg, rgba(16,185,129,0.2), rgba(56,189,248,0.2)); border:1px solid rgba(16,185,129,0.5); font-weight:700;"
+        title="View Zerodha Kite Portfolio Holdings, Diagnostics & Actions">
+        <span>💼</span> My Portfolio
+      </button>
       <a href="/news_reports/latest_market_news.md" target="_blank" rel="noopener noreferrer" class="nav-btn highlight"
         id="headerMarketNewsBtn" title="Open Latest Market News Markdown report">
         <span>📰</span> Market News (.md) ↗
@@ -4756,6 +4760,146 @@ body{background:#090d16;color:#f3f4f6;font-family:'Inter',sans-serif;min-height:
       }
     }
 
+    function closePortfolioModal() {
+      document.getElementById('portfolioModalOverlay').style.display = 'none';
+    }
+
+    async function openPortfolioModal() {
+      const overlay = document.getElementById('portfolioModalOverlay');
+      const body = document.getElementById('portfolioBody');
+      overlay.style.display = 'flex';
+      body.innerHTML = '<div style="padding:40px; text-align:center; color:#94a3b8;">Connecting to Kite / loading portfolio diagnostics...</div>';
+
+      try {
+        const resp = await fetch('/api/portfolio');
+        const data = await resp.json();
+        const s = data.summary || {};
+        const holdings = data.holdings || [];
+        const secBd = data.sector_breakdown || {};
+        const flags = data.diversification_flags || [];
+
+        if (holdings.length === 0) {
+          body.innerHTML = `
+            <div style="background:rgba(255,255,255,0.03); border:1px dashed var(--border-card); border-radius:12px; padding:32px; text-align:center;">
+              <div style="font-size:2.5rem; margin-bottom:12px;">💼</div>
+              <h3 style="color:#fff; margin-bottom:8px;">No Portfolio Holdings Loaded</h3>
+              <p style="color:var(--text-muted); font-size:0.88rem; max-width:500px; margin:0 auto 20px;">
+                Connect your Zerodha Kite account or initialize a local holdings snapshot to get direct long-term compounder and swing trading intelligence on your assets.
+              </p>
+              <div style="display:flex; justify-content:center; gap:12px; flex-wrap:wrap;">
+                <button class="btn-trigger" onclick="alert('To log in to Zerodha Kite:\\n\\n1. Open your terminal in this repo.\\n2. Run: python tools/kite_portfolio.py --login\\n3. Approve the login in your browser and paste the request token.\\n\\nTokens expire daily per Zerodha security.')">
+                  🔑 How to Connect Kite
+                </button>
+              </div>
+            </div>
+          `;
+          return;
+        }
+
+        const pnlSign = s.total_pnl >= 0 ? '+' : '';
+        const pnlColor = s.total_pnl >= 0 ? 'var(--accent-green)' : 'var(--accent-rose)';
+
+        let flagsHtml = flags.map(f => `<div style="font-size:0.8rem; color:#cbd5e1; margin-bottom:4px;">${f.replace(/\\*\\*(.*?)\\*\\*/g, '<b>$1</b>')}</div>`).join('');
+
+        let holdingsRows = holdings.map((h, i) => {
+          const hpnlSign = h.pnl >= 0 ? '+' : '';
+          const hpnlColor = h.pnl >= 0 ? 'var(--accent-green)' : 'var(--accent-rose)';
+          const ltColor = (h.long_term_action || '').includes('TOP COMPOUNDER') ? 'var(--accent-green)' : (h.long_term_action || '').includes('EXPENSIVE') ? 'var(--accent-amber)' : '#cbd5e1';
+          const swColor = (h.swing_action || '').includes('TARGET') ? 'var(--accent-green)' : (h.swing_action || '').includes('STOP LOSS') ? 'var(--accent-rose)' : (h.swing_action || '').includes('OVERHEAD') ? 'var(--accent-amber)' : '#38bdf8';
+
+          return `
+            <tr>
+              <td>
+                <button class="qp-sym-btn" onclick="closePortfolioModal(); setTimeout(() => openStockModalDirect('${h.symbol}'), 150)">
+                  ${h.symbol} ↗
+                </button>
+                <div style="font-size:0.75rem; color:var(--text-muted);">${h.sector}</div>
+              </td>
+              <td style="font-family:'JetBrains Mono';">${h.quantity}</td>
+              <td style="font-family:'JetBrains Mono';">Rs.${h.average_price.toFixed(1)}</td>
+              <td style="font-family:'JetBrains Mono'; font-weight:600;">Rs.${h.last_price.toFixed(1)}</td>
+              <td style="font-family:'JetBrains Mono'; color:${hpnlColor}; font-weight:700;">
+                ${hpnlSign}Rs.${h.pnl.toLocaleString('en-IN')}<br>
+                <span style="font-size:0.75rem;">(${hpnlSign}${h.pnl_pct.toFixed(1)}%)</span>
+              </td>
+              <td>
+                <div style="color:${ltColor}; font-size:0.83rem; font-weight:600; line-height:1.4;">
+                  ${h.long_term_action}
+                </div>
+                <div style="font-size:0.75rem; color:#94a3b8;">3Y Target: <b style="color:#f1f5f9;">${h.long_term_target}</b> (${h.long_term_upside})</div>
+              </td>
+              <td>
+                <div style="color:${swColor}; font-size:0.83rem; font-weight:600; line-height:1.4;">
+                  ${h.swing_action}
+                </div>
+                <div style="font-size:0.75rem; color:#94a3b8;">Verdict: <b>${h.short_term_verdict}</b> | Target: ${h.short_term_target} | Stop: ${h.short_term_stop_loss}</div>
+              </td>
+            </tr>
+          `;
+        }).join('');
+
+        body.innerHTML = `
+          <!-- Portfolio Metric Cards -->
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin-bottom:18px;">
+            <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border-card); border-radius:10px; padding:12px 16px;">
+              <div style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase;">Invested Capital</div>
+              <div style="font-size:1.3rem; font-weight:700; font-family:'JetBrains Mono'; color:#f1f5f9;">Rs. ${s.total_invested.toLocaleString('en-IN')}</div>
+              <div style="font-size:0.74rem; color:#94a3b8;">${s.total_holdings} Active Holdings</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border-card); border-radius:10px; padding:12px 16px;">
+              <div style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase;">Current Portfolio Value</div>
+              <div style="font-size:1.3rem; font-weight:700; font-family:'JetBrains Mono'; color:var(--accent-blue);">Rs. ${s.current_value.toLocaleString('en-IN')}</div>
+              <div style="font-size:0.74rem; color:#94a3b8;">Data: ${s.data_source}</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border-card); border-radius:10px; padding:12px 16px;">
+              <div style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase;">Total Unrealized P&L</div>
+              <div style="font-size:1.3rem; font-weight:700; font-family:'JetBrains Mono'; color:${pnlColor};">${pnlSign}Rs. ${Math.abs(s.total_pnl).toLocaleString('en-IN')}</div>
+              <div style="font-size:0.74rem; color:${pnlColor}; font-weight:600;">${pnlSign}${s.total_pnl_pct.toFixed(2)}% Overall</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border-card); border-radius:10px; padding:12px 16px;">
+              <div style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase;">Portfolio Win Rate</div>
+              <div style="font-size:1.3rem; font-weight:700; font-family:'JetBrains Mono'; color:#f1f5f9;">${s.win_rate_pct}%</div>
+              <div style="font-size:0.74rem; color:#94a3b8;">🟢 ${s.profitable_count} Profitable / 🔴 ${s.losing_count} Losing</div>
+            </div>
+          </div>
+
+          <!-- Diversification & Concentration Warning Banner -->
+          <div style="background:rgba(56,189,248,0.04); border:1px solid rgba(56,189,248,0.2); border-radius:10px; padding:12px 16px; margin-bottom:18px;">
+            <div style="font-weight:600; color:var(--accent-blue); font-size:0.85rem; margin-bottom:6px;">📊 Portfolio Risk & Concentration Diagnostics:</div>
+            ${flagsHtml}
+          </div>
+
+          <!-- Holdings Strategy Table -->
+          <div style="overflow-x:auto;">
+            <table class="acc-table" style="font-size:0.83rem;">
+              <thead>
+                <tr>
+                  <th>Symbol</th>
+                  <th>Qty</th>
+                  <th>Avg Price</th>
+                  <th>LTP</th>
+                  <th>P&L</th>
+                  <th style="min-width:240px;">🏛️ Long-Term Wealth Action</th>
+                  <th style="min-width:260px;">⚡ Short-Term Swing Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${holdingsRows}
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Footer / Safety Notice -->
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-top:16px; padding-top:12px; border-top:1px solid var(--border-card); font-size:0.78rem; color:#94a3b8;">
+            <div>🛡️ <b>Advisory Mode</b>: Strictly Read-Only. No real money trades are placed. Tokens remain private.</div>
+            <div><a href="/reports/Portfolio_Holdings_Analysis_latest.md" target="_blank" rel="noopener noreferrer" style="color:var(--accent-blue); text-decoration:none; font-weight:600;">Open Full Report (.md) ↗</a></div>
+          </div>
+        `;
+      } catch (err) {
+        body.innerHTML = `<p style="color:var(--accent-rose);">Error loading portfolio: ${err.message}</p>`;
+      }
+    }
+
     function fetchAllData() { fetchStatus(); fetchStockCards(); fetchQuotes(); }
 
     // Poll only while the tab is visible. Full analysis payload every 20s; light quote refresh every 15s.
@@ -4771,6 +4915,25 @@ body{background:#090d16;color:#f3f4f6;font-family:'Inter',sans-serif;min-height:
     initSidebarState();
     startPolling();
   </script>
+
+  <!-- Zerodha Kite Portfolio Diagnostics & Actions Modal -->
+  <div class="modal-overlay" id="portfolioModalOverlay"
+    onclick="if(event.target.id==='portfolioModalOverlay') closePortfolioModal()">
+    <div class="modal-card" style="max-width:1050px; width:95vw;">
+      <span class="modal-close" onclick="closePortfolioModal()">&times;</span>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+        <h2 style="font-family:'Outfit'; font-size:1.6rem; color:#fff; display:flex; align-items:center; gap:10px;">
+          <span>💼</span> Portfolio Holdings & Action Engine
+        </h2>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <button class="btn-trigger" onclick="openPortfolioModal()" style="padding:5px 12px; font-size:0.8rem;">
+            🔄 Refresh Live
+          </button>
+        </div>
+      </div>
+      <div id="portfolioBody" style="color:#cbd5e1;">Loading portfolio data…</div>
+    </div>
+  </div>
 
   <!-- Prediction accuracy modal -->
   <div class="modal-overlay" id="accuracyModalOverlay"

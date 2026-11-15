@@ -133,13 +133,13 @@ class KiteQuoteProvider:
     def fetch(self, symbols: List[str]) -> Dict[str, Dict[str, Any]]:
         if not symbols:
             return {}
-        try:
-            from kiteconnect import KiteConnect
-        except ImportError:
-            raise ProviderUnavailable("kiteconnect not installed (pip install kiteconnect)")
         token = self._access_token()
         if not self.api_key or not token:
             raise ProviderUnavailable("Kite not set up: set KITE_API_KEY and run tools/kite_probe.py")
+        try:
+            from kiteconnect import KiteConnect
+        except Exception as e:
+            raise ProviderUnavailable(f"kiteconnect unavailable: {e}")
 
         kite = KiteConnect(api_key=self.api_key)
         kite.set_access_token(token)

@@ -353,6 +353,55 @@ class VerdictInvariantTests(unittest.TestCase):
         self.assertIn("Inst. Flow", md)
         self.assertIn("Accumulation (1.4x)", md)
 
+    def test_kite_portfolio_diagnostics_and_actions(self):
+        from tools.kite_portfolio import KitePortfolioEngine
+        engine = KitePortfolioEngine()
+        test_holdings = [
+            {
+                "symbol": "BEL",
+                "quantity": 100,
+                "average_price": 280.0,
+                "last_price": 305.0,
+                "invested_value": 28000.0,
+                "current_value": 30500.0,
+                "pnl": 2500.0,
+                "pnl_pct": 8.93
+            },
+            {
+                "symbol": "TCS",
+                "quantity": 10,
+                "average_price": 3900.0,
+                "last_price": 3800.0,
+                "invested_value": 39000.0,
+                "current_value": 38000.0,
+                "pnl": -1000.0,
+                "pnl_pct": -2.56
+            }
+        ]
+        res = engine.evaluate_portfolio(test_holdings)
+        summary = res["summary"]
+        self.assertEqual(summary["total_holdings"], 2)
+        self.assertEqual(summary["total_invested"], 67000.0)
+        self.assertGreater(summary["current_value"], 0)
+        self.assertIn("total_pnl", summary)
+        self.assertGreater(summary["total_pnl_pct"], 0)
+        self.assertEqual(summary["profitable_count"], 1)
+        self.assertEqual(summary["losing_count"], 1)
+
+        holdings = res["holdings"]
+        bel = next(h for h in holdings if h["symbol"] == "BEL")
+        self.assertIn("COMPOUNDER", bel["long_term_action"])
+        self.assertIn("trailing stop", bel["swing_action"])
+
+        rep_path = engine.generate_portfolio_report()
+        self.assertTrue(os.path.exists(rep_path))
+        with open(rep_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        self.assertIn("Portfolio Diagnostics & Strategic Action Report", content)
+        self.assertIn("BEL", content)
+        self.assertIn("Holdings Action Matrix", content)
+        self.assertIn("Advisory Mode", content)
+
     def test_invalid_price_yields_no_levels(self):
         for bad in (None, "N/A", float("nan"), 0, -5):
             sig = Synth.compute_quantitative_verdict("T", "T", bad, {}, {}, [BULL], {}, None)

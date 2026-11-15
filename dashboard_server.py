@@ -387,6 +387,17 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(body)
             return
 
+        elif path.startswith("/api/portfolio"):
+            try:
+                from tools.kite_portfolio import KitePortfolioEngine
+                port_engine = KitePortfolioEngine(cache_manager=cache_mgr)
+                data = port_engine.evaluate_portfolio()
+                body = safe_json_dumps(data)
+            except Exception as e:
+                body = safe_json_dumps({"error": str(e), "summary": {}, "holdings": []})
+            self._send_json(200, body)
+            return
+
         elif path == "/" or path == "/index.html":
             html_path = os.path.join(PROJECT_ROOT, "static", "index.html")
             if os.path.exists(html_path):
