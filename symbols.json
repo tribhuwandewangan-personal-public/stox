@@ -1,6 +1,6 @@
 {
   "description": "List of NSE stock symbols for multi-agent RAG analysis and prediction",
-  "updated_at": "2026-11-09",
+  "updated_at": "2026-11-15",
   "default_timeframe_days": 1825,
   "symbols": [
     {
@@ -363,6 +363,36 @@
       "symbol": "KOTAKBANK",
       "name": "KOTAK MAHINDRA BANK LTD",
       "sector": "Financial Services",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "TATAELEXI",
+      "name": "TATAELEXI Limited",
+      "sector": "Indian Equities",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "KPITTECH",
+      "name": "KPIT TECHNOLOGIES LIMITED",
+      "sector": "Technology",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "IREDA",
+      "name": "INDIAN RENEWABLE ENERGY",
+      "sector": "Financial Services",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "UNOMINDA",
+      "name": "UNO MINDA LIMITED",
+      "sector": "Consumer Cyclical",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "RADICO",
+      "name": "RADICO KHAITAN LTD",
+      "sector": "Consumer Defensive",
       "exchange": "NSE"
     }
   ]

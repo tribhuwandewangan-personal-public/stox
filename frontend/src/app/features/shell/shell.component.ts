@@ -4,7 +4,6 @@
 
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterOutlet, Router } from '@angular/router';
 import { HeaderComponent } from './header.component';
 import { BulletinComponent } from './bulletin.component';
 import { DashboardComponent } from '../dashboard/dashboard.component';
@@ -12,7 +11,7 @@ import { DashboardComponent } from '../dashboard/dashboard.component';
 @Component({
   selector: 'app-shell',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, HeaderComponent, BulletinComponent, DashboardComponent],
+  imports: [CommonModule, HeaderComponent, BulletinComponent, DashboardComponent],
   template: `
     <div class="app-container">
       <app-header></app-header>

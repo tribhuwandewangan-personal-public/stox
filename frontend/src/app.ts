@@ -5,7 +5,6 @@
 
 import { Component, OnInit, OnDestroy, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterOutlet, provideRouter } from '@angular/router';
 import { ApiService } from './app/core/services/api.service';
 import { ws } from './app/core/services/ws.service';
 import { stocksStore } from './app/core/stores/stocks.store';
@@ -14,7 +13,7 @@ import { ShellComponent } from './app/features/shell/shell.component';
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, ShellComponent],
+  imports: [CommonModule, ShellComponent],
   template: `<app-shell></app-shell>`,
   styles: []
 })

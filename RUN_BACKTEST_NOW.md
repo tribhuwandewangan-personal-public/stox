@@ -39,10 +39,7 @@ python main.py --force
 ## Step 3: Run Backtest (1 min)
 
 ```powershell
-python tools/backtest_runner.py `
-  --start 2024-01-01 `
-  --end 2026-11-10 `
-  --symbols "INFY,TCS,RELIANCE,ITC,HDFC"
+python tools/backtest_runner.py --start 2024-01-01 --end 2026-11-10 --symbols "INFY,TCS,RELIANCE,ITC,HDFC"
 ```
 
 **What it does:**

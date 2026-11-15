@@ -3,6 +3,7 @@
  * Thin wrapper around fetch that adds CSRF headers and error handling.
  */
 
+import { Injectable } from '@angular/core';
 import {
   Stock,
   AccuracyReport,
@@ -42,11 +43,14 @@ async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
   }
 }
 
+@Injectable({
+  providedIn: 'root' // <-- This makes it available globally
+})
 export class ApiService {
   /**
    * GET /api/status: Server status, queue, macro.
    */
-  static getStatus(): Promise<any> {
+  getStatus(): Promise<any> {
     return fetchJson('/status');
   }
 
