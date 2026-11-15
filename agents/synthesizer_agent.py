@@ -217,6 +217,28 @@ def _fundamental_signal(fund: Optional[dict]) -> Optional[Tuple[float, str]]:
             value -= 0.2
             notes.append(f"weak ROE {roe:.0f}%")
 
+    # 4. Balance Sheet Health (Solvency & Working Capital)
+    de = _to_float(fund.get("debt_to_equity"))
+    cr = _to_float(fund.get("current_ratio"))
+    net_cash_status = str(fund.get("net_cash_status", ""))
+
+    if "Net Cash Positive" in net_cash_status or (de is not None and 0 <= de < 15):
+        value += 0.15
+        notes.append("virtually debt-free balance sheet")
+    elif de is not None and de > 150:
+        value -= 0.20
+        notes.append(f"high leverage (D/E {de:.0f})")
+
+    if cr is not None and cr < 0.9:
+        value -= 0.15
+        notes.append(f"tight liquidity (Current Ratio {cr:.2f})")
+
+    # 5. Corporate Order Book & Contract Pipeline Catalyst
+    order_catalyst = fund.get("order_book_catalyst")
+    if order_catalyst:
+        value += 0.15
+        notes.append("contract pipeline / order inflow")
+
     if not notes:
         return None
     return _clamp(value), "valuation: " + ", ".join(notes)

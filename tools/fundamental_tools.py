@@ -36,6 +36,13 @@ class FundamentalAnalysisEngine:
             "pb_ratio": "N/A",
             "roe_pct": "N/A",
             "debt_to_equity": "N/A",
+            "total_debt": "N/A",
+            "total_cash": "N/A",
+            "net_debt": "N/A",
+            "net_cash_status": "N/A",
+            "current_ratio": "N/A",
+            "quick_ratio": "N/A",
+            "free_cashflow": "N/A",
             "revenue_growth_pct": "N/A",
             "profit_margin_pct": "N/A",
             "valuation_assessment": "Unavailable",
@@ -98,6 +105,30 @@ class FundamentalAnalysisEngine:
                     if isinstance(eg_val, (int, float)) and eg_val > 2.0:
                         peg_val = round(pe_val / eg_val, 2)
 
+                # Balance Sheet & Solvency metrics (freely available via market feed)
+                total_debt = _num(info.get("totalDebt"))
+                total_cash = _num(info.get("totalCash"))
+                current_ratio = _num(info.get("currentRatio"))
+                quick_ratio = _num(info.get("quickRatio"))
+                free_cashflow = _num(info.get("freeCashflow"))
+                de_ratio = _num(info.get("debtToEquity"))
+
+                net_debt = "N/A"
+                net_cash_status = "N/A"
+                if isinstance(total_debt, (int, float)) and isinstance(total_cash, (int, float)):
+                    net_debt = round(total_debt - total_cash, 2)
+                    if net_debt <= 0:
+                        net_cash_status = "Net Cash Positive (Debt-Free)"
+                    else:
+                        net_cash_status = f"Net Debt: Rs. {net_debt:,.0f}"
+                elif isinstance(de_ratio, (int, float)):
+                    if de_ratio < 15:
+                        net_cash_status = "Virtually Debt-Free"
+                    elif de_ratio > 150:
+                        net_cash_status = "High Leverage"
+                    else:
+                        net_cash_status = "Moderate Leverage"
+
                 val_status = "Fairly Valued"
                 if pe_val == "N/A" or pe_val <= 0:
                     # Negative / missing earnings: a P/E-based valuation label would be meaningless
@@ -115,7 +146,14 @@ class FundamentalAnalysisEngine:
                     "earnings_growth_pct": eg_val,
                     "pb_ratio": _num(info.get("priceToBook")),
                     "roe_pct": _num(info.get("returnOnEquity"), 100),
-                    "debt_to_equity": _num(info.get("debtToEquity")),
+                    "debt_to_equity": de_ratio,
+                    "total_debt": total_debt,
+                    "total_cash": total_cash,
+                    "net_debt": net_debt,
+                    "net_cash_status": net_cash_status,
+                    "current_ratio": current_ratio,
+                    "quick_ratio": quick_ratio,
+                    "free_cashflow": free_cashflow,
                     "revenue_growth_pct": _num(info.get("revenueGrowth"), 100),
                     "profit_margin_pct": _num(info.get("profitMargins"), 100),
                     "valuation_assessment": val_status,

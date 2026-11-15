@@ -187,6 +187,34 @@ class VerdictInvariantTests(unittest.TestCase):
         self.assertLess(val_trap, val_true)
         self.assertIn("growth concern", note_trap)
 
+    def test_balance_sheet_and_order_book_signals(self):
+        from agents.synthesizer_agent import _fundamental_signal
+        # Healthy balance sheet (debt-free) and order book catalyst boost score
+        strong_bs = {
+            "available": True,
+            "valuation_assessment": "Fairly Valued",
+            "debt_to_equity": 8.0,
+            "net_cash_status": "Net Cash Positive (Debt-Free)",
+            "current_ratio": 1.6,
+            "order_book_catalyst": "L&T bags mega order worth Rs 12,000 Cr"
+        }
+        val_strong, note_strong = _fundamental_signal(strong_bs)
+        self.assertGreater(val_strong, 0)
+        self.assertIn("virtually debt-free", note_strong)
+        self.assertIn("order inflow", note_strong)
+
+        # High leverage and weak working capital decrease score
+        leveraged = {
+            "available": True,
+            "valuation_assessment": "Fairly Valued",
+            "debt_to_equity": 210.0,
+            "current_ratio": 0.72
+        }
+        val_weak, note_weak = _fundamental_signal(leveraged)
+        self.assertLess(val_weak, 0)
+        self.assertIn("high leverage", note_weak)
+        self.assertIn("tight liquidity", note_weak)
+
     def test_invalid_price_yields_no_levels(self):
         for bad in (None, "N/A", float("nan"), 0, -5):
             sig = Synth.compute_quantitative_verdict("T", "T", bad, {}, {}, [BULL], {}, None)
