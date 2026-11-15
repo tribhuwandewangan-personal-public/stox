@@ -257,6 +257,38 @@ class NewsAgentTests(unittest.TestCase):
         self.assertEqual(out["news_score"]["total"], 0)
         self.assertIn("No recent news", out["analysis"])
 
+    def test_filters_broker_recommendation_and_ticker_spam(self):
+        from tools.news_tools import is_recommendation_spam
+        # Broker recommendation headlines must be rejected as spam
+        self.assertTrue(is_recommendation_spam("Buy Reliance with target price of Rs 3,400: Brokerage Radar"))
+        self.assertTrue(is_recommendation_spam("Stocks to watch today: HDFC Bank, ICICI Bank, Swiggy"))
+        self.assertTrue(is_recommendation_spam("Share price target for 2026: Experts recommend Accumulate"))
+        self.assertTrue(is_recommendation_spam("Bharat Electronics Ltd. Share Price, Stock Price - NSE/BSE Live"))
+
+        # Genuine business activity headlines must NOT be rejected
+        self.assertFalse(is_recommendation_spam("L&T Construction bags mega orders worth Rs 12,000 crore from Saudi Aramco"))
+        self.assertFalse(is_recommendation_spam("Aether Industries commissions new 2,000 MTPA manufacturing facility in Surat"))
+        self.assertFalse(is_recommendation_spam("Bharat Electronics secures Rs 1,150 crore communication contract from MoD"))
+        self.assertFalse(is_recommendation_spam("Ambuja Cements acquires 46% stake in Orient Cement"))
+
+    def test_classifies_business_activity_accurately(self):
+        from tools.news_tools import classify_business_activity
+        cat1, badge1 = classify_business_activity("L&T bags mega EPC order worth Rs 15,000 Cr")
+        self.assertEqual(cat1, "Orders & Contracts")
+        self.assertIn("Order", badge1)
+
+        cat2, badge2 = classify_business_activity("Tata Motors acquires 51% stake in European EV battery maker")
+        self.assertEqual(cat2, "M&A & Partnerships")
+        self.assertIn("M&A", badge2)
+
+        cat3, badge3 = classify_business_activity("Dixon Tech commissions new smartphone manufacturing facility in Noida")
+        self.assertEqual(cat3, "Capacity & Expansion")
+        self.assertIn("Expansion", badge3)
+
+        cat4, badge4 = classify_business_activity("Q2 net profit surges 28% YoY to Rs 450 Cr driven by margin expansion")
+        self.assertEqual(cat4, "Financial Results")
+        self.assertIn("Earnings", badge4)
+
 
 class CacheManagerTests(unittest.TestCase):
     def setUp(self):

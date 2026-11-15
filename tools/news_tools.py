@@ -24,7 +24,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 import concurrent.futures
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
@@ -44,24 +44,115 @@ def clean_text(text: str) -> str:
     return " ".join(clean.split())
 
 
+# ----------------------------------------------------------------------
+# Business Activity & Recommendation Filter Rules
+# ----------------------------------------------------------------------
+SPAM_RECOMMENDATION_PATTERNS = [
+    re.compile(r"\b(?:buy|sell|hold|accumulate)\s+(?:call|target|rating|recommendation)\b", re.I),
+    re.compile(r"\bstocks?\s+to\s+(?:buy|watch|track|sell|trade)\b", re.I),
+    re.compile(r"\bhot\s+stocks?\b", re.I),
+    re.compile(r"\bshare\s+price\s+(?:live|today|chart|target|forecast|prediction)\b", re.I),
+    re.compile(r"\bstock\s+price\s+(?:live|today|chart|target|forecast|prediction)\b", re.I),
+    re.compile(r"\bprice\s+target\s+(?:of|raised|cut|sees|hike)\b", re.I),
+    re.compile(r"\btarget\s+of\s+rs\.?\b", re.I),
+    re.compile(r"\bbrokerage\s+(?:radar|view|calls?|raises|cuts|recommends)\b", re.I),
+    re.compile(r"\bwhat\s+analysts\s+are\s+forecasting\b", re.I),
+    re.compile(r"\bshould\s+you\s+(?:buy|sell|hold)\b", re.I),
+    re.compile(r"\btradingview\b", re.I),
+    re.compile(r"\bforecast\s+for\s+202\d\b", re.I),
+    re.compile(r"\btechnical\s+view\b", re.I),
+    re.compile(r"\bsupport[–\-]resistance\b", re.I),
+    re.compile(r"\bnse/bse\s+live\b", re.I),
+    re.compile(r"\bmarket\s+summary\b", re.I),
+    re.compile(r"\bexpert\s+recommendations?\b", re.I),
+    re.compile(r"\bmovers\s+and\s+shakers\b", re.I),
+    re.compile(r"\bhere'?s\s+what\s+analysts\b", re.I),
+    re.compile(r"\btop\s+picks?\b", re.I),
+    re.compile(r"\bbrokerages?\s+maintain\b", re.I),
+    re.compile(r"\bbulls\s+vs\s+bears\b", re.I),
+]
+
+
+def is_recommendation_spam(title: str, snippet: str = "") -> bool:
+    """Detects broker recommendation clickbait, price target spam, and ticker tracker pages."""
+    text = f"{title} {snippet}"
+    return any(p.search(text) for p in SPAM_RECOMMENDATION_PATTERNS)
+
+
+BUSINESS_CATEGORIES = {
+    "Orders & Contracts": {
+        "badge": "🎯 [Order / Deal]",
+        "patterns": [
+            re.compile(r"\b(?:order|contract|deal|bid|mandate|project)s?\s+(?:win|won|bag|bagged|worth|valued at|of)\b", re.I),
+            re.compile(r"\b(?:order\s*book|order\s*backlog|order\s*pipeline)\b", re.I),
+            re.compile(r"\b(?:secures|bags|awarded|wins)\s+(?:new\s+)?(?:order|contract|deal|tender)\b", re.I),
+            re.compile(r"\b(?:signs|pact|mou|agreement)\s+(?:with|for)\b", re.I),
+        ]
+    },
+    "M&A & Partnerships": {
+        "badge": "🤝 [M&A / Partnership]",
+        "patterns": [
+            re.compile(r"\b(?:acquires|acquisition|merger|amalgamation|stake\s+purchase)\b", re.I),
+            re.compile(r"\b(?:buys|picks\s+up)\s+(?:stake|equity)\b", re.I),
+            re.compile(r"\b(?:joint\s+venture|tie-up|partnership|strategic\s+alliance)\b", re.I),
+        ]
+    },
+    "Capacity & Expansion": {
+        "badge": "🏭 [Expansion / Capex]",
+        "patterns": [
+            re.compile(r"\b(?:commissions|commissioned|capacity\s+expansion|new\s+plant|new\s+facility)\b", re.I),
+            re.compile(r"\b(?:commercial\s+production|commercial\s+operations|capex|groundbreaking)\b", re.I),
+            re.compile(r"\b(?:opens|launches)\s+(?:new\s+)?(?:facility|unit|plant|store)\b", re.I),
+        ]
+    },
+    "Financial Results": {
+        "badge": "📊 [Earnings / Performance]",
+        "patterns": [
+            re.compile(r"\b(?:net\s+profit|revenue|ebitda|pat)\s+(?:rises|jumps|surges|grows|up|beats|falls|drops|down)\b", re.I),
+            re.compile(r"\b(?:q[1-4]|quarterly|half-yearly|annual)\s+(?:results|profit|earnings|revenue)\b", re.I),
+            re.compile(r"\b(?:declares|recommends)\s+(?:dividend|interim\s+dividend|bonus\s+issue)\b", re.I),
+        ]
+    },
+    "Regulatory & Operations": {
+        "badge": "⚖️ [Regulatory / Ops]",
+        "patterns": [
+            re.compile(r"\b(?:fda\s+approval|clearance|environmental\s+nod|patent\s+granted|cci\s+approval)\b", re.I),
+            re.compile(r"\b(?:sanction|tax\s+notice|penalty|inspection|investigation|sebi|cbi|ed\s+raid)\b", re.I),
+        ]
+    }
+}
+
+
+def classify_business_activity(title: str, snippet: str = "") -> Tuple[str, str]:
+    """Returns (category_name, badge) for genuine corporate events."""
+    text = f"{title} {snippet}"
+    for cat_name, cat_data in BUSINESS_CATEGORIES.items():
+        if any(p.search(text) for p in cat_data["patterns"]):
+            return cat_name, cat_data["badge"]
+    return "Corporate Activity", "🏢 [Corporate]"
+
+
 class NewsSentimentEngine:
     def __init__(self, cache_manager: CacheManager = None):
         self.cache_manager = cache_manager or CacheManager()
 
     def _quick_sentiment_score(self, text: str):
-        """Financial rule-based sentiment classifier for headline and snippet text."""
+        """Financial rule-based sentiment classifier for genuine corporate operational events."""
         text_lower = text.lower()
         bullish_words = [
-            "growth", "profit", "surge", "gain", "buy", "bullish", "record", "strong",
-            "outperform", "rally", "dividend", "upside", "expansion", "partnership",
-            "breakout", "target raised", "upgrade", "order win", "contract", "listing",
-            "acquisition", "jump", "soar", "high", "positive", "beat", "recovery"
+            "order win", "bags contract", "secures order", "profit surge", "profit rise",
+            "profit jump", "revenue surge", "revenue growth", "capacity expansion",
+            "commissioning", "approval granted", "patent granted", "debt reduction",
+            "dividend", "record profit", "margin expansion", "acquisition", "deal signed",
+            "joint venture", "commercial operations", "contract award", "expansion",
+            "growth", "turnaround", "order book", "strong demand", "partnership"
         ]
         bearish_words = [
-            "fall", "drop", "loss", "decline", "sell", "bearish", "plunge", "weak",
-            "downside", "investigation", "penalty", "risk", "downgrade", "deficit",
-            "slump", "probe", "scam", "fraud", "warning", "debt", "default", "delay",
-            "litigation", "crash", "tumble", "cut", "negative", "miss"
+            "order cancellation", "profit drop", "profit slump", "loss widens",
+            "revenue decline", "plant shutdown", "tax notice", "penalty",
+            "investigation", "sebi probe", "fraud", "debt default", "litigation",
+            "strike", "credit downgrade", "resignation", "margin contraction",
+            "curbs", "ban", "loss", "slump", "deficit", "scam", "delay"
         ]
 
         bull_count = sum(1 for w in bullish_words if w in text_lower)
@@ -77,7 +168,8 @@ class NewsSentimentEngine:
     def fetch_stock_news(self, symbol: str, company_name: str = "", force_refresh: bool = False, max_items: int = 10) -> List[Dict[str, Any]]:
         """
         Checks SQLite cache first. If empty or stale (>24h), fetches live multi-source news
-        for the symbol via Google News RSS aggregator and direct sources.
+        for the symbol via Google News RSS aggregator, targeting business activities (orders,
+        deals, expansions, financials) and filtering out broker recommendations and stock tips.
         """
         symbol = symbol.upper()
         if not force_refresh:
@@ -88,12 +180,12 @@ class NewsSentimentEngine:
         fetched_items: List[Dict[str, Any]] = []
         seen_titles = set()
 
-        # Query Google News RSS aggregator
-        query_str = f"{symbol} NSE stock news"
-        if company_name:
-            clean_name = re.sub(r"(Limited|Ltd\.|Ltd|Industries|Technologies|Services)", "", company_name).strip()
-            if clean_name and clean_name.lower() not in symbol.lower():
-                query_str += f" {clean_name}"
+        # Build query focused on actual business activity:
+        clean_name = re.sub(r"\b(Limited|Ltd\.|Ltd|Industries|Technologies|Services|Corp|Corporation)\b", "", company_name or "", flags=re.I).strip()
+        name_term = f'"{clean_name}"' if (clean_name and len(clean_name) >= 3) else f'"{symbol}"'
+
+        # Primary query: Target business activity, exclude recommendation spam
+        query_str = f'{name_term} (order OR contract OR deal OR acquisition OR expansion OR profit OR plant OR commissioning OR partnership OR revenue OR dividend) -recommendation -brokerage -"stocks to watch" -"share price"'
 
         rss_items = self._fetch_rss_query(query_str, symbol, max_items=max_items)
         for item in rss_items:
@@ -102,13 +194,23 @@ class NewsSentimentEngine:
                 seen_titles.add(norm_title)
                 fetched_items.append(item)
 
+        # Fallback query if no operational news found
+        if not fetched_items:
+            fallback_query = f'{name_term} (business OR company OR management OR quarterly OR results) -recommendation -brokerage'
+            fallback_items = self._fetch_rss_query(fallback_query, symbol, max_items=max_items)
+            for item in fallback_items:
+                norm_title = re.sub(r"[^\w\s]", "", item["title"].lower())
+                if norm_title not in seen_titles:
+                    seen_titles.add(norm_title)
+                    fetched_items.append(item)
+
         if fetched_items:
             self.cache_manager.save_news(symbol, fetched_items)
 
         return fetched_items
 
     def _fetch_rss_query(self, query_str: str, tag: str = "", max_items: int = 10) -> List[Dict[str, Any]]:
-        """Fetches Google News RSS search feed for any arbitrary query string."""
+        """Fetches Google News RSS search feed, filtering spam and classifying business events."""
         encoded_query = urllib.parse.quote(query_str)
         rss_url = f"https://news.google.com/rss/search?q={encoded_query}&hl=en-IN&gl=IN&ceid=IN:en"
         items: List[Dict[str, Any]] = []
@@ -120,7 +222,7 @@ class NewsSentimentEngine:
             )
             with urllib.request.urlopen(req, timeout=6.0) as resp:
                 root = ET.fromstring(resp.read())
-                for item_elem in root.findall(".//item")[:max_items]:
+                for item_elem in root.findall(".//item"):
                     raw_title = clean_text(item_elem.findtext("title", ""))
                     link = item_elem.findtext("link", "")
                     pub_date = item_elem.findtext("pubDate", "")
@@ -135,7 +237,18 @@ class NewsSentimentEngine:
                         if parts[1].strip().lower() == source_name.lower():
                             title = parts[0].strip()
 
-                    snippet = raw_desc if (raw_desc and raw_desc != raw_title) else raw_title
+                    clean_snip = raw_desc
+                    if source_name and clean_snip.endswith(source_name):
+                        clean_snip = clean_snip[:-len(source_name)].strip()
+                    snippet = clean_snip if (clean_snip and clean_snip != raw_title) else raw_title
+
+                    # Filter out broker recommendations, stock tip lists, and price target noise
+                    if is_recommendation_spam(title, snippet):
+                        continue
+
+                    # Classify into structured business activity category
+                    category, badge = classify_business_activity(title, snippet)
+
                     sentiment_label, score = self._quick_sentiment_score(f"{title}. {snippet}")
 
                     items.append({
@@ -143,11 +256,15 @@ class NewsSentimentEngine:
                         "url": link,
                         "title": title,
                         "snippet": snippet,
+                        "category": category,
+                        "category_badge": badge,
                         "source": source_name,
                         "pub_date": pub_date or datetime.now().strftime("%a, %d %b %Y %H:%M:%S GMT"),
                         "sentiment_score": score,
                         "sentiment_label": sentiment_label
                     })
+                    if len(items) >= max_items:
+                        break
         except Exception as e:
             if VERBOSE_LOGGING:
                 print(f"  ⚠️ [RSS Notice] Could not fetch for '{query_str}': {e}")

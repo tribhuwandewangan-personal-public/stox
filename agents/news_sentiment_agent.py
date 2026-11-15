@@ -42,14 +42,28 @@ class NewsSentimentAgent:
             overall_sentiment = "Balanced / Neutral"
 
         if total == 0:
-            analysis_text = f"No recent news could be retrieved for {symbol} ({company_name}); news sentiment is not factored in."
+            analysis_text = f"No recent news on verified business activity (orders, deals, expansion) found for {symbol} ({company_name}); broker recommendation noise filtered out."
         else:
-            top_catalysts = [item.get("title") for item in news_items[:2] if item.get("title")]
-            cat_str = " | ".join(top_catalysts) if top_catalysts else "Normal market trade flows."
+            # Group verified news items by business activity categories
+            category_groups = {}
+            for item in news_items:
+                cat = item.get("category", "Corporate Activity")
+                badge = item.get("category_badge", "🏢 [Corporate]")
+                title = item.get("title", "")
+                if cat not in category_groups:
+                    category_groups[cat] = {"badge": badge, "items": []}
+                category_groups[cat]["items"].append(title)
+
+            # Build structured executive business highlights
+            summary_lines = []
+            for cat, data in list(category_groups.items())[:3]:
+                summary_lines.append(f"{data['badge']} {data['items'][0]}")
+
+            cat_str = " | ".join(summary_lines) if summary_lines else "Standard market operations."
             analysis_text = (
-                f"News sentiment for {symbol} ({company_name}) is overall {overall_sentiment} "
-                f"({bull_count} bullish vs {bear_count} bearish headlines out of {total}). "
-                f"Recent headlines: {cat_str}."
+                f"Business activity for {symbol} ({company_name}) is overall {overall_sentiment} "
+                f"({bull_count} positive vs {bear_count} negative developments out of {total} verified business news items). "
+                f"Key Business Events: {cat_str}."
             )
 
         return {
