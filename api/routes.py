@@ -280,8 +280,29 @@ async def fundamental_picks(request: Request) -> JSONResponse:
                 continue
 
             tech_res = cache_mgr.get_latest_agent_output(sym, TECH_AGENT_NAME, max_age_hours=168)
+            fund_res = cache_mgr.get_latest_agent_output(sym, "Fundamental Analyst Agent", max_age_hours=168)
+            if not fund_res:
+                fund_res = cache_mgr.get_latest_agent_output(sym, "Fundamental Analyst Agent", max_age_hours=None)
 
-            pick = score_fundamental_pick(sym, synth_res, tech_res)
+            # Compute 52W metrics from cached candles if missing
+            raw_tech = (tech_res or {}).get("raw_indicators", {})
+            if raw_tech.get("pct_from_52w_high") is None:
+                try:
+                    c_list = cache_mgr.get_cached_candles(sym, limit_days=260)
+                    if c_list:
+                        h_max = max(float(c.get("HIGH_PRICE") or c.get("CLOSE_PRICE") or 0.0) for c in c_list)
+                        p_now = float(c_list[-1].get("CLOSE_PRICE") or 0.0)
+                        if h_max > 0 and p_now > 0:
+                            if not tech_res:
+                                tech_res = {"raw_indicators": {}}
+                            tech_res.setdefault("raw_indicators", {})
+                            tech_res["raw_indicators"]["pct_from_52w_high"] = round((p_now - h_max) / h_max * 100, 2)
+                            tech_res["raw_indicators"]["high_52w"] = round(h_max, 2)
+                            tech_res["raw_indicators"]["last_price"] = p_now
+                except Exception:
+                    pass
+
+            pick = score_fundamental_pick(sym, synth_res, tech_res, fund_res=fund_res)
             if pick is None:
                 continue
 
@@ -324,6 +345,33 @@ async def macro_risk_shield(request: Request) -> JSONResponse:
         return JSONResponse({"error": str(e), "risk_key": "ELEVATED", "risk_label": "🟡 ELEVATED"}, status_code=500)
 
 
+async def market_scanner(request: Request) -> JSONResponse:
+    """GET /api/market-scanner: Returns latest market scan results of strong non-symbols.json stocks."""
+    try:
+        import threading
+        from tools.market_scanner import get_latest_cached_scan, run_market_scan
+        cached = get_latest_cached_scan()
+        if cached.get("stocks"):
+            return JSONResponse(cached)
+
+        # If no cached scan exists yet, run a quick background scan of top candidates
+        threading.Thread(target=run_market_scan, kwargs={"max_scan_count": 25, "top_n": 10}, daemon=True).start()
+        return JSONResponse({"status": "scanning", "stocks": [], "message": "Initial market scan in progress..."})
+    except Exception as e:
+        return JSONResponse({"error": str(e), "stocks": []}, status_code=500)
+
+
+async def market_scanner_trigger(request: Request) -> JSONResponse:
+    """POST /api/market-scanner/scan: Triggers a fresh scan of non-watchlist stocks."""
+    try:
+        import threading
+        from tools.market_scanner import run_market_scan
+        threading.Thread(target=run_market_scan, kwargs={"max_scan_count": 50, "top_n": 15}, daemon=True).start()
+        return JSONResponse({"status": "triggered", "message": "Market scan started in background"})
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+
+
 async def favicon(request: Request) -> Response:
     """GET /favicon.ico: Empty response."""
     return Response(status_code=204)
@@ -341,6 +389,8 @@ routes = [
     Route("/api/portfolio", endpoint=portfolio, methods=["GET"]),
     Route("/api/fundamental-picks", endpoint=fundamental_picks, methods=["GET"]),
     Route("/api/macro-risk-shield", endpoint=macro_risk_shield, methods=["GET"]),
+    Route("/api/market-scanner", endpoint=market_scanner, methods=["GET"]),
+    Route("/api/market-scanner/scan", endpoint=market_scanner_trigger, methods=["POST"]),
     Route("/api/trigger", endpoint=trigger, methods=["POST"]),
     Route("/api/add-symbol", endpoint=add_symbol, methods=["POST"]),
     Route("/api/remove-symbol", endpoint=remove_symbol, methods=["POST"]),

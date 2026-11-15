@@ -30,7 +30,7 @@ from typing import Any
 # Public API
 # ---------------------------------------------------------------------------
 
-def score_fundamental_pick(sym: str, synth_res: dict, tech_res: dict | None) -> dict | None:
+def score_fundamental_pick(sym: str, synth_res: dict, tech_res: dict | None, fund_res: dict | None = None) -> dict | None:
     """
     Score one stock for the Fundamental Picks table.
 
@@ -39,6 +39,7 @@ def score_fundamental_pick(sym: str, synth_res: dict, tech_res: dict | None) -> 
     sym       : ticker symbol (e.g. "RELIANCE")
     synth_res : result dict from Master Prediction Synthesizer Agent
     tech_res  : result dict from Technical Analysis Agent (may be None)
+    fund_res  : result dict from Fundamental Analyst Agent (may be None)
 
     Returns
     -------
@@ -46,19 +47,21 @@ def score_fundamental_pick(sym: str, synth_res: dict, tech_res: dict | None) -> 
     """
 
     sig       = synth_res.get("structured_signal", {})
-    fund_out  = synth_res.get("agent_outputs", {}).get("fundamental", {}) or {}
+    fund_synth = synth_res.get("agent_outputs", {}).get("fundamental", {}) or {}
+    fund_raw   = (fund_res or {}).get("raw_fundamentals", {}) or {}
+    fund_out   = fund_synth or fund_raw
     tech_out  = (tech_res or {}).get("raw_indicators", {}) or {}
 
     verdict = str(sig.get("action_verdict", "HOLD")).upper()
     if verdict == "SELL":
         return None                               # hard gate
 
-    peg_raw       = _safe_float(synth_res.get("peg_ratio") or fund_out.get("peg_ratio"))
-    pe_raw        = _safe_float(synth_res.get("pe_ratio")  or fund_out.get("pe_ratio"))
-    de_raw        = _safe_float(synth_res.get("debt_to_equity") or fund_out.get("debt_to_equity"))
-    cr_raw        = _safe_float(synth_res.get("current_ratio")  or fund_out.get("current_ratio"))
-    net_cash_flag = str(synth_res.get("net_cash_status") or fund_out.get("net_cash_status") or "").lower()
-    val_text      = str(synth_res.get("valuation_assessment") or fund_out.get("valuation_assessment") or "").lower()
+    peg_raw       = _safe_float(synth_res.get("peg_ratio") or fund_out.get("peg_ratio") or fund_raw.get("peg_ratio"))
+    pe_raw        = _safe_float(synth_res.get("pe_ratio")  or fund_out.get("pe_ratio") or fund_raw.get("pe_ratio"))
+    de_raw        = _safe_float(synth_res.get("debt_to_equity") or fund_out.get("debt_to_equity") or fund_raw.get("debt_to_equity"))
+    cr_raw        = _safe_float(synth_res.get("current_ratio")  or fund_out.get("current_ratio") or fund_raw.get("current_ratio"))
+    net_cash_flag = str(synth_res.get("net_cash_status") or fund_out.get("net_cash_status") or fund_raw.get("net_cash_status") or "").lower()
+    val_text      = str(synth_res.get("valuation_assessment") or fund_out.get("valuation_assessment") or fund_raw.get("valuation_assessment") or "").lower()
     lt_verdict    = str(sig.get("long_term_verdict") or "").upper()
     # pct from 52W high (negative = below high)
     pct52w        = _safe_float(tech_out.get("pct_from_52w_high"))
@@ -81,18 +84,20 @@ def score_fundamental_pick(sym: str, synth_res: dict, tech_res: dict | None) -> 
 
     # 1. PEG ratio (primary value quality signal)
     if peg_raw is not None:
-        if peg_raw <= 0.8:
+        if 0 < peg_raw <= 0.8:
             score += 25; reasons.append("Exceptional PEG ≤0.8")
-        elif peg_raw <= 1.0:
+        elif 0 < peg_raw <= 1.0:
             score += 22; reasons.append("Excellent PEG ≤1.0")
-        elif peg_raw <= 1.5:
+        elif 0 < peg_raw <= 1.5:
             score += 18; reasons.append("Good PEG ≤1.5")
-        elif peg_raw <= 2.0:
+        elif 0 < peg_raw <= 2.0:
             score += 10; reasons.append("Acceptable PEG ≤2.0")
-        elif peg_raw <= 2.5:
+        elif 0 < peg_raw <= 2.5:
             score += 3
-        else:
+        elif peg_raw > 2.5:
             score -= 10; reasons.append(f"Pricey PEG {peg_raw:.1f}")
+        elif peg_raw <= 0:
+            score -= 8; reasons.append("Earnings Contraction (Negative PEG)")
     elif pe_raw is not None:
         # Fallback: use P/E heuristics when PEG unavailable
         if pe_raw <= 15:
@@ -224,7 +229,35 @@ def build_fundamental_picks_section(symbols_list: list, results_dict: dict, cach
         if not tech_res and cache_mgr:
             tech_res = cache_mgr.get_latest_agent_output(sym, "Technical Analysis Agent", max_age_hours=168)
 
-        pick = score_fundamental_pick(sym, synth_res, tech_res)
+        # Fallback: compute 52W metrics from cached candles if not already in tech_res
+        if cache_mgr:
+            raw_tech = (tech_res or {}).get("raw_indicators", {})
+            if raw_tech.get("pct_from_52w_high") is None:
+                try:
+                    c_list = cache_mgr.get_cached_candles(sym, limit_days=260)
+                    if c_list:
+                        h_max = max(float(c.get("HIGH_PRICE") or c.get("CLOSE_PRICE") or 0.0) for c in c_list)
+                        p_now = float(c_list[-1].get("CLOSE_PRICE") or 0.0)
+                        if h_max > 0 and p_now > 0:
+                            if not tech_res:
+                                tech_res = {"raw_indicators": {}}
+                            tech_res.setdefault("raw_indicators", {})
+                            tech_res["raw_indicators"]["pct_from_52w_high"] = round((p_now - h_max) / h_max * 100, 2)
+                            tech_res["raw_indicators"]["high_52w"] = round(h_max, 2)
+                            tech_res["raw_indicators"]["last_price"] = p_now
+                except Exception:
+                    pass
+
+        # Resolve fundamental output for PEG, P/E, Solvency
+        fund_res = None
+        if sym in results_dict:
+            fund_res = results_dict[sym]["result"].get("agent_outputs", {}).get("fundamental")
+        if not fund_res and cache_mgr:
+            fund_res = cache_mgr.get_latest_agent_output(sym, "Fundamental Analyst Agent", max_age_hours=168)
+        if not fund_res and cache_mgr:
+            fund_res = cache_mgr.get_latest_agent_output(sym, "Fundamental Analyst Agent", max_age_hours=None)
+
+        pick = score_fundamental_pick(sym, synth_res, tech_res, fund_res=fund_res)
         if pick is None:
             continue
 

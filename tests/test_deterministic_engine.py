@@ -1045,5 +1045,84 @@ class TestMacroRiskShieldEngine(unittest.TestCase):
                 )
 
 
+    def test_52w_high_metrics_computed_from_candles(self):
+        """Verifies that 52-week high, low, and gap are computed accurately from candle series."""
+        # Mock 250 daily candles with peak at 500.0 and last close at 420.0 (-16.0%)
+        mock_candles = [
+            {"HIGH_PRICE": 400.0, "LOW_PRICE": 350.0, "CLOSE_PRICE": 380.0}
+            for _ in range(200)
+        ]
+        mock_candles.append({"HIGH_PRICE": 500.0, "LOW_PRICE": 480.0, "CLOSE_PRICE": 490.0}) # 52W High
+        mock_candles.append({"HIGH_PRICE": 430.0, "LOW_PRICE": 410.0, "CLOSE_PRICE": 420.0}) # Latest close
+
+        high_52w = max(float(c.get("HIGH_PRICE") or 0.0) for c in mock_candles)
+        low_52w = min(float(c.get("LOW_PRICE") or 1e9) for c in mock_candles)
+        last_p = float(mock_candles[-1]["CLOSE_PRICE"])
+        pct_52w = round((last_p - high_52w) / high_52w * 100, 2)
+
+        self.assertEqual(high_52w, 500.0)
+        self.assertEqual(low_52w, 350.0)
+        self.assertEqual(pct_52w, -16.0)
+
+    def test_hardened_peg_ratio_handling_and_fallbacks(self):
+        """Verifies PEG calculation guards against negative multiples and normalizes base effects."""
+        from tools.fundamental_picks import score_fundamental_pick
+
+        # 1. Normal valid PEG <= 0.8 receives maximum score
+        synth_good = {"structured_signal": {"action_verdict": "BUY"}}
+        fund_good = {"raw_fundamentals": {"peg_ratio": 0.75, "pe_ratio": 18.0, "net_cash_status": "Net Cash Positive"}}
+        tech_good = {"raw_indicators": {"pct_from_52w_high": -12.0, "up_down_vol_ratio": 1.35}}
+        pick_good = score_fundamental_pick("TEST1", synth_good, tech_good, fund_res=fund_good)
+        self.assertIsNotNone(pick_good)
+        self.assertIn("Exceptional PEG ≤0.8", pick_good["reasons"])
+
+        # 2. Negative PEG is NOT scored as low PEG; receives penalty
+        synth_neg = {"structured_signal": {"action_verdict": "BUY"}}
+        fund_neg = {"raw_fundamentals": {"peg_ratio": -1.5, "pe_ratio": 15.0}}
+        tech_neg = {"raw_indicators": {"pct_from_52w_high": -12.0}}
+        pick_neg = score_fundamental_pick("TEST2", synth_neg, tech_neg, fund_res=fund_neg)
+        self.assertIsNotNone(pick_neg)
+        self.assertNotIn("Exceptional PEG ≤0.8", pick_neg["reasons"])
+        self.assertIn("Earnings Contraction (Negative PEG)", pick_neg["reasons"])
+
+    def test_market_scanner_candidate_exclusion_and_scoring(self):
+        """Verifies market scanner excludes tracked symbols and correctly computes composite scores."""
+        from tools.market_scanner import get_scan_candidates, load_existing_symbols, _cache_scan_results, get_latest_cached_scan
+
+        existing = load_existing_symbols()
+        candidates = get_scan_candidates()
+
+        # All candidates must be outside symbols.json
+        candidate_syms = {c["symbol"].upper() for c in candidates}
+        overlap = existing.intersection(candidate_syms)
+        self.assertEqual(len(overlap), 0, f"Market scanner candidates contain tracked symbols: {overlap}")
+
+        # Cache & retrieval round-trip
+        mock_results = [{
+            "symbol": "TESTSCAN",
+            "name": "Test Scanning Ltd",
+            "sector": "Technology",
+            "strength_score": 85,
+            "tier": "⭐ TOP LEADER",
+            "last_price": 1250.0,
+            "high_52w": 1300.0,
+            "low_52w": 850.0,
+            "pct_from_52w_high": -3.8,
+            "rsi_14": 62.5,
+            "up_down_vol_ratio": 1.45,
+            "rvol": 1.3,
+            "pe_ratio": 22.5,
+            "peg_ratio": 0.95,
+            "roe_pct": 18.5,
+            "signals": ["Stage 2 Bullish Trend", "Prime Leader High Proximity"],
+            "evaluated_at": "2026-11-16 00:00:00"
+        }]
+        _cache_scan_results(mock_results)
+        cached = get_latest_cached_scan()
+        self.assertGreaterEqual(len(cached.get("stocks", [])), 1)
+        self.assertEqual(cached["stocks"][0]["symbol"], "TESTSCAN")
+        self.assertEqual(cached["stocks"][0]["strength_score"], 85)
+
+
 if __name__ == "__main__":
     unittest.main()

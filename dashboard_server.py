@@ -416,7 +416,29 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                     if not synth_res:
                         continue
                     tech_res = cache_mgr.get_latest_agent_output(sym, TECH_AGENT_NAME, max_age_hours=168)
-                    pick = score_fundamental_pick(sym, synth_res, tech_res)
+                    fund_res = cache_mgr.get_latest_agent_output(sym, "Fundamental Analyst Agent", max_age_hours=168)
+                    if not fund_res:
+                        fund_res = cache_mgr.get_latest_agent_output(sym, "Fundamental Analyst Agent", max_age_hours=None)
+
+                    # Compute 52W metrics from cached candles if missing
+                    raw_tech = (tech_res or {}).get("raw_indicators", {})
+                    if raw_tech.get("pct_from_52w_high") is None:
+                        try:
+                            c_list = cache_mgr.get_cached_candles(sym, limit_days=260)
+                            if c_list:
+                                h_max = max(float(c.get("HIGH_PRICE") or c.get("CLOSE_PRICE") or 0.0) for c in c_list)
+                                p_now = float(c_list[-1].get("CLOSE_PRICE") or 0.0)
+                                if h_max > 0 and p_now > 0:
+                                    if not tech_res:
+                                        tech_res = {"raw_indicators": {}}
+                                    tech_res.setdefault("raw_indicators", {})
+                                    tech_res["raw_indicators"]["pct_from_52w_high"] = round((p_now - h_max) / h_max * 100, 2)
+                                    tech_res["raw_indicators"]["high_52w"] = round(h_max, 2)
+                                    tech_res["raw_indicators"]["last_price"] = p_now
+                        except Exception:
+                            pass
+
+                    pick = score_fundamental_pick(sym, synth_res, tech_res, fund_res=fund_res)
                     if pick is None:
                         continue
                     pick["company"] = cname
@@ -453,6 +475,18 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                 body = safe_json_dumps(shield_data)
             except Exception as e:
                 body = safe_json_dumps({"error": str(e), "risk_key": "ELEVATED", "risk_label": "🟡 ELEVATED"})
+            self._send_json(200, body)
+            return
+
+        elif path.startswith("/api/market-scanner"):
+            try:
+                from tools.market_scanner import get_latest_cached_scan, run_market_scan
+                cached = get_latest_cached_scan()
+                if not cached.get("stocks"):
+                    threading.Thread(target=run_market_scan, kwargs={"max_scan_count": 25, "top_n": 10}, daemon=True).start()
+                body = safe_json_dumps(cached)
+            except Exception as e:
+                body = safe_json_dumps({"error": str(e), "stocks": []})
             self._send_json(200, body)
             return
 
@@ -646,6 +680,15 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                 return
 
             self._send_json(200, remove_symbol_from_json(symbol=sym))
+            return
+
+        elif parsed_path.path == "/api/market-scanner/scan":
+            try:
+                from tools.market_scanner import run_market_scan
+                threading.Thread(target=run_market_scan, kwargs={"max_scan_count": 50, "top_n": 15}, daemon=True).start()
+                self._send_json(200, {"status": "triggered", "message": "Market scan started in background"})
+            except Exception as e:
+                self._send_json(500, {"status": "error", "message": str(e)})
             return
 
         self._send_json(404, {"status": "error", "message": "Unknown endpoint"})

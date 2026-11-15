@@ -2404,6 +2404,11 @@
         title="View Zerodha Kite Portfolio Holdings, Diagnostics & Actions">
         <span>💼</span> My Portfolio
       </button>
+      <button class="nav-btn highlight" id="headerMarketScannerBtn" onclick="openMarketScannerModal()"
+        style="background:linear-gradient(135deg, rgba(168,85,247,0.25), rgba(56,189,248,0.25)); border:1px solid rgba(168,85,247,0.5); font-weight:700;"
+        title="Discover High-Strength Leaders Outside Active Watchlist">
+        <span>🔍</span> Market Scanner
+      </button>
       <a href="/news_reports/latest_market_news.md" target="_blank" rel="noopener noreferrer" class="nav-btn highlight"
         id="headerMarketNewsBtn" title="Open Latest Market News Markdown report">
         <span>📰</span> Market News (.md) ↗
@@ -3784,7 +3789,16 @@
 
       const fund = s.fund_output ? (s.fund_output.raw_fundamentals || {}) : {};
       const tech = s.tech_output ? (s.tech_output.raw_indicators || {}) : {};
+      const hist = s.hist_output || {};
       const news = s.news_output || {};
+
+      const h52 = tech.high_52w || hist['52w_high'];
+      const l52 = tech.low_52w || hist['52w_low'];
+      let pct52 = tech.pct_from_52w_high;
+      if (pct52 == null && h52 && (s.price_info?.price || tech.last_price)) {
+        const curP = s.price_info?.price || tech.last_price;
+        pct52 = Number(((curP - h52) / h52 * 100).toFixed(1));
+      }
 
       let fundHtml = `
         <div style="font-size:0.85rem; line-height:1.75;">
@@ -3814,7 +3828,7 @@
           <div><b>📊 Inst. Volume (20D U/D):</b> <span style="color:${udColor}; font-weight:700;">${udRatio != null ? udRatio.toFixed(2) + 'x (' + udBadge + ')' : 'Pending'}</span></div>
           <div><b>🎯 20D Swing Levels:</b> <span style="font-family:'JetBrains Mono'; color:#cbd5e1;">${(tech.swing_low_20 && tech.swing_high_20) ? `Rs.${tech.swing_low_20} (Floor) — Rs.${tech.swing_high_20} (Hurdle)` : 'Consolidation Range'}</span></div>
           <div><b>📈 60D Quarterly Range:</b> <span style="font-family:'JetBrains Mono'; color:#cbd5e1;">${(tech.swing_low_60 && tech.swing_high_60) ? `Rs.${tech.swing_low_60} — Rs.${tech.swing_high_60}` : 'N/A'}</span></div>
-          <div><b>🏆 52-Week High / Low:</b> <span style="font-family:'JetBrains Mono'; color:#cbd5e1;">${(tech.high_52w && tech.low_52w) ? `Rs.${tech.low_52w} — Rs.${tech.high_52w} ${tech.pct_from_52w_high != null ? `(${tech.pct_from_52w_high}% from High)` : ''}` : 'N/A'}</span></div>
+          <div><b>🏆 52-Week High / Low:</b> <span style="font-family:'JetBrains Mono'; color:#cbd5e1;">${(h52 && l52) ? `Rs.${l52} — Rs.${h52} ${pct52 != null ? `(${pct52 > 0 ? '+' : ''}${pct52}% from High)` : ''}` : 'N/A'}</span></div>
         </div>
       `;
 
@@ -5342,6 +5356,170 @@ body{background:#090d16;color:#f3f4f6;font-family:'Inter',sans-serif;min-height:
       }
     }
 
+    function closeMarketScannerModal() {
+      document.getElementById('marketScannerModalOverlay').style.display = 'none';
+    }
+
+    async function triggerMarketScanFresh() {
+      const btn = document.getElementById('btnScanMarketFresh');
+      if (btn) { btn.disabled = true; btn.innerText = '⏳ Scanning Universe...'; }
+      try {
+        await fetch('/api/market-scanner/scan', { method: 'POST' });
+        showToast('🔍 Market scan initiated in background. Refreshing in 5s...', 'info');
+        setTimeout(() => {
+          openMarketScannerModal();
+          if (btn) { btn.disabled = false; btn.innerText = '🚀 Run Fresh Market Scan'; }
+        }, 5000);
+      } catch (e) {
+        if (btn) { btn.disabled = false; btn.innerText = '🚀 Run Fresh Market Scan'; }
+        alert('Could not start scan: ' + e.message);
+      }
+    }
+
+    async function openMarketScannerModal() {
+      const overlay = document.getElementById('marketScannerModalOverlay');
+      const body = document.getElementById('marketScannerBody');
+      overlay.style.display = 'flex';
+      body.innerHTML = '<div style="padding:40px; text-align:center; color:#94a3b8;"><div class="pulse-dot" style="display:inline-block; margin-right:8px;"></div> Loading latest market discovery scan...</div>';
+
+      try {
+        const resp = await fetch('/api/market-scanner');
+        const data = await resp.json();
+        const stocks = data.stocks || [];
+
+        if (stocks.length === 0) {
+          body.innerHTML = `
+            <div style="background:rgba(255,255,255,0.03); border:1px dashed var(--border-card); border-radius:12px; padding:36px; text-align:center;">
+              <div style="font-size:2.5rem; margin-bottom:12px;">🔭</div>
+              <h3 style="color:#fff; margin-bottom:8px;">No Market Scan Results Cached Yet</h3>
+              <p style="color:var(--text-muted); font-size:0.88rem; max-width:540px; margin:0 auto 20px;">
+                The market scanner evaluates institutional-grade NSE stocks outside your current watchlist for Stage 2 Trend alignment, 52W High proximity (-2% to -20%), and 20D institutional volume accumulation.
+              </p>
+              <button class="btn-trigger" onclick="triggerMarketScanFresh()" style="padding:8px 18px; font-size:0.9rem;">
+                🚀 Scan Market Leaders Now
+              </button>
+            </div>
+          `;
+          return;
+        }
+
+        const dateStr = data.timestamp ? new Date(data.timestamp).toLocaleString() : 'Recent';
+
+        let rows = stocks.map((s, idx) => {
+          const score = s.strength_score || 0;
+          let badgeColor = '#94a3b8';
+          let badgeBg = 'rgba(148,163,184,0.15)';
+          if (score >= 80) { badgeColor = '#10b981'; badgeBg = 'rgba(16,185,129,0.2)'; }
+          else if (score >= 70) { badgeColor = '#38bdf8'; badgeBg = 'rgba(56,189,248,0.2)'; }
+          else if (score >= 60) { badgeColor = '#fbbf24'; badgeBg = 'rgba(251,191,36,0.2)'; }
+
+          const pct52w = s.pct_from_52w_high;
+          const pct52Disp = pct52w != null ? `${pct52w > 0 ? '+' : ''}${pct52w.toFixed(1)}%` : 'N/A';
+          let pct52Class = 'fp-pct-mid';
+          if (pct52w != null) {
+            if (pct52w >= -15 && pct52w <= -2) pct52Class = 'fp-pct-sweet';
+            else if (pct52w < -25) pct52Class = 'fp-pct-deep';
+          }
+
+          const udRatio = s.up_down_vol_ratio != null ? `${s.up_down_vol_ratio.toFixed(2)}x` : 'N/A';
+          const udClass = (s.up_down_vol_ratio || 1.0) >= 1.25 ? 'color:#10b981; font-weight:700;' : 'color:#cbd5e1;';
+          const rsiDisp = s.rsi_14 != null ? s.rsi_14.toFixed(1) : 'N/A';
+          const pegDisp = (s.peg_ratio && s.peg_ratio !== 'N/A') ? `${s.peg_ratio}x` : 'N/A';
+          const sigsDisp = (s.signals || []).slice(0, 2).map(x => `• ${x}`).join('<br>');
+
+          return `
+            <tr>
+              <td style="font-family:'JetBrains Mono'; font-weight:700; color:var(--text-muted);">${idx + 1}</td>
+              <td>
+                <b style="font-size:1.05rem; color:#f1f5f9; font-family:'Outfit';">${s.symbol}</b>
+                <div style="font-size:0.75rem; color:var(--text-muted);">${s.name || ''}</div>
+                <div style="font-size:0.72rem; color:#38bdf8;">${s.sector || ''}</div>
+              </td>
+              <td>
+                <span style="background:${badgeBg}; color:${badgeColor}; font-weight:700; padding:3px 10px; border-radius:12px; font-size:0.85rem; display:inline-block;">
+                  ${score}/100
+                </span>
+                <div style="font-size:0.7rem; color:${badgeColor}; margin-top:2px; font-weight:600;">${s.tier || ''}</div>
+              </td>
+              <td style="font-family:'JetBrains Mono'; font-weight:700; color:#fff;">Rs. ${Number(s.last_price || 0).toLocaleString('en-IN', {minimumFractionDigits: 1, maximumFractionDigits: 1})}</td>
+              <td class="fp-pct ${pct52Class}">${pct52Disp}</td>
+              <td style="font-family:'JetBrains Mono'; ${udClass}">${udRatio}</td>
+              <td style="font-family:'JetBrains Mono';">${rsiDisp}</td>
+              <td style="font-family:'JetBrains Mono'; color:#38bdf8;">${pegDisp}</td>
+              <td style="font-size:0.78rem; line-height:1.4; color:#cbd5e1;">${sigsDisp}</td>
+              <td>
+                <button class="btn-trigger" onclick="addScannedStockToWatchlist('${s.symbol}', '${esc(s.name)}', '${esc(s.sector)}', this)" style="padding:4px 10px; font-size:0.78rem; border-radius:6px; background:rgba(56,189,248,0.15); border:1px solid #38bdf8; color:#38bdf8;">
+                  ➕ Add to Watchlist
+                </button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+
+        body.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+            <div style="font-size:0.82rem; color:var(--text-muted);">
+              Scanned Candidates: <b style="color:#fff;">${stocks.length} High-Strength Leaders</b> | As of: <b>${dateStr}</b>
+            </div>
+            <div style="font-size:0.8rem; color:var(--text-muted);">
+              Sorted by: <b>Quantitative Relative Strength Score (0–100)</b>
+            </div>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="qp-table" style="width:100%;">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Symbol & Company</th>
+                  <th>Strength Score</th>
+                  <th>LTP</th>
+                  <th>% from 52W High</th>
+                  <th>20D Flow</th>
+                  <th>RSI</th>
+                  <th>PEG</th>
+                  <th>Top Structural Signals</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows}
+              </tbody>
+            </table>
+          </div>
+        `;
+      } catch (err) {
+        body.innerHTML = `<p style="color:var(--accent-rose);">Error loading market scan: ${err.message}</p>`;
+      }
+    }
+
+    async function addScannedStockToWatchlist(symbol, name, sector, btnEl) {
+      if (btnEl) { btnEl.disabled = true; btnEl.innerText = 'Adding...'; }
+      try {
+        const resp = await fetch('/api/add-symbol', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbol: symbol, name: name, sector: sector, exchange: 'NSE' })
+        });
+        const res = await resp.json();
+        if (res.status === 'success' || res.message?.includes('added')) {
+          if (btnEl) {
+            btnEl.innerText = '✅ Added!';
+            btnEl.style.background = 'rgba(16,185,129,0.2)';
+            btnEl.style.borderColor = '#10b981';
+            btnEl.style.color = '#10b981';
+          }
+          showToast(`✅ ${symbol} added to symbols.json watchlist!`, 'success');
+          fetchStockCards();
+        } else {
+          if (btnEl) { btnEl.disabled = false; btnEl.innerText = '➕ Add to Watchlist'; }
+          alert(res.message || 'Could not add stock');
+        }
+      } catch (e) {
+        if (btnEl) { btnEl.disabled = false; btnEl.innerText = '➕ Add to Watchlist'; }
+        alert('Error: ' + e.message);
+      }
+    }
+
     function fetchAllData() { fetchStatus(); fetchStockCards(); fetchQuotes(); fetchMacroRiskShield(); }
 
     // Poll only while the tab is visible. Full analysis payload every 20s; light quote refresh every 15s.
@@ -5357,6 +5535,30 @@ body{background:#090d16;color:#f3f4f6;font-family:'Inter',sans-serif;min-height:
     initSidebarState();
     startPolling();
   </script>
+
+  <!-- Market Scanner Discovery Modal -->
+  <div class="modal-overlay" id="marketScannerModalOverlay"
+    onclick="if(event.target.id==='marketScannerModalOverlay') closeMarketScannerModal()">
+    <div class="modal-card" style="max-width:1150px; width:95vw;">
+      <span class="modal-close" onclick="closeMarketScannerModal()">&times;</span>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+        <div>
+          <h2 style="font-family:'Outfit'; font-size:1.6rem; color:#fff; display:flex; align-items:center; gap:10px; margin-bottom:4px;">
+            <span>🔭</span> Market Scanner & Stock Discovery Engine
+          </h2>
+          <p style="color:var(--text-muted); font-size:0.85rem; margin:0;">
+            Scans institutional-grade NSE stocks outside <code style="color:var(--accent-blue);">symbols.json</code> for Stage 2 Trend, 52W Proximity, Volume Footprint, and GARP Quality.
+          </p>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <button class="btn-trigger" id="btnScanMarketFresh" onclick="triggerMarketScanFresh()" style="padding:6px 14px; font-size:0.85rem; background:linear-gradient(135deg, rgba(168,85,247,0.3), rgba(56,189,248,0.3)); border:1px solid rgba(168,85,247,0.6);">
+            🚀 Run Fresh Market Scan
+          </button>
+        </div>
+      </div>
+      <div id="marketScannerBody" style="color:#cbd5e1;">Loading market scan data…</div>
+    </div>
+  </div>
 
   <!-- Macro Risk Shield Modal -->
   <div class="modal-overlay" id="riskShieldModalOverlay"
@@ -5548,7 +5750,7 @@ body{background:#090d16;color:#f3f4f6;font-family:'Inter',sans-serif;min-height:
         const synth = s.synth_output || {};
         const sig   = synth.structured_signal || {};
         const tech  = s.tech_output?.raw_indicators || {};
-        const fund  = synth.agent_outputs?.fundamental || {};
+        const fund  = s.fund_output?.raw_fundamentals || synth.agent_outputs?.fundamental || {};
 
         const verdict = (sig.action_verdict || 'HOLD').toUpperCase();
         if (verdict === 'SELL') return;
@@ -5560,7 +5762,11 @@ body{background:#090d16;color:#f3f4f6;font-family:'Inter',sans-serif;min-height:
         const netCash = (synth.net_cash_status || fund.net_cash_status || '').toLowerCase();
         const valText = (synth.valuation_assessment || fund.valuation_assessment || '').toLowerCase();
         const ltVerdict = (sig.long_term_verdict || '').toUpperCase();
-        const pct52w  = parseFloat(tech.pct_from_52w_high ?? 'NaN');
+        let pct52w    = parseFloat(tech.pct_from_52w_high ?? 'NaN');
+        if (isNaN(pct52w) && tech.high_52w && (s.price_info?.price || tech.last_price)) {
+          const curP = s.price_info?.price || tech.last_price;
+          pct52w = ((curP - tech.high_52w) / tech.high_52w) * 100;
+        }
         const udRatio = parseFloat(tech.up_down_vol_ratio  ?? 'NaN');
         const swing20 = parseFloat(tech.swing_low_20       ?? 'NaN');
         const lp      = parseFloat(tech.last_price || synth.last_price || 'NaN');
@@ -5576,13 +5782,15 @@ body{background:#090d16;color:#f3f4f6;font-family:'Inter',sans-serif;min-height:
         const reasons = [];
 
         // 1. PEG
-        if (!isNaN(pegRaw)) {
+        if (!isNaN(pegRaw) && pegRaw > 0) {
           if      (pegRaw <= 0.8)  { score += 25; reasons.push('Exceptional PEG ≤0.8'); }
           else if (pegRaw <= 1.0)  { score += 22; reasons.push('Excellent PEG ≤1.0'); }
           else if (pegRaw <= 1.5)  { score += 18; reasons.push('Good PEG ≤1.5'); }
           else if (pegRaw <= 2.0)  { score += 10; }
           else if (pegRaw <= 2.5)  { score += 3;  }
           else                     { score -= 10; }
+        } else if (!isNaN(pegRaw) && pegRaw <= 0) {
+          score -= 8; reasons.push('Negative Growth (Negative PEG)');
         } else if (!isNaN(peRaw)) {
           if      (peRaw <= 15)    { score += 12; reasons.push(`Low P/E ${peRaw.toFixed(0)}x`); }
           else if (peRaw <= 25)    { score += 6; }

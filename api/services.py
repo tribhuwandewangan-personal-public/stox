@@ -174,11 +174,12 @@ def get_all_stock_data(cache_mgr, queue_mgr, hist_engine, tech_engine, events_en
         else:
             events = events_engine.get_cached_events(sym)
 
-        # Quick sparkline data for inline visual chart (last 25 candles)
+        # Quick sparkline data (last 25 candles) & full 52-week lookback
         try:
-            candles = cache_mgr.get_cached_candles(sym, limit_days=25)
+            full_candles = cache_mgr.get_cached_candles(sym, limit_days=260)
         except Exception:
-            candles = []
+            full_candles = []
+        candles = full_candles[-25:] if len(full_candles) > 25 else full_candles
         sparkline = [round(float(c.get("CLOSE_PRICE", 0)), 2) for c in candles]
         latest_close = sparkline[-1] if sparkline else None
         latest_close_date = str(candles[-1]["DATE"])[:10] if candles else None
@@ -195,6 +196,36 @@ def get_all_stock_data(cache_mgr, queue_mgr, hist_engine, tech_engine, events_en
             (synth_output or {}).get("as_of_date"),
         )
         last_price = price_info["price"]      # None when unknown (no invented price)
+
+        # Guarantee high_52w, low_52w, and pct_from_52w_high are populated from candles if missing
+        if full_candles:
+            try:
+                h_52w_val = max(float(c.get("HIGH_PRICE") or c.get("CLOSE_PRICE") or 0.0) for c in full_candles)
+                l_52w_val = min(float(c.get("LOW_PRICE") or c.get("CLOSE_PRICE") or 1e9) for c in full_candles)
+                eff_p = last_price or float(full_candles[-1].get("CLOSE_PRICE") or 0.0)
+                pct_52w_val = round((eff_p - h_52w_val) / h_52w_val * 100, 2) if h_52w_val > 0 else 0.0
+
+                if tech_output is not None:
+                    raw_ind = tech_output.setdefault("raw_indicators", {})
+                    if raw_ind.get("high_52w") is None or raw_ind.get("high_52w") == 0:
+                        raw_ind["high_52w"] = round(h_52w_val, 2)
+                    if raw_ind.get("low_52w") is None or raw_ind.get("low_52w") == 0:
+                        raw_ind["low_52w"] = round(l_52w_val, 2)
+                    if raw_ind.get("pct_from_52w_high") is None:
+                        raw_ind["pct_from_52w_high"] = pct_52w_val
+                else:
+                    tech_output = {
+                        "agent_name": "Technical Analysis Agent",
+                        "symbol": sym,
+                        "raw_indicators": {
+                            "high_52w": round(h_52w_val, 2),
+                            "low_52w": round(l_52w_val, 2),
+                            "pct_from_52w_high": pct_52w_val,
+                            "last_price": eff_p
+                        }
+                    }
+            except Exception:
+                pass
 
         short_verdict = "HOLD"
         if synth_output and "structured_signal" in synth_output:

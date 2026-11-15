@@ -97,13 +97,31 @@ class FundamentalAnalysisEngine:
                     continue
 
                 pe_val = _num(pe_ratio)
-                peg_val = _num(info.get("pegRatio"))
+                raw_peg = info.get("pegRatio") or info.get("trailingPegRatio")
+                peg_val = _num(raw_peg)
                 eg_val = _num(info.get("earningsGrowth"), 100)
+                rg_val = _num(info.get("revenueGrowth"), 100)
+
+                # Ensure negative PEG from data feed is flagged rather than misconstrued as a bargain multiple
+                if isinstance(peg_val, (int, float)) and peg_val <= 0:
+                    peg_val = "N/A (Negative Growth)"
 
                 # Fallback: calculate PEG from P/E and earningsGrowth if pegRatio is not provided directly
-                if peg_val == "N/A" and isinstance(pe_val, (int, float)) and pe_val > 0:
-                    if isinstance(eg_val, (int, float)) and eg_val > 2.0:
-                        peg_val = round(pe_val / eg_val, 2)
+                if (peg_val == "N/A" or not isinstance(peg_val, (int, float))) and isinstance(pe_val, (int, float)) and pe_val > 0:
+                    if isinstance(eg_val, (int, float)):
+                        if eg_val > 2.0:
+                            # Normalize extreme base-effect surge (e.g. >100%) so PEG does not artificially collapse to 0.00
+                            denom_g = min(eg_val, 100.0)
+                            peg_val = round(pe_val / denom_g, 2)
+                        elif eg_val <= 0:
+                            # Earnings contraction: fallback to revenue growth proxy if company is expanding top-line
+                            if isinstance(rg_val, (int, float)) and rg_val > 5.0:
+                                peg_val = round(pe_val / min(rg_val, 100.0), 2)
+                            else:
+                                peg_val = "N/A (Negative Growth)"
+                    elif isinstance(rg_val, (int, float)) and rg_val > 5.0:
+                        # Earnings growth unavailable; use top-line revenue expansion proxy
+                        peg_val = round(pe_val / min(rg_val, 100.0), 2)
 
                 # Balance Sheet & Solvency metrics (freely available via market feed)
                 total_debt = _num(info.get("totalDebt"))
