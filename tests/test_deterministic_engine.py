@@ -699,5 +699,222 @@ class IncrementalHistoryTests(unittest.TestCase):
         self.assertEqual(res, {"AAA": True, "BBB": True, "CCC": True})
 
 
+# =============================================================================
+# Fundamental Picks Engine Tests
+# =============================================================================
+
+class TestFundamentalPicksEngine(unittest.TestCase):
+    """Unit tests for tools/fundamental_picks.py scoring engine."""
+
+    def _make_synth(self, **overrides):
+        """Build a minimal synth_res dict suitable for scoring."""
+        base = {
+            "last_price": 500.0,
+            "peg_ratio": 1.2,
+            "pe_ratio": 20.0,
+            "debt_to_equity": 0.4,
+            "current_ratio": 1.8,
+            "net_cash_status": "low debt",
+            "valuation_assessment": "Fairly Valued",
+            "structured_signal": {
+                "action_verdict": "BUY",
+                "confidence_rating": "HIGH (82%)",
+                "long_term_verdict": "BUY",
+                "long_term_target": "Rs. 750",
+                "when_to_sell_target": "Rs. 650",
+                "stop_loss": "Rs. 450",
+                "upcoming_events_note": "Q2 results expected next week",
+            },
+            "agent_outputs": {},
+        }
+        base.update(overrides)
+        return base
+
+    def _make_tech(self, pct52w=-15.0, ud=1.3, swing_low=480.0):
+        """Build a minimal tech raw_indicators dict."""
+        return {
+            "raw_indicators": {
+                "pct_from_52w_high": pct52w,
+                "up_down_vol_ratio": ud,
+                "swing_low_20": swing_low,
+                "last_price": 500.0,
+            }
+        }
+
+    def test_garp_stock_scores_above_expensive_growth(self):
+        """A GARP stock (PEG 1.2, Fairly Valued, net cash) must outscore an expensive one (PEG 3.5)."""
+        from tools.fundamental_picks import score_fundamental_pick
+
+        garp = self._make_synth(peg_ratio=1.2, valuation_assessment="Fairly Valued", net_cash_status="net cash positive")
+        tech = self._make_tech(pct52w=-12.0, ud=1.4)
+
+        expensive = self._make_synth(peg_ratio=3.5, valuation_assessment="High growth priced in", net_cash_status="moderate debt")
+        # Put expensive stock 2% from 52W high — should be ineligible
+        tech_expensive = self._make_tech(pct52w=-1.5)
+
+        garp_pick = score_fundamental_pick("GARP", garp, tech)
+        exp_pick  = score_fundamental_pick("EXP", expensive, tech_expensive)
+
+        self.assertIsNotNone(garp_pick, "GARP stock should be eligible")
+        self.assertIsNone(exp_pick, "Stock within 3% of 52W high is ineligible")
+        self.assertGreater(garp_pick["score"], 30, "GARP stock should have strong positive score")
+
+    def test_overvalued_stock_at_52w_high_excluded(self):
+        """Overvalued stock near 52W high must be ineligible (fails two gates)."""
+        from tools.fundamental_picks import score_fundamental_pick
+
+        synth = self._make_synth(peg_ratio=4.0, valuation_assessment="Overvalued")
+        tech  = self._make_tech(pct52w=-1.0)   # near 52W high
+
+        pick = score_fundamental_pick("OVERVAL", synth, tech)
+        self.assertIsNone(pick, "Overvalued stock near 52W high must be excluded")
+
+    def test_overvalued_with_exceptional_peg_allowed(self):
+        """An 'overvalued' label stock with PEG < 1.0 (genuine GARP) may still qualify."""
+        from tools.fundamental_picks import score_fundamental_pick
+
+        # PEG 0.7 overrides the valuation label gate
+        synth = self._make_synth(peg_ratio=0.7, valuation_assessment="Overvalued")
+        tech  = self._make_tech(pct52w=-18.0)
+
+        pick = score_fundamental_pick("GARPVAL", synth, tech)
+        self.assertIsNotNone(pick, "Exceptional PEG < 1.0 should override overvalued gate")
+        # Must have received PEG bonus AND valuation penalty
+        self.assertGreater(pick["score"], 10)
+
+    def test_sell_verdict_excluded(self):
+        """SELL-rated stock must always be excluded regardless of valuation."""
+        from tools.fundamental_picks import score_fundamental_pick
+
+        synth = self._make_synth(peg_ratio=0.5, valuation_assessment="Undervalued")
+        synth["structured_signal"]["action_verdict"] = "SELL"
+        tech  = self._make_tech(pct52w=-20.0)
+
+        pick = score_fundamental_pick("SELLME", synth, tech)
+        self.assertIsNone(pick, "SELL verdict must be a hard gate regardless of fundamentals")
+
+    def test_top10_cap_enforced(self):
+        """build_fundamental_picks_section must return at most 10 stocks."""
+        from tools.fundamental_picks import build_fundamental_picks_section
+
+        # Build 15 eligible symbols
+        symbols_list = [{"symbol": f"ST{i:02d}", "name": f"Stock {i}", "sector": "Test"} for i in range(15)]
+
+        # results_dict: each stock is a good GARP stock
+        results_dict = {}
+        for i, item in enumerate(symbols_list):
+            sym = item["symbol"]
+            results_dict[sym] = {
+                "name": item["name"],
+                "sector": item["sector"],
+                "result": {
+                    "last_price": 500.0,
+                    "peg_ratio": 1.1,
+                    "valuation_assessment": "Fairly Valued",
+                    "net_cash_status": "net cash positive",
+                    "structured_signal": {
+                        "action_verdict": "BUY",
+                        "long_term_verdict": "BUY",
+                        "long_term_target": "Rs. 700",
+                        "when_to_sell_target": "Rs. 650",
+                        "stop_loss": "Rs. 450",
+                        "upcoming_events_note": "",
+                    },
+                    "agent_outputs": {
+                        "technical": {
+                            "raw_indicators": {
+                                "pct_from_52w_high": -15.0,
+                                "up_down_vol_ratio": 1.3,
+                                "swing_low_20": 475.0,
+                                "last_price": 500.0,
+                            }
+                        }
+                    },
+                },
+            }
+
+        md = build_fundamental_picks_section(symbols_list, results_dict, None)
+        # Count rows in the markdown table (each data row starts with "| {number}")
+        import re
+        rows = re.findall(r"^\| \d+ \|", md, re.MULTILINE)
+        self.assertLessEqual(len(rows), 10, f"Must return at most 10 picks, got {len(rows)}")
+        self.assertGreater(len(rows), 0, "Should have at least 1 pick from 15 eligible stocks")
+
+    def test_near_support_timing_tag(self):
+        """Stock within 4% of swing_low_20 should get 'Near Support Floor' timing tag."""
+        from tools.fundamental_picks import score_fundamental_pick
+
+        synth = self._make_synth(peg_ratio=1.3, valuation_assessment="Fairly Valued")
+        # last_price = 500, swing_low = 485 → 3.1% above low = near support
+        tech  = self._make_tech(pct52w=-14.0, ud=1.2, swing_low=485.0)
+        # Override last_price in tech to match
+        tech["raw_indicators"]["last_price"] = 500.0
+
+        pick = score_fundamental_pick("NEARSUPP", synth, tech)
+        self.assertIsNotNone(pick)
+        # Timing tag should reference support
+        self.assertIn("Support", pick["timing_tag"], f"Expected 'Support' in timing_tag, got: {pick['timing_tag']}")
+
+    def test_net_cash_gives_balance_sheet_bonus(self):
+        """Net cash / debt-free status must add significant balance sheet score."""
+        from tools.fundamental_picks import score_fundamental_pick
+
+        net_cash = self._make_synth(net_cash_status="net cash positive", debt_to_equity=None)
+        high_debt = self._make_synth(net_cash_status="high leverage", debt_to_equity=2.5)
+
+        tech = self._make_tech(pct52w=-12.0)
+
+        nc_pick = score_fundamental_pick("NETCASH", net_cash, tech)
+        hd_pick = score_fundamental_pick("HDEBT",  high_debt, tech)
+
+        self.assertIsNotNone(nc_pick)
+        # High debt may still qualify but must score lower
+        if hd_pick is not None:
+            self.assertGreater(nc_pick["score"], hd_pick["score"],
+                               "Net cash stock should outscore high-debt stock")
+
+    def test_markdown_table_has_expected_columns(self):
+        """The generated markdown must include all required column headers."""
+        from tools.fundamental_picks import build_fundamental_picks_section
+
+        symbols_list = [{"symbol": "TESTCO", "name": "Test Company", "sector": "Technology"}]
+        results_dict = {
+            "TESTCO": {
+                "name": "Test Company",
+                "sector": "Technology",
+                "result": {
+                    "last_price": 1200.0,
+                    "peg_ratio": 1.4,
+                    "valuation_assessment": "Fairly Valued",
+                    "net_cash_status": "net cash positive",
+                    "structured_signal": {
+                        "action_verdict": "ACCUMULATE",
+                        "long_term_verdict": "ACCUMULATE",
+                        "long_term_target": "Rs. 1600",
+                        "when_to_sell_target": "Rs. 1550",
+                        "stop_loss": "Rs. 1100",
+                        "upcoming_events_note": "Q3 results next month",
+                    },
+                    "agent_outputs": {
+                        "technical": {
+                            "raw_indicators": {
+                                "pct_from_52w_high": -18.5,
+                                "up_down_vol_ratio": 1.35,
+                                "swing_low_20": 1160.0,
+                                "last_price": 1200.0,
+                            }
+                        }
+                    },
+                },
+            }
+        }
+
+        md = build_fundamental_picks_section(symbols_list, results_dict, None)
+        for col in ("Symbol", "PEG", "Valuation", "52W", "Inst. Flow", "LT Rating", "Why Now", "Action"):
+            self.assertIn(col, md, f"Column '{col}' missing from fundamental picks table")
+        self.assertIn("TESTCO", md)
+        self.assertIn("🏛️", md, "Section header emoji must be present")
+
+
 if __name__ == "__main__":
     unittest.main()

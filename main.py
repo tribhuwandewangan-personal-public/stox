@@ -461,6 +461,11 @@ def main():
         quick_picks_md = build_quick_picks_section(symbols_list, results_dict, cache_mgr)
         report_markdown.append(quick_picks_md)
 
+        # --- Build Top 10 Fundamental Picks section ---
+        from tools.fundamental_picks import build_fundamental_picks_section
+        fundamental_picks_md = build_fundamental_picks_section(symbols_list, results_dict, cache_mgr)
+        report_markdown.append(fundamental_picks_md)
+
         for item in symbols_list:
             sym = item.get("symbol", "").upper()
             c_name = item.get("name", "")

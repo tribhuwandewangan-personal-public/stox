@@ -2207,6 +2207,168 @@
     .qp-tip strong {
       color: #38bdf8;
     }
+
+    /* 🏛️ Fundamental Picks Banner */
+    .fp-banner {
+      background: linear-gradient(135deg, rgba(16, 24, 40, 0.97) 0%, rgba(10, 25, 15, 0.97) 100%);
+      border: 1px solid rgba(52, 211, 153, 0.35);
+      border-radius: 14px;
+      margin-bottom: 22px;
+      overflow: hidden;
+      box-shadow: 0 0 32px rgba(52, 211, 153, 0.07);
+    }
+
+    .fp-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      background: linear-gradient(90deg, rgba(52, 211, 153, 0.1) 0%, transparent 100%);
+      border-bottom: 1px solid rgba(52, 211, 153, 0.18);
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .fp-title {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .fp-icon { font-size: 1.8rem; line-height: 1; }
+
+    .fp-heading {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #34d399;
+      letter-spacing: 0.3px;
+    }
+
+    .fp-sub {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .fp-collapse-btn {
+      background: rgba(52, 211, 153, 0.1);
+      border: 1px solid rgba(52, 211, 153, 0.3);
+      color: #34d399;
+      padding: 5px 14px;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .fp-collapse-btn:hover { background: rgba(52, 211, 153, 0.22); }
+
+    .fp-table-wrap {
+      overflow-x: auto;
+      padding: 16px 20px 8px;
+    }
+
+    .fp-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+
+    .fp-table th {
+      text-align: left;
+      padding: 7px 12px;
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      white-space: nowrap;
+    }
+
+    .fp-table td {
+      padding: 9px 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+
+    .fp-table tr:last-child td { border-bottom: none; }
+    .fp-table tr:hover td { background: rgba(52, 211, 153, 0.03); }
+
+    .fp-rank { font-weight: 700; color: var(--text-muted); }
+
+    .fp-sym-btn {
+      background: rgba(52, 211, 153, 0.12);
+      border: 1px solid rgba(52, 211, 153, 0.3);
+      color: #34d399;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: 0.82rem;
+      cursor: pointer;
+      font-family: 'JetBrains Mono', monospace;
+      transition: all 0.15s;
+    }
+
+    .fp-sym-btn:hover { background: rgba(52, 211, 153, 0.25); }
+
+    .fp-score {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 6px;
+    }
+
+    .fp-score-high  { background: rgba(16, 185, 129, 0.15); color: #10b981; }
+    .fp-score-mid   { background: rgba(245, 158, 11, 0.15);  color: #f59e0b; }
+    .fp-score-low   { background: rgba(148, 163, 184, 0.1);  color: #94a3b8; }
+
+    .fp-peg   { font-family: 'JetBrains Mono', monospace; color: #cbd5e1; }
+    .fp-val   { font-size: 0.78rem; }
+    .fp-val-under  { color: #10b981; font-weight: 600; }
+    .fp-val-fair   { color: #94a3b8; }
+    .fp-val-over   { color: #ef4444; }
+
+    .fp-pct {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+    }
+    .fp-pct-sweet  { color: #10b981; }
+    .fp-pct-mid    { color: #f59e0b; }
+    .fp-pct-deep   { color: #ef4444; }
+
+    .fp-flow { font-size: 0.78rem; color: #94a3b8; }
+    .fp-flow-accum { color: #34d399; font-weight: 600; }
+    .fp-flow-dist  { color: #ef4444; }
+
+    .fp-lt-rating { font-size: 0.78rem; font-weight: 600; }
+    .fp-lt-strong { color: #10b981; }
+    .fp-lt-buy    { color: #34d399; }
+    .fp-lt-hold   { color: #94a3b8; }
+
+    .fp-timing-tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      background: rgba(52, 211, 153, 0.1);
+      border: 1px solid rgba(52, 211, 153, 0.25);
+      color: #34d399;
+      white-space: nowrap;
+    }
+
+    .fp-tip {
+      padding: 10px 20px 14px;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .fp-tip strong { color: #34d399; }
   </style>
 </head>
 
@@ -2436,6 +2598,47 @@
             <div class="qp-tip">
               &#128161; <strong>How to use:</strong> Place limit buy at the <strong>lower end</strong> of Entry Range.
               Stop loss is non-negotiable. Best R:R stocks listed first &mdash; on busy days, start from row&nbsp;#1.
+            </div>
+          </div>
+        </div>
+
+        <!-- 🏛️ Fundamental Picks Banner -->
+        <div class="fp-banner" id="fundPicksBanner" style="display:none;">
+          <div class="fp-header">
+            <div class="fp-title">
+              <span class="fp-icon">🏛️</span>
+              <div>
+                <div class="fp-heading">Top 10 Fundamental Picks — Right Time to Buy</div>
+                <div class="fp-sub">Long-term compounders at the right valuation &amp; technical entry &bull; Scored on 8 dimensions &bull; Accumulate in tranches</div>
+              </div>
+            </div>
+            <button class="fp-collapse-btn" onclick="toggleFundPicks()" id="fpCollapseBtn">&#9650; Hide</button>
+          </div>
+          <div id="fundPicksBody">
+            <div class="fp-table-wrap">
+              <table class="fp-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Symbol</th>
+                    <th>Score</th>
+                    <th>Sector</th>
+                    <th>LTP</th>
+                    <th>PEG</th>
+                    <th>Valuation</th>
+                    <th>% from 52W High</th>
+                    <th>Inst. Flow</th>
+                    <th>LT Rating</th>
+                    <th>LT Target</th>
+                    <th>Why Now</th>
+                  </tr>
+                </thead>
+                <tbody id="fundPicksRows"></tbody>
+              </table>
+            </div>
+            <div class="fp-tip">
+              &#128161; <strong>How to use:</strong> These are long-term wealth compounders. Buy in 2–3 tranches over 2–4 weeks.
+              Stocks with the best convergence of <strong>fundamental quality + technical timing</strong> are ranked first.
             </div>
           </div>
         </div>
@@ -3360,6 +3563,7 @@
         renderSidebarItems();
         renderStockGrid();
         renderQuickPicks(stocks);
+        renderFundamentalPicks(stocks);
       } catch (e) { console.error("Stock fetch error", e); }
     }
 
@@ -5062,6 +5266,214 @@ body{background:#090d16;color:#f3f4f6;font-family:'Inter',sans-serif;min-height:
       body.style.display = qpVisible ? '' : 'none';
       if (btn) btn.innerHTML = qpVisible ? '&#9650; Hide' : '&#9660; Show Picks';
     }
+
+    // ── Fundamental Picks ────────────────────────────────────────────────────
+    let fpVisible = true;
+
+    function toggleFundPicks() {
+      const body = document.getElementById('fundPicksBody');
+      const btn  = document.getElementById('fpCollapseBtn');
+      if (!body) return;
+      fpVisible = !fpVisible;
+      body.style.display = fpVisible ? '' : 'none';
+      if (btn) btn.innerHTML = fpVisible ? '&#9650; Hide' : '&#9660; Show Picks';
+    }
+
+    function renderFundamentalPicks(stocks) {
+      const banner = document.getElementById('fundPicksBanner');
+      const tbody  = document.getElementById('fundPicksRows');
+      if (!banner || !tbody) return;
+
+      // ── Scoring logic (mirrors tools/fundamental_picks.py) ──
+      const picks = [];
+
+      stocks.forEach(s => {
+        const synth = s.synth_output || {};
+        const sig   = synth.structured_signal || {};
+        const tech  = s.tech_output?.raw_indicators || {};
+        const fund  = synth.agent_outputs?.fundamental || {};
+
+        const verdict = (sig.action_verdict || 'HOLD').toUpperCase();
+        if (verdict === 'SELL') return;
+
+        const pegRaw  = parseFloat(synth.peg_ratio ?? fund.peg_ratio ?? 'NaN');
+        const peRaw   = parseFloat(synth.pe_ratio  ?? fund.pe_ratio  ?? 'NaN');
+        const deRaw   = parseFloat(synth.debt_to_equity ?? fund.debt_to_equity ?? 'NaN');
+        const crRaw   = parseFloat(synth.current_ratio  ?? fund.current_ratio  ?? 'NaN');
+        const netCash = (synth.net_cash_status || fund.net_cash_status || '').toLowerCase();
+        const valText = (synth.valuation_assessment || fund.valuation_assessment || '').toLowerCase();
+        const ltVerdict = (sig.long_term_verdict || '').toUpperCase();
+        const pct52w  = parseFloat(tech.pct_from_52w_high ?? 'NaN');
+        const udRatio = parseFloat(tech.up_down_vol_ratio  ?? 'NaN');
+        const swing20 = parseFloat(tech.swing_low_20       ?? 'NaN');
+        const lp      = parseFloat(tech.last_price || synth.last_price || 'NaN');
+        const upcoming = (sig.upcoming_events_note || '').toLowerCase();
+
+        // ── Eligibility gates ──
+        const isOvervalued = /overvalued|high premium|expensive/.test(valText);
+        if (isOvervalued && (isNaN(pegRaw) || pegRaw >= 1.0)) return;
+        if (!isNaN(pct52w) && pct52w >= -3.0) return;
+
+        // ── Score ──
+        let score = 0;
+        const reasons = [];
+
+        // 1. PEG
+        if (!isNaN(pegRaw)) {
+          if      (pegRaw <= 0.8)  { score += 25; reasons.push('Exceptional PEG ≤0.8'); }
+          else if (pegRaw <= 1.0)  { score += 22; reasons.push('Excellent PEG ≤1.0'); }
+          else if (pegRaw <= 1.5)  { score += 18; reasons.push('Good PEG ≤1.5'); }
+          else if (pegRaw <= 2.0)  { score += 10; }
+          else if (pegRaw <= 2.5)  { score += 3;  }
+          else                     { score -= 10; }
+        } else if (!isNaN(peRaw)) {
+          if      (peRaw <= 15)    { score += 12; reasons.push(`Low P/E ${peRaw.toFixed(0)}x`); }
+          else if (peRaw <= 25)    { score += 6; }
+          else if (peRaw > 50)     { score -= 8; }
+        }
+
+        // 2. Balance sheet
+        if (/net cash|positive|debt.free/.test(netCash)) {
+          score += 15; reasons.push('Net Cash / Debt-Free');
+        } else if (/low|minimal/.test(netCash)) {
+          score += 8; reasons.push('Low Debt');
+        } else if (!isNaN(deRaw)) {
+          if      (deRaw <= 0.3)  { score += 12; reasons.push('Strong B/S'); }
+          else if (deRaw <= 0.8)  { score += 6; }
+          else if (deRaw <= 1.5)  { score += 0; }
+          else if (deRaw <= 2.0)  { score -= 5; }
+          else                    { score -= 15; }
+        }
+
+        // 3. Valuation label
+        if (/undervalued|deeply/.test(valText))              { score += 12; reasons.push('Undervalued'); }
+        else if (/fairly valued|fair value|reasonably/.test(valText)) { score += 6; }
+        else if (isOvervalued)                                { score -= 15; }
+
+        // 4. 52W timing
+        if (!isNaN(pct52w)) {
+          if      (pct52w >= -20 && pct52w <= -5)  { score += 15; reasons.push(`Sweet Timing (${pct52w.toFixed(1)}%)`); }
+          else if (pct52w >= -35 && pct52w < -20)  { score += 8;  reasons.push(`Moderate Dip (${pct52w.toFixed(1)}%)`); }
+          else if (pct52w < -35)                    { score -= 5; }
+
+          if (!isNaN(swing20) && !isNaN(lp) && lp > 0) {
+            const pctFromLow = (lp - swing20) / swing20 * 100;
+            if (pctFromLow >= 0 && pctFromLow <= 4) { score += 5; reasons.push('Near 20D Support'); }
+          }
+        }
+
+        // 5. Institutional flow
+        if (!isNaN(udRatio)) {
+          if      (udRatio >= 1.5)  { score += 10; reasons.push(`Strong Accum. (${udRatio.toFixed(1)}x)`); }
+          else if (udRatio >= 1.1)  { score += 6;  reasons.push(`Mild Accum. (${udRatio.toFixed(1)}x)`); }
+          else if (udRatio <= 0.6)  { score -= 10; }
+          else if (udRatio <= 0.85) { score -= 4; }
+        }
+
+        // 6. LT moat
+        if      (ltVerdict.includes('STRONG BUY'))  { score += 10; }
+        else if (/BUY|ACCUMULATE/.test(ltVerdict))  { score += 5;  }
+        else if (ltVerdict.includes('SELL'))         { score -= 10; }
+
+        // 7. Current ratio
+        if (!isNaN(crRaw)) {
+          if      (crRaw >= 2.0) { score += 5; }
+          else if (crRaw >= 1.5) { score += 3; }
+          else if (crRaw < 1.0)  { score -= 5; }
+        }
+
+        // 8. Catalyst
+        if (/result|earnings|order|deal|contract|export|win|capex|launch/.test(upcoming)) { score += 3; }
+
+        // Timing tag
+        let timingTag = 'Multi-Factor Entry';
+        if (!isNaN(swing20) && !isNaN(lp) && lp > 0 && (lp - swing20) / swing20 * 100 <= 4) {
+          timingTag = 'Near Support Floor';
+        } else if (!isNaN(pct52w) && pct52w >= -20 && pct52w <= -5) {
+          timingTag = `Attractive Dip (${pct52w.toFixed(1)}%)`;
+        } else if (!isNaN(udRatio) && udRatio >= 1.25) {
+          timingTag = 'Inst. Accumulation';
+        } else if (/undervalued|deeply/.test(valText)) {
+          timingTag = 'Undervalued Entry';
+        } else if (!isNaN(pct52w) && pct52w < -20) {
+          timingTag = `Deep Correction (${pct52w.toFixed(1)}%)`;
+        } else if (reasons.length > 0) {
+          timingTag = reasons[0];
+        }
+
+        picks.push({
+          sym:        s.symbol,
+          company:    s.company_name || '',
+          sector:     s.sector || '',
+          score,
+          peg:        isNaN(pegRaw) ? null : pegRaw,
+          valText,
+          pct52w:     isNaN(pct52w) ? null : pct52w,
+          udRatio:    isNaN(udRatio) ? null : udRatio,
+          ltVerdict:  ltVerdict || verdict,
+          ltTarget:   sig.long_term_target || sig.when_to_sell_target || 'N/A',
+          lp:         isNaN(lp) ? null : lp,
+          timingTag,
+        });
+      });
+
+      picks.sort((a, b) => b.score - a.score);
+      const top10 = picks.slice(0, 10);
+
+      if (top10.length === 0) { banner.style.display = 'none'; return; }
+
+      tbody.innerHTML = top10.map((p, i) => {
+        const scoreClass = p.score >= 50 ? 'fp-score-high' : p.score >= 30 ? 'fp-score-mid' : 'fp-score-low';
+        const pegDisp = p.peg != null ? `${p.peg.toFixed(2)}x` : 'N/A';
+
+        let valClass = 'fp-val-fair', valDisp = p.valText;
+        if (/undervalued/.test(p.valText))                   { valClass = 'fp-val-under'; valDisp = 'Undervalued'; }
+        else if (/fairly|fair value|reasonably/.test(p.valText)) { valClass = 'fp-val-fair'; valDisp = 'Fairly Valued'; }
+        else if (/overvalued|expensive/.test(p.valText))     { valClass = 'fp-val-over'; valDisp = 'Overvalued*'; }
+        else { valDisp = p.valText ? (p.valText.charAt(0).toUpperCase() + p.valText.slice(1)) : 'N/A'; }
+
+        const pct52Disp = p.pct52w != null ? `${p.pct52w.toFixed(1)}%` : 'N/A';
+        let pct52Class = 'fp-pct-mid';
+        if (p.pct52w != null) {
+          if (p.pct52w >= -20 && p.pct52w <= -5) pct52Class = 'fp-pct-sweet';
+          else if (p.pct52w < -30)                pct52Class = 'fp-pct-deep';
+        }
+
+        let flowDisp = 'N/A', flowClass = 'fp-flow';
+        if (p.udRatio != null) {
+          if      (p.udRatio >= 1.5)  { flowDisp = `Strong Accum. (${p.udRatio.toFixed(1)}x)`;  flowClass = 'fp-flow-accum'; }
+          else if (p.udRatio >= 1.1)  { flowDisp = `Mild Accum. (${p.udRatio.toFixed(1)}x)`;    flowClass = 'fp-flow-accum'; }
+          else if (p.udRatio <= 0.6)  { flowDisp = `Dist. (${p.udRatio.toFixed(1)}x)`;           flowClass = 'fp-flow-dist'; }
+          else                        { flowDisp = `Neutral (${p.udRatio.toFixed(1)}x)`; }
+        }
+
+        let ltClass = 'fp-lt-hold';
+        if (/STRONG/.test(p.ltVerdict)) ltClass = 'fp-lt-strong';
+        else if (/BUY|ACCUMULATE/.test(p.ltVerdict)) ltClass = 'fp-lt-buy';
+
+        const ltDisp = p.ltVerdict || 'N/A';
+        const ltTargetDisp = p.ltTarget || 'N/A';
+        const ltpDisp = p.lp != null ? `₹${p.lp.toLocaleString('en-IN')}` : 'N/A';
+
+        return `<tr>
+          <td class="fp-rank">${i + 1}</td>
+          <td><button class="fp-sym-btn" onclick="openStockModalDirect('${p.sym}', event)">${p.sym} &#8599;</button></td>
+          <td><span class="fp-score ${scoreClass}">${p.score}</span></td>
+          <td style="color:var(--text-muted);font-size:0.78rem;">${p.sector}</td>
+          <td style="font-family:'JetBrains Mono',monospace;">${ltpDisp}</td>
+          <td class="fp-peg">${pegDisp}</td>
+          <td class="fp-val ${valClass}">${valDisp}</td>
+          <td class="fp-pct ${pct52Class}">${pct52Disp}</td>
+          <td class="${flowClass}">${flowDisp}</td>
+          <td class="fp-lt-rating ${ltClass}">${ltDisp}</td>
+          <td style="font-family:'JetBrains Mono',monospace;color:#34d399;font-size:0.78rem;">${ltTargetDisp}</td>
+          <td><span class="fp-timing-tag">${p.timingTag}</span></td>
+        </tr>`;
+      }).join('');
+
+      banner.style.display = '';
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     function renderQuickPicks(stocks) {
       const banner = document.getElementById('quickPicksBanner');

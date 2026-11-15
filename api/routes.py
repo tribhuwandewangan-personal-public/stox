@@ -257,6 +257,46 @@ async def portfolio(request: Request) -> JSONResponse:
         return JSONResponse({"error": str(e), "summary": {}, "holdings": []}, status_code=500)
 
 
+async def fundamental_picks(request: Request) -> JSONResponse:
+    """GET /api/fundamental-picks: Top 10 fundamentally sound stocks at the right technical entry."""
+    try:
+        from tools.fundamental_picks import score_fundamental_pick
+        cache_mgr = _managers.get("cache_mgr")
+        symbols_list = _load_symbols_list()
+
+        SYNTH_AGENT_NAME = "Master Prediction Synthesizer Agent"
+        TECH_AGENT_NAME  = "Technical Analysis Agent"
+
+        picks = []
+        for item in symbols_list:
+            sym   = item.get("symbol", "").upper()
+            cname = item.get("name", "")
+            sec   = item.get("sector", "")
+
+            synth_res = cache_mgr.get_latest_agent_output(sym, SYNTH_AGENT_NAME, max_age_hours=168)
+            if not synth_res:
+                synth_res = cache_mgr.get_latest_agent_output(sym, SYNTH_AGENT_NAME, max_age_hours=None)
+            if not synth_res:
+                continue
+
+            tech_res = cache_mgr.get_latest_agent_output(sym, TECH_AGENT_NAME, max_age_hours=168)
+
+            pick = score_fundamental_pick(sym, synth_res, tech_res)
+            if pick is None:
+                continue
+
+            pick["company"] = cname
+            pick["sector"]  = sec
+            picks.append(pick)
+
+        picks.sort(key=lambda x: x["score"], reverse=True)
+        top10 = picks[:10]
+
+        return JSONResponse({"picks": top10, "count": len(top10), "universe": len(symbols_list)})
+    except Exception as e:
+        return JSONResponse({"error": str(e), "picks": [], "count": 0}, status_code=500)
+
+
 async def favicon(request: Request) -> Response:
     """GET /favicon.ico: Empty response."""
     return Response(status_code=204)
@@ -272,6 +312,7 @@ routes = [
     Route("/api/events", endpoint=events, methods=["GET"]),
     Route("/api/search-symbol", endpoint=search_symbol, methods=["GET"]),
     Route("/api/portfolio", endpoint=portfolio, methods=["GET"]),
+    Route("/api/fundamental-picks", endpoint=fundamental_picks, methods=["GET"]),
     Route("/api/trigger", endpoint=trigger, methods=["POST"]),
     Route("/api/add-symbol", endpoint=add_symbol, methods=["POST"]),
     Route("/api/remove-symbol", endpoint=remove_symbol, methods=["POST"]),

@@ -398,6 +398,38 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json(200, body)
             return
 
+        elif path.startswith("/api/fundamental-picks"):
+            try:
+                from tools.fundamental_picks import score_fundamental_pick
+                from api.services import _load_symbols_list
+                symbols_list = _load_symbols_list()
+                SYNTH_AGENT_NAME = "Master Prediction Synthesizer Agent"
+                TECH_AGENT_NAME  = "Technical Analysis Agent"
+                picks = []
+                for item in symbols_list:
+                    sym   = item.get("symbol", "").upper()
+                    cname = item.get("name", "")
+                    sec   = item.get("sector", "")
+                    synth_res = cache_mgr.get_latest_agent_output(sym, SYNTH_AGENT_NAME, max_age_hours=168)
+                    if not synth_res:
+                        synth_res = cache_mgr.get_latest_agent_output(sym, SYNTH_AGENT_NAME, max_age_hours=None)
+                    if not synth_res:
+                        continue
+                    tech_res = cache_mgr.get_latest_agent_output(sym, TECH_AGENT_NAME, max_age_hours=168)
+                    pick = score_fundamental_pick(sym, synth_res, tech_res)
+                    if pick is None:
+                        continue
+                    pick["company"] = cname
+                    pick["sector"]  = sec
+                    picks.append(pick)
+                picks.sort(key=lambda x: x["score"], reverse=True)
+                top10 = picks[:10]
+                body = safe_json_dumps({"picks": top10, "count": len(top10), "universe": len(symbols_list)})
+            except Exception as e:
+                body = safe_json_dumps({"error": str(e), "picks": [], "count": 0})
+            self._send_json(200, body)
+            return
+
         elif path == "/" or path == "/index.html":
             html_path = os.path.join(PROJECT_ROOT, "static", "index.html")
             if os.path.exists(html_path):
