@@ -2395,6 +2395,11 @@
       </div>
     </div>
     <div class="header-badges">
+      <button class="nav-btn highlight" id="headerRiskShieldBtn" onclick="openRiskShieldModal()"
+        style="background:linear-gradient(135deg, rgba(245,158,11,0.2), rgba(239,68,68,0.2)); border:1px solid rgba(245,158,11,0.5); font-weight:700;"
+        title="View Global Shock Safeguards & Risk Shield Playbook">
+        <span id="riskShieldHeaderIcon">🛡️</span> <span id="riskShieldHeaderLabel">Risk Shield: Checking...</span>
+      </button>
       <button class="nav-btn highlight" onclick="openPortfolioModal()" style="background:linear-gradient(135deg, rgba(16,185,129,0.2), rgba(56,189,248,0.2)); border:1px solid rgba(16,185,129,0.5); font-weight:700;"
         title="View Zerodha Kite Portfolio Holdings, Diagnostics & Actions">
         <span>💼</span> My Portfolio
@@ -2562,6 +2567,20 @@
           </div>
         </div>
 
+
+        <!-- 🚨 Macro Risk Alert Banner (Shown during HIGH or DANGER global risk) -->
+        <div id="macroRiskAlertBanner" style="display:none; background:linear-gradient(135deg, rgba(239,68,68,0.2) 0%, rgba(185,28,28,0.3) 100%); border:1px solid #ef4444; border-radius:12px; padding:14px 20px; margin-bottom:18px; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+          <div style="display:flex; align-items:center; gap:14px;">
+            <span style="font-size:2rem; line-height:1;">🚨</span>
+            <div>
+              <div style="font-weight:700; color:#fca5a5; font-size:1.05rem;" id="macroRiskAlertTitle">Global Shock Alert: Elevated Macro Downside Risk</div>
+              <div style="font-size:0.8rem; color:#cbd5e1;" id="macroRiskAlertSub">Headwinds detected across global crude, bond yields, and currency markets. Review protective safeguards.</div>
+            </div>
+          </div>
+          <button class="btn-trigger" onclick="openRiskShieldModal()" style="background:#ef4444; border-color:#f87171; font-weight:700; padding:6px 16px;">
+            🛡️ View Protection Playbook
+          </button>
+        </div>
 
         <!-- ⚡ Quick Picks Banner -->
         <div class="quick-picks-banner" id="quickPicksBanner" style="display:none;">
@@ -5104,14 +5123,233 @@ body{background:#090d16;color:#f3f4f6;font-family:'Inter',sans-serif;min-height:
       }
     }
 
-    function fetchAllData() { fetchStatus(); fetchStockCards(); fetchQuotes(); }
+    // ── Macro Risk Shield ─────────────────────────────────────────────────────
+    let latestRiskShieldData = null;
+
+    function closeRiskShieldModal() {
+      const overlay = document.getElementById('riskShieldModalOverlay');
+      if (overlay) overlay.style.display = 'none';
+    }
+
+    async function fetchMacroRiskShield() {
+      try {
+        const resp = await fetch('/api/macro-risk-shield');
+        const data = await resp.json();
+        latestRiskShieldData = data;
+
+        const headerBtn = document.getElementById('headerRiskShieldBtn');
+        const headerLabel = document.getElementById('riskShieldHeaderLabel');
+        const alertBanner = document.getElementById('macroRiskAlertBanner');
+        const alertTitle = document.getElementById('macroRiskAlertTitle');
+        const alertSub = document.getElementById('macroRiskAlertSub');
+
+        if (headerLabel) {
+          headerLabel.innerText = `Risk: ${data.risk_label || 'ELEVATED'}`;
+        }
+        if (headerBtn && data.risk_colour) {
+          headerBtn.style.borderColor = data.risk_colour;
+        }
+
+        if (alertBanner) {
+          if (data.risk_key === 'HIGH' || data.risk_key === 'DANGER') {
+            alertBanner.style.display = 'flex';
+            if (alertTitle) {
+              alertTitle.innerText = `${data.risk_label} — Global Macro Headwind Warning (${data.action_header || 'Protection Advised'})`;
+            }
+            if (alertSub && data.macro_drivers && data.macro_drivers.length > 0) {
+              alertSub.innerText = `Primary Global Stress Drivers: ${data.macro_drivers.join(' • ')}`;
+            }
+          } else {
+            alertBanner.style.display = 'none';
+          }
+        }
+      } catch (err) {
+        console.error("Risk shield fetch error:", err);
+      }
+    }
+
+    async function openRiskShieldModal() {
+      const overlay = document.getElementById('riskShieldModalOverlay');
+      const body = document.getElementById('riskShieldBody');
+      if (!overlay || !body) return;
+      overlay.style.display = 'flex';
+      body.innerHTML = '<div style="padding:40px; text-align:center; color:#94a3b8;">Loading macro telemetry and synthesizing risk shield playbook...</div>';
+
+      try {
+        const resp = await fetch('/api/macro-risk-shield');
+        const data = await resp.json();
+        latestRiskShieldData = data;
+
+        const riskKey = data.risk_key || 'ELEVATED';
+        const riskColour = data.risk_colour || '#f59e0b';
+        const drivers = data.macro_drivers || [];
+        const playbook = data.playbook || [];
+        const holdings = data.holding_shields || [];
+        const defensives = data.defensive_sectors || [];
+        const defExamples = data.defensive_examples || {};
+        const events = data.scheduled_events || [];
+
+        let driversHtml = drivers.length ? drivers.map(d => `<span style="display:inline-block; background:rgba(255,255,255,0.06); padding:4px 10px; border-radius:6px; font-size:0.78rem; font-family:'JetBrains Mono'; margin:3px;">${d}</span>`).join('') : '<span style="color:var(--text-muted);">No acute macro drivers detected.</span>';
+
+        let playbookHtml = playbook.map(p => `
+          <div style="background:rgba(255,255,255,0.03); border-left:3px solid ${riskColour}; border-radius:6px; padding:10px 14px; margin-bottom:8px;">
+            <div style="font-weight:700; color:#fff; font-size:0.88rem; display:flex; align-items:center; gap:8px;">
+              <span>${p.icon}</span> <span>Step ${p.step}: ${p.action}</span>
+            </div>
+            <div style="font-size:0.8rem; color:#cbd5e1; margin-top:4px; line-height:1.4;">${p.detail}</div>
+          </div>
+        `).join('');
+
+        let holdingsHtml = '';
+        if (holdings.length > 0) {
+          let rows = holdings.map(h => {
+            const urgColour = h.urgency === 'critical' ? '#ef4444' : h.urgency === 'high' ? '#f97316' : h.urgency === 'medium' ? '#f59e0b' : '#10b981';
+            const pnlSign = h.pnl_pct >= 0 ? '+' : '';
+            const pnlCol = h.pnl_pct >= 0 ? 'var(--accent-green)' : 'var(--accent-rose)';
+            return `
+              <tr>
+                <td>
+                  <button class="qp-sym-btn" onclick="closeRiskShieldModal(); setTimeout(() => openStockModalDirect('${h.symbol}'), 150)">
+                    ${h.symbol} ↗
+                  </button>
+                </td>
+                <td style="color:var(--text-muted); font-size:0.8rem;">${h.sector}</td>
+                <td style="font-family:'JetBrains Mono'; font-size:0.82rem;">${(h.sensitivity * 100).toFixed(0)}%</td>
+                <td style="font-family:'JetBrains Mono'; color:${pnlCol}; font-weight:700;">${pnlSign}${h.pnl_pct.toFixed(1)}%</td>
+                <td style="font-size:0.82rem; color:${urgColour}; font-weight:600;">${h.shield_action}</td>
+              </tr>
+            `;
+          }).join('');
+
+          holdingsHtml = `
+            <div style="margin-top:22px;">
+              <h3 style="font-size:1.05rem; color:#fff; margin-bottom:10px; display:flex; align-items:center; gap:8px;">
+                <span>💼</span> Portfolio Holdings Exposure & Shield Actions
+              </h3>
+              <div style="overflow-x:auto;">
+                <table class="qp-table" style="width:100%;">
+                  <thead>
+                    <tr>
+                      <th>Symbol</th>
+                      <th>Sector</th>
+                      <th>Macro Sensitivity</th>
+                      <th>Your P&amp;L</th>
+                      <th>Specific Shield Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>${rows}</tbody>
+                </table>
+              </div>
+            </div>
+          `;
+        }
+
+        let defCardsHtml = defensives.map(([sec, why]) => {
+          const ex = (defExamples[sec] || defExamples[sec.split('/')[0].trim()] || []).join(', ');
+          const exLine = ex ? `<div style="font-size:0.75rem; color:#38bdf8; margin-top:4px;"><b>Examples:</b> ${ex}</div>` : '';
+          return `
+            <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border-card); border-radius:8px; padding:10px 12px;">
+              <div style="font-weight:700; color:#34d399; font-size:0.84rem;">${sec}</div>
+              <div style="font-size:0.78rem; color:#cbd5e1; margin-top:3px; line-height:1.35;">${why}</div>
+              ${exLine}
+            </div>
+          `;
+        }).join('');
+
+        let eventsHtml = events.map(e => `
+          <tr>
+            <td style="font-weight:600; color:#f1f5f9; font-size:0.82rem;">${e.event}</td>
+            <td style="color:var(--text-muted); font-size:0.78rem;">${e.frequency}</td>
+            <td><span class="event-impact-chip event-impact-${e.risk === 'VERY HIGH' ? 'High' : e.risk}">${e.risk}</span></td>
+            <td style="color:#94a3b8; font-size:0.78rem;">${e.impact}</td>
+          </tr>
+        `).join('');
+
+        const scoreSign = (data.macro_score > 0 ? '+' : '');
+        const scoreVal = typeof data.macro_score === 'number' ? data.macro_score.toFixed(2) : '0.00';
+
+        body.innerHTML = `
+          <!-- Summary Banner Card -->
+          <div style="background:linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%); border:1px solid ${riskColour}; border-radius:12px; padding:16px 20px; margin-bottom:18px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+              <div>
+                <div style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Global Market Threat Assessment</div>
+                <div style="font-size:1.6rem; font-weight:800; font-family:'Outfit'; color:${riskColour}; margin-top:2px;">
+                  ${data.risk_label} &bull; ${data.action_header}
+                </div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:0.75rem; color:var(--text-muted);">Macro Health Score</div>
+                <div style="font-size:1.4rem; font-weight:700; font-family:'JetBrains Mono'; color:${riskColour};">${scoreSign}${scoreVal}</div>
+                <div style="font-size:0.72rem; color:var(--text-muted);">Scale: -1.0 (Critical) to +1.0 (Supportive)</div>
+              </div>
+            </div>
+            <div style="margin-top:12px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.07);">
+              <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:4px;">Active Global Macro Drivers:</div>
+              <div>${driversHtml}</div>
+            </div>
+          </div>
+
+          <!-- Playbook & Defensives Grid -->
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap:16px; margin-bottom:16px;">
+            <!-- Left: Playbook -->
+            <div>
+              <h3 style="font-size:1.05rem; color:#fff; margin-bottom:10px; display:flex; align-items:center; gap:8px;">
+                <span>📋</span> Defensive Action Playbook
+              </h3>
+              ${playbookHtml}
+            </div>
+
+            <!-- Right: Safe Havens -->
+            <div>
+              <h3 style="font-size:1.05rem; color:#fff; margin-bottom:10px; display:flex; align-items:center; gap:8px;">
+                <span>🏛️</span> Safe-Haven Sectors (Recession & Shock Resilient)
+              </h3>
+              <div style="display:flex; flex-direction:column; gap:8px;">
+                ${defCardsHtml}
+              </div>
+            </div>
+          </div>
+
+          ${holdingsHtml}
+
+          <!-- Scheduled Macro Shock Events Calendar -->
+          <div style="margin-top:20px;">
+            <h3 style="font-size:1.05rem; color:#fff; margin-bottom:10px; display:flex; align-items:center; gap:8px;">
+              <span>📅</span> High-Risk Scheduled Global Events to Watch
+            </h3>
+            <div style="overflow-x:auto;">
+              <table class="qp-table" style="width:100%;">
+                <thead>
+                  <tr>
+                    <th>Event</th>
+                    <th>Frequency</th>
+                    <th>Risk Rating</th>
+                    <th>Sectors Affected</th>
+                  </tr>
+                </thead>
+                <tbody>${eventsHtml}</tbody>
+              </table>
+            </div>
+          </div>
+
+          <div style="margin-top:20px; padding:12px; border-radius:8px; background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.25); font-size:0.75rem; color:#fca5a5;">
+            ⚠️ <b>Risk Disclaimer</b>: This system evaluates macro sensitivity quantitatively. It does not replace personal risk tolerance or financial advice. Never hold losing swing trades through global shocks hoping for recovery.
+          </div>
+        `;
+      } catch (err) {
+        body.innerHTML = `<p style="color:var(--accent-rose);">Error loading risk shield: ${err.message}</p>`;
+      }
+    }
+
+    function fetchAllData() { fetchStatus(); fetchStockCards(); fetchQuotes(); fetchMacroRiskShield(); }
 
     // Poll only while the tab is visible. Full analysis payload every 20s; light quote refresh every 15s.
     let pollTimers = [];
     function startPolling() {
       stopPolling();
       fetchAllData();
-      pollTimers = [setInterval(fetchStatus, 20000), setInterval(fetchStockCards, 20000), setInterval(fetchQuotes, 15000)];
+      pollTimers = [setInterval(fetchStatus, 20000), setInterval(fetchStockCards, 20000), setInterval(fetchQuotes, 15000), setInterval(fetchMacroRiskShield, 30000)];
     }
     function stopPolling() { pollTimers.forEach(clearInterval); pollTimers = []; }
     document.addEventListener('visibilitychange', () => { if (document.hidden) stopPolling(); else startPolling(); });
@@ -5119,6 +5357,25 @@ body{background:#090d16;color:#f3f4f6;font-family:'Inter',sans-serif;min-height:
     initSidebarState();
     startPolling();
   </script>
+
+  <!-- Macro Risk Shield Modal -->
+  <div class="modal-overlay" id="riskShieldModalOverlay"
+    onclick="if(event.target.id==='riskShieldModalOverlay') closeRiskShieldModal()">
+    <div class="modal-card" style="max-width:1050px; width:95vw;">
+      <span class="modal-close" onclick="closeRiskShieldModal()">&times;</span>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+        <h2 style="font-family:'Outfit'; font-size:1.6rem; color:#fff; display:flex; align-items:center; gap:10px;">
+          <span>🛡️</span> Macro Risk Shield & Global Event Safeguards
+        </h2>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <button class="btn-trigger" onclick="openRiskShieldModal()" style="padding:5px 12px; font-size:0.8rem;">
+            🔄 Refresh Macro Live
+          </button>
+        </div>
+      </div>
+      <div id="riskShieldBody" style="color:#cbd5e1;">Loading macro risk data…</div>
+    </div>
+  </div>
 
   <!-- Zerodha Kite Portfolio Diagnostics & Actions Modal -->
   <div class="modal-overlay" id="portfolioModalOverlay"

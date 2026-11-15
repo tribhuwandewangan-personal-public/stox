@@ -916,5 +916,102 @@ class TestFundamentalPicksEngine(unittest.TestCase):
         self.assertIn("🏛️", md, "Section header emoji must be present")
 
 
+# =============================================================================
+# Macro Risk Shield Engine Tests
+# =============================================================================
+
+class TestMacroRiskShieldEngine(unittest.TestCase):
+    """Unit tests for tools/macro_risk_shield.py."""
+
+    def test_risk_level_thresholds(self):
+        from tools.macro_risk_shield import compute_risk_level
+
+        low = compute_risk_level(0.40)
+        self.assertEqual(low["risk_key"], "LOW")
+        self.assertIn("🟢", low["risk_label"])
+
+        elevated = compute_risk_level(0.05)
+        self.assertEqual(elevated["risk_key"], "ELEVATED")
+        self.assertIn("🟡", elevated["risk_label"])
+
+        high = compute_risk_level(-0.35)
+        self.assertEqual(high["risk_key"], "HIGH")
+        self.assertIn("🟠", high["risk_label"])
+
+        danger = compute_risk_level(-0.75)
+        self.assertEqual(danger["risk_key"], "DANGER")
+        self.assertIn("🔴", danger["risk_label"])
+
+    def test_holding_shield_evaluates_sensitivity_and_pnl(self):
+        from tools.macro_risk_shield import evaluate_holding_shield
+
+        # High sensitivity cyclical holding (Banking) in HIGH risk
+        bank_holding = {
+            "symbol": "HDFCBANK",
+            "sector": "Banking & Finance",
+            "pnl_pct": 2.5,
+            "current_value": 50000,
+        }
+        res_bank = evaluate_holding_shield(bank_holding, "HIGH")
+        self.assertIn("REDUCE", res_bank["shield_action"])
+        self.assertEqual(res_bank["urgency"], "high")
+
+        # Defensive holding (Pharma) in HIGH risk
+        pharma_holding = {
+            "symbol": "SUNPHARMA",
+            "sector": "Pharma / Healthcare",
+            "pnl_pct": 5.0,
+            "current_value": 30000,
+        }
+        res_pharma = evaluate_holding_shield(pharma_holding, "HIGH")
+        self.assertIn("HOLD", res_pharma["shield_action"])
+        self.assertEqual(res_pharma["urgency"], "none")
+
+        # Losing holding in DANGER risk
+        losing_holding = {
+            "symbol": "TATASTEEL",
+            "sector": "Metals & Mining",
+            "pnl_pct": -6.5,
+            "current_value": 20000,
+        }
+        res_losing = evaluate_holding_shield(losing_holding, "DANGER")
+        self.assertIn("EXIT", res_losing["shield_action"])
+        self.assertEqual(res_losing["urgency"], "critical")
+
+    def test_macro_risk_shield_markdown_generation(self):
+        from tools.macro_risk_shield import build_macro_risk_shield, build_macro_risk_shield_markdown
+
+        macro_result = {
+            "label": "Bearish",
+            "score": -0.42,
+            "available": True,
+            "drivers": ["Brent Crude Oil +3.20% (headwind)", "US 10Y Yield +4.10% (headwind)"]
+        }
+        holdings = [
+            {"symbol": "ICICIBANK", "sector": "Banking", "pnl_pct": 3.0, "current_value": 40000},
+            {"symbol": "ITC", "sector": "FMCG", "pnl_pct": 8.0, "current_value": 30000}
+        ]
+
+        shield_data = build_macro_risk_shield(macro_result, holdings)
+        self.assertEqual(shield_data["risk_key"], "HIGH")
+
+        md = build_macro_risk_shield_markdown(shield_data)
+        self.assertIn("Macro Risk Shield", md)
+        self.assertIn("Protection Playbook", md)
+        self.assertIn("Safe-Haven Sectors", md)
+        self.assertIn("High-Risk Scheduled Events", md)
+        self.assertIn("Portfolio Shield Actions", md)
+        self.assertIn("ICICIBANK", md)
+        self.assertIn("ITC", md)
+
+    def test_defensive_sectors_and_scheduled_events(self):
+        from tools.macro_risk_shield import DEFENSIVE_SECTORS, SCHEDULED_RISK_EVENTS
+
+        self.assertIn("FMCG", DEFENSIVE_SECTORS)
+        self.assertIn("Pharma / Healthcare", DEFENSIVE_SECTORS)
+        self.assertTrue(any("FOMC" in e["event"] for e in SCHEDULED_RISK_EVENTS))
+        self.assertTrue(any("Budget" in e["event"] for e in SCHEDULED_RISK_EVENTS))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -430,6 +430,32 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json(200, body)
             return
 
+        elif path.startswith("/api/macro-risk-shield"):
+            try:
+                from tools.macro_tools import GlobalMacroEngine, compute_macro_sentiment
+                from tools.macro_risk_shield import build_macro_risk_shield
+                from tools.kite_portfolio import KitePortfolioEngine
+
+                macro_engine = GlobalMacroEngine(cache_mgr)
+                macro_res = macro_engine.fetch_macro_indicators(max_age_hours=12)
+                indicators = macro_res.get("indicators", [])
+                sentiment = compute_macro_sentiment(indicators)
+
+                holdings = []
+                try:
+                    port_engine = KitePortfolioEngine(cache_manager=cache_mgr)
+                    port_data = port_engine.evaluate_portfolio()
+                    holdings = port_data.get("holdings", [])
+                except Exception:
+                    pass
+
+                shield_data = build_macro_risk_shield(sentiment, holdings)
+                body = safe_json_dumps(shield_data)
+            except Exception as e:
+                body = safe_json_dumps({"error": str(e), "risk_key": "ELEVATED", "risk_label": "🟡 ELEVATED"})
+            self._send_json(200, body)
+            return
+
         elif path == "/" or path == "/index.html":
             html_path = os.path.join(PROJECT_ROOT, "static", "index.html")
             if os.path.exists(html_path):

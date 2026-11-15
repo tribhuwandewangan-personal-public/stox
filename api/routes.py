@@ -297,6 +297,33 @@ async def fundamental_picks(request: Request) -> JSONResponse:
         return JSONResponse({"error": str(e), "picks": [], "count": 0}, status_code=500)
 
 
+async def macro_risk_shield(request: Request) -> JSONResponse:
+    """GET /api/macro-risk-shield: Multi-tier macro risk level and portfolio safeguarding playbook."""
+    try:
+        from tools.macro_tools import GlobalMacroEngine, compute_macro_sentiment
+        from tools.macro_risk_shield import build_macro_risk_shield
+        from tools.kite_portfolio import KitePortfolioEngine
+
+        cache_mgr = _managers.get("cache_mgr")
+        macro_engine = GlobalMacroEngine(cache_mgr)
+        macro_res = macro_engine.fetch_macro_indicators(max_age_hours=12)
+        indicators = macro_res.get("indicators", [])
+        sentiment = compute_macro_sentiment(indicators)
+
+        holdings = []
+        try:
+            port_engine = KitePortfolioEngine(cache_manager=cache_mgr)
+            port_data = port_engine.evaluate_portfolio()
+            holdings = port_data.get("holdings", [])
+        except Exception:
+            pass
+
+        shield_data = build_macro_risk_shield(sentiment, holdings)
+        return JSONResponse(shield_data)
+    except Exception as e:
+        return JSONResponse({"error": str(e), "risk_key": "ELEVATED", "risk_label": "🟡 ELEVATED"}, status_code=500)
+
+
 async def favicon(request: Request) -> Response:
     """GET /favicon.ico: Empty response."""
     return Response(status_code=204)
@@ -313,6 +340,7 @@ routes = [
     Route("/api/search-symbol", endpoint=search_symbol, methods=["GET"]),
     Route("/api/portfolio", endpoint=portfolio, methods=["GET"]),
     Route("/api/fundamental-picks", endpoint=fundamental_picks, methods=["GET"]),
+    Route("/api/macro-risk-shield", endpoint=macro_risk_shield, methods=["GET"]),
     Route("/api/trigger", endpoint=trigger, methods=["POST"]),
     Route("/api/add-symbol", endpoint=add_symbol, methods=["POST"]),
     Route("/api/remove-symbol", endpoint=remove_symbol, methods=["POST"]),

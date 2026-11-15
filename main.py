@@ -466,6 +466,31 @@ def main():
         fundamental_picks_md = build_fundamental_picks_section(symbols_list, results_dict, cache_mgr)
         report_markdown.append(fundamental_picks_md)
 
+        # --- Build Macro Risk Shield & Safeguarding Playbook section ---
+        try:
+            from tools.macro_tools import GlobalMacroEngine, compute_macro_sentiment
+            from tools.macro_risk_shield import build_macro_risk_shield, build_macro_risk_shield_markdown
+            from tools.kite_portfolio import KitePortfolioEngine
+
+            macro_engine = GlobalMacroEngine(cache_mgr)
+            macro_res = macro_engine.fetch_macro_indicators(max_age_hours=12)
+            indicators = macro_res.get("indicators", [])
+            sentiment = compute_macro_sentiment(indicators)
+
+            holdings = []
+            try:
+                port_engine = KitePortfolioEngine(cache_manager=cache_mgr)
+                port_data = port_engine.evaluate_portfolio()
+                holdings = port_data.get("holdings", [])
+            except Exception:
+                pass
+
+            shield_data = build_macro_risk_shield(sentiment, holdings)
+            shield_md = build_macro_risk_shield_markdown(shield_data)
+            report_markdown.append(shield_md)
+        except Exception as e:
+            safe_print(f"⚠️ [Macro Risk Shield Notice] Could not build shield section: {e}")
+
         for item in symbols_list:
             sym = item.get("symbol", "").upper()
             c_name = item.get("name", "")
