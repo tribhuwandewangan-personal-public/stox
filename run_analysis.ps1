@@ -2,11 +2,11 @@
 .SYNOPSIS
     Interactive Multi-Agent Analysis, Update & Report Generation Runner for NSE Stock Predictor.
 .DESCRIPTION
-    1. Checks dependencies & background services (Valkey, Zerodha Kite Connect, Dashboard).
+    1. Checks dependencies and background services (Valkey, Zerodha Kite Connect, Dashboard).
     2. Interactive Wizard: Prompt for Valkey wait, Zerodha login, and Analysis parameters (Complete Fresh vs Incremental).
-    3. Syncs split-adjusted historical data & updates Excel dataset.
+    3. Syncs split-adjusted historical data and updates Excel dataset.
     4. Runs the multi-agent analysis workflow (deterministic, no LLM) and outputs prediction reports.
-    5. Evaluates portfolio holdings & generates long-term / swing diagnostics.
+    5. Evaluates portfolio holdings and generates long-term / swing diagnostics.
 .PARAMETER Force
     Force reset persistent queue and fresh re-analysis of all symbols without using cache.
 .PARAMETER Symbol
@@ -44,19 +44,13 @@ $env:PYTHONIOENCODING = "utf-8"
 $env:PYTHONUTF8 = "1"
 
 # Resolve best Python executable (prefer project venv)
-$venvPy = Join-Path $ScriptDir ".venv\Scripts\python.exe"
-if (Test-Path $venvPy) {
-    $pyRunner = @($venvPy)
-}
-elseif (Get-Command uv -ErrorAction SilentlyContinue) {
-    $pyRunner = @("uv", "run", "python")
-}
-else {
-    $pyRunner = @("python")
+$pyExe = Join-Path $ScriptDir ".venv\Scripts\python.exe"
+if (-not (Test-Path $pyExe)) {
+    $pyExe = "python"
 }
 
 Write-Host "========================================================================" -ForegroundColor Cyan
-Write-Host "  📈 NSE MULTI-AGENT STOCK PREDICTOR - INTERACTIVE RUNNER" -ForegroundColor Cyan
+Write-Host "  NSE MULTI-AGENT STOCK PREDICTOR - INTERACTIVE RUNNER" -ForegroundColor Cyan
 Write-Host "========================================================================" -ForegroundColor Cyan
 
 # Determine if we should run in interactive wizard mode
@@ -67,27 +61,28 @@ $isInteractive = (-not $NonInteractive) -and (-not $Force) -and ($Symbol -eq "")
 # STEP 1: Python Environment & Dependencies
 # -----------------------------------------------------------------------------
 Write-Host ""
-Write-Host "[1/5] Checking Python environment & dependencies..." -ForegroundColor Yellow
-if (Test-Path $venvPy) {
-    Write-Host "   ✅ Python virtual environment verified (.venv)." -ForegroundColor Green
+Write-Host "[1/5] Checking Python environment and dependencies..." -ForegroundColor Yellow
+if (Test-Path $pyExe) {
+    Write-Host "   [OK] Python virtual environment verified (.venv)." -ForegroundColor Green
 }
 elseif (Get-Command uv -ErrorAction SilentlyContinue) {
     try {
         uv sync --offline --quiet 2>$null
-        Write-Host "   ✅ Virtual environment verified via uv." -ForegroundColor Green
+        Write-Host "   [OK] Virtual environment verified via uv." -ForegroundColor Green
     }
     catch {
         Write-Host "   Using active Python environment." -ForegroundColor DarkGray
     }
-} else {
-    Write-Host "   Using Python environment: $($pyRunner -join ' ')" -ForegroundColor DarkGray
+}
+else {
+    Write-Host "   Using Python executable: $pyExe" -ForegroundColor DarkGray
 }
 
 # -----------------------------------------------------------------------------
 # STEP 2: Valkey / Redis Service Check (with Interactive Wait Option)
 # -----------------------------------------------------------------------------
 Write-Host ""
-Write-Host "[2/5] Checking Queue & Caching Services (Valkey on port 6379)..." -ForegroundColor Yellow
+Write-Host "[2/5] Checking Queue and Caching Services (Valkey on port 6379)..." -ForegroundColor Yellow
 
 function Test-ValkeySocket {
     try {
@@ -110,40 +105,40 @@ function Test-ValkeySocket {
 $valkeyUp = Test-ValkeySocket
 
 if ($valkeyUp) {
-    Write-Host "   ✅ Valkey/Redis server active on localhost:6379" -ForegroundColor Green
+    Write-Host "   [OK] Valkey/Redis server active on localhost:6379" -ForegroundColor Green
 }
 else {
-    Write-Host "   ⚠️  Valkey server is NOT running on localhost:6379." -ForegroundColor Yellow
+    Write-Host "   [WARN] Valkey server is NOT running on localhost:6379." -ForegroundColor Yellow
     if ($isInteractive) {
         Write-Host ""
         Write-Host "   Queue Server Options:" -ForegroundColor Cyan
-        Write-Host "   [W] Wait for Valkey (starts polling; launch 'valkey-server' in another terminal)" -ForegroundColor White
+        Write-Host "   [W] Wait for Valkey (starts polling; launch valkey-server in another terminal)" -ForegroundColor White
         Write-Host "   [C] Continue with resilient SQLite task queue (Default)" -ForegroundColor White
         $vChoice = Read-Host "   Select [W/C] (Default: C)"
 
         if ($vChoice -match "^[wW]") {
-            Write-Host "   ⏳ Waiting for Valkey server on localhost:6379... (Press Ctrl+C to cancel)" -ForegroundColor Yellow
+            Write-Host "   Waiting for Valkey server on localhost:6379... (Press Ctrl+C to cancel)" -ForegroundColor Yellow
             $elapsedWait = 0
             while (-not (Test-ValkeySocket)) {
                 Start-Sleep -Seconds 2
                 $elapsedWait += 2
-                Write-Host "      Waiting for Valkey connection ($elapsedWait`s elapsed)..." -ForegroundColor DarkGray
+                Write-Host "      Waiting for Valkey connection ($elapsedWait seconds elapsed)..." -ForegroundColor DarkGray
                 if ($elapsedWait -ge 90) {
-                    Write-Host "   ⚠️  Wait timeout reached (90s). Falling back to SQLite queue." -ForegroundColor DarkYellow
+                    Write-Host "   [WARN] Wait timeout reached (90s). Falling back to SQLite queue." -ForegroundColor DarkYellow
                     break
                 }
             }
             if (Test-ValkeySocket) {
-                Write-Host "   ✅ Valkey server connected successfully on localhost:6379!" -ForegroundColor Green
+                Write-Host "   [OK] Valkey server connected successfully on localhost:6379!" -ForegroundColor Green
                 $valkeyUp = $true
             }
         }
         else {
-            Write-Host "   ℹ️  Continuing with persistent SQLite task queue." -ForegroundColor DarkGray
+            Write-Host "   Continuing with persistent SQLite task queue." -ForegroundColor DarkGray
         }
     }
     else {
-        Write-Host "   ℹ️  Falling back to persistent SQLite task queue (storage/cache.db)." -ForegroundColor DarkGray
+        Write-Host "   Falling back to persistent SQLite task queue (storage/cache.db)." -ForegroundColor DarkGray
     }
 }
 
@@ -162,7 +157,6 @@ if (Test-Path $kiteTokenFile) {
         $tokData = Get-Content $kiteTokenFile -Raw | ConvertFrom-Json
         if ($tokData.access_token) {
             $kiteUser = if ($tokData.user_id) { $tokData.user_id } else { "Active User" }
-            # Check if token was created today (Zerodha tokens expire daily at 06:00 AM IST)
             if ($tokData.created_at) {
                 $tokCreated = [DateTime]::Parse($tokData.created_at)
                 if ($tokCreated.Date -eq [DateTime]::Today) {
@@ -170,17 +164,19 @@ if (Test-Path $kiteTokenFile) {
                 }
             }
         }
-    } catch {}
+    }
+    catch {}
 }
 
 if ($kiteActive) {
-    Write-Host "   ✅ Kite Connect active: Logged in as '$kiteUser' (session fresh for today)" -ForegroundColor Green
+    Write-Host "   [OK] Kite Connect active: Logged in as $kiteUser (session fresh for today)" -ForegroundColor Green
 }
 else {
     if (Test-Path $kiteTokenFile) {
-        Write-Host "   ⚠️  Kite Connect token exists but may be expired (Zerodha requires daily login)." -ForegroundColor Yellow
-    } else {
-        Write-Host "   ⚠️  No Zerodha Kite Connect session token found." -ForegroundColor Yellow
+        Write-Host "   [WARN] Kite Connect token exists but may be expired (Zerodha requires daily login)." -ForegroundColor Yellow
+    }
+    else {
+        Write-Host "   [WARN] No Zerodha Kite Connect session token found." -ForegroundColor Yellow
     }
 
     if ($isInteractive) {
@@ -192,24 +188,24 @@ else {
 
         if ($kChoice -match "^[lL]") {
             Write-Host "   Launching Zerodha Kite secure interactive login..." -ForegroundColor Cyan
-            & $pyRunner[0] $pyRunner[1..$pyRunner.Length] "$ScriptDir\tools\kite_portfolio.py" --login
-            # Re-check token
+            & $pyExe "$ScriptDir\tools\kite_portfolio.py" --login
             if (Test-Path $kiteTokenFile) {
                 try {
                     $tokData = Get-Content $kiteTokenFile -Raw | ConvertFrom-Json
                     if ($tokData.access_token) {
                         $kiteActive = $true
-                        Write-Host "   ✅ Zerodha Kite session established successfully!" -ForegroundColor Green
+                        Write-Host "   [OK] Zerodha Kite session established successfully!" -ForegroundColor Green
                     }
-                } catch {}
+                }
+                catch {}
             }
         }
         else {
-            Write-Host "   ℹ️  Continuing with offline snapshot data (storage/my_holdings.json)." -ForegroundColor DarkGray
+            Write-Host "   Continuing with offline snapshot data (storage/my_holdings.json)." -ForegroundColor DarkGray
         }
     }
     else {
-        Write-Host "   ℹ️  Proceeding in offline/snapshot advisory mode." -ForegroundColor DarkGray
+        Write-Host "   Proceeding in offline/snapshot advisory mode." -ForegroundColor DarkGray
     }
 }
 
@@ -222,7 +218,7 @@ $portfolioOnly = $false
 if ($isInteractive) {
     Write-Host ""
     Write-Host "------------------------------------------------------------------------" -ForegroundColor DarkCyan
-    Write-Host "🎯 ANALYSIS CONFIGURATION WIZARD" -ForegroundColor Cyan
+    Write-Host "  ANALYSIS CONFIGURATION WIZARD" -ForegroundColor Cyan
     Write-Host "------------------------------------------------------------------------" -ForegroundColor DarkCyan
     Write-Host "   Analysis is very fast because the engine is 100% rule-based (no slow LLM)" -ForegroundColor DarkGray
     Write-Host "   and caches calculations for 12 hours unless a full refresh is requested." -ForegroundColor DarkGray
@@ -238,32 +234,32 @@ if ($isInteractive) {
     switch ($modeSelect.Trim()) {
         "2" {
             $Force = $true
-            Write-Host "   ⚡ Complete Fresh Analysis selected: Will recompute all 6 agents for every stock." -ForegroundColor Yellow
+            Write-Host "   [!] Complete Fresh Analysis selected: Recomputing all 6 agents for every stock." -ForegroundColor Yellow
         }
         "3" {
             $customSyms = Read-Host "   Enter stock symbol(s) comma-separated (e.g. RELIANCE,TCS,BEL)"
             if ($customSyms.Trim()) {
                 $Symbol = $customSyms.Trim()
-                Write-Host "   🎯 Filtered target symbol(s): $Symbol" -ForegroundColor Yellow
+                Write-Host "   Target symbol(s): $Symbol" -ForegroundColor Yellow
             }
         }
         "4" {
             $portfolioOnly = $true
-            Write-Host "   💼 Portfolio-Only mode selected." -ForegroundColor Yellow
+            Write-Host "   Portfolio-Only mode selected." -ForegroundColor Yellow
         }
         default {
-            Write-Host "   ⚡ Incremental Analysis mode selected (fast, cache-assisted)." -ForegroundColor Green
+            Write-Host "   Incremental Analysis mode selected (fast, cache-assisted)." -ForegroundColor Green
         }
     }
 
-    # Historical Data sync prompt
     if (-not $portfolioOnly) {
-        $syncPrompt = Read-Host "`n   Sync split-adjusted historical data & Excel workbook? [Y/n] (Default: Y)"
+        $syncPrompt = Read-Host "`n   Sync split-adjusted historical data and Excel workbook? [Y/n] (Default: Y)"
         if ($syncPrompt -match "^[nN]") {
             $runSync = $false
-            Write-Host "   ℹ️  Historical sync skipped." -ForegroundColor DarkGray
-        } else {
-            Write-Host "   ✅ Historical data sync enabled." -ForegroundColor Green
+            Write-Host "   Historical sync skipped." -ForegroundColor DarkGray
+        }
+        else {
+            Write-Host "   Historical data sync enabled." -ForegroundColor Green
         }
     }
     Write-Host "------------------------------------------------------------------------" -ForegroundColor DarkCyan
@@ -285,24 +281,26 @@ foreach ($checkPort in @($DashPort, ($DashPort + 1), ($DashPort + 2))) {
             $activePort = $checkPort
             break
         }
-    } catch {
+    }
+    catch {
         $serverRunning = $false
     }
 }
 $DashUrl = "http://localhost:$activePort"
 
 if ($serverRunning) {
-    Write-Host "`n   ✅ Realtime Dashboard Server already active at $DashUrl" -ForegroundColor Green
+    Write-Host "`n   [OK] Realtime Dashboard Server already active at $DashUrl" -ForegroundColor Green
 }
 else {
     try {
         Get-CimInstance Win32_Process -Filter "Name = 'python.exe'" -ErrorAction SilentlyContinue | 
             Where-Object { $_.CommandLine -like "*dashboard_server.py*" } | 
             ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-    } catch {}
+    }
+    catch {}
 
     Write-Host "`n   Launching Realtime Dashboard Server on $DashUrl..." -ForegroundColor Yellow
-    Start-Process -FilePath $pyRunner[0] -ArgumentList @($pyRunner[1..$pyRunner.Length] + @("$ScriptDir\dashboard_server.py", "--port", "$DashPort")) -WorkingDirectory $ScriptDir -WindowStyle Hidden
+    Start-Process -FilePath $pyExe -ArgumentList @("$ScriptDir\dashboard_server.py", "--port", "$DashPort") -WorkingDirectory $ScriptDir -WindowStyle Hidden
 
     $retries = 20
     while ($retries -gt 0) {
@@ -315,32 +313,37 @@ else {
                     $activePort = $checkPort
                     break
                 }
-            } catch {}
+            }
+            catch {}
         }
         if ($serverRunning) { break }
         $retries--
     }
     $DashUrl = "http://localhost:$activePort"
     if ($serverRunning) {
-        Write-Host "   ✅ Dashboard Server started successfully at $DashUrl" -ForegroundColor Green
+        Write-Host "   [OK] Dashboard Server started successfully at $DashUrl" -ForegroundColor Green
     }
 }
 
-# Launch browser
-try {
-    Start-Process $DashUrl
-    Write-Host "   🌐 Dashboard opened in browser: $DashUrl" -ForegroundColor Cyan
-} catch {}
+# Launch browser if interactive
+if (-not $NonInteractive) {
+    try {
+        Start-Process $DashUrl
+        Write-Host "   Dashboard opened in browser: $DashUrl" -ForegroundColor Cyan
+    }
+    catch {}
+}
 
 # -----------------------------------------------------------------------------
 # STEP 6: Historical Data Sync & Excel Export
 # -----------------------------------------------------------------------------
 if ($runSync -and (-not $portfolioOnly)) {
     Write-Host ""
-    Write-Host "[4/5] Syncing split-adjusted historical data & updating Excel dataset..." -ForegroundColor Yellow
+    Write-Host "[4/5] Syncing split-adjusted historical data and updating Excel dataset..." -ForegroundColor Yellow
     try {
-        & $pyRunner[0] $pyRunner[1..$pyRunner.Length] "$ScriptDir\tools\historical_data_tools.py" --sync --excel
-    } catch {
+        & $pyExe "$ScriptDir\tools\historical_data_tools.py" --sync --excel
+    }
+    catch {
         Write-Host "   Data sync notice: Continuing with existing SQLite historical dataset..." -ForegroundColor DarkYellow
     }
 }
@@ -360,7 +363,7 @@ if (-not $portfolioOnly) {
     if ($Symbol -and $Symbol.Trim() -ne "") { $mainArgs += @("--symbol", $Symbol.Trim()) }
 
     try {
-        & $pyRunner[0] $pyRunner[1..$pyRunner.Length] "$ScriptDir\main.py" @mainArgs
+        & $pyExe "$ScriptDir\main.py" @mainArgs
     }
     catch [System.Management.Automation.PipelineStoppedException] {
         Write-Host "`n[STOP] Execution stopped by user." -ForegroundColor Yellow
@@ -376,17 +379,18 @@ if (-not $portfolioOnly) {
 # -----------------------------------------------------------------------------
 if ($Portfolio -or $portfolioOnly -or (Test-Path "$ScriptDir\storage\my_holdings.json") -or (Test-Path "$ScriptDir\storage\kite_token.json")) {
     Write-Host ""
-    Write-Host "💼 Generating Portfolio Diagnostics & Action Strategy Report..." -ForegroundColor Green
+    Write-Host "Generating Portfolio Diagnostics and Action Strategy Report..." -ForegroundColor Green
     try {
-        & $pyRunner[0] $pyRunner[1..$pyRunner.Length] "$ScriptDir\tools\kite_portfolio.py" --report
-    } catch {
+        & $pyExe "$ScriptDir\tools\kite_portfolio.py" --report
+    }
+    catch {
         Write-Host "   Notice: Portfolio report generation skipped." -ForegroundColor DarkGray
     }
 }
 
 Write-Host ""
 Write-Host "========================================================================" -ForegroundColor Cyan
-Write-Host "  🎉 RUN COMPLETE! Reports and dashboard are ready:" -ForegroundColor Cyan
+Write-Host "  RUN COMPLETE! Reports and dashboard are ready:" -ForegroundColor Cyan
 Write-Host "  * Realtime Web Dashboard:     $DashUrl" -ForegroundColor Green
 Write-Host "  * Daily Predictions Report:   $ScriptDir\reports\NSE_Stock_Predictions_latest.md" -ForegroundColor Green
 Write-Host "  * Portfolio Action Report:    $ScriptDir\reports\Portfolio_Holdings_Analysis_latest.md" -ForegroundColor Green
