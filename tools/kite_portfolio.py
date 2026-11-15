@@ -205,7 +205,7 @@ class KitePortfolioEngine:
                         "exchange": h.get("exchange", "NSE"),
                         "isin": h.get("isin", ""),
                         "quantity": qty,
-                        "average_price": avg_p,
+                        "average_price": avg_price,
                         "last_price": ltp,
                         "invested_value": invested,
                         "current_value": cur_val,
