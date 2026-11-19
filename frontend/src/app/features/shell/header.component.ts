@@ -4,8 +4,7 @@
 
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ApiService } from '../../core/services/api.service';
-import { stocksStore } from '../../core/stores/stocks.store';
+import { AppStore } from '../../core/stores/app.store';
 
 interface Status {
   model: string;
@@ -34,7 +33,7 @@ interface Status {
       </div>
 
       <div class="bar-center">
-        <div class="status-group" *ngIf="status$ | async as status">
+        <div class="status-group" *ngIf="status as status">
           <div class="queue-badge">
             <span class="queue-label">Pending:</span>
             <span class="queue-count">{{ status.queue_status.pending_count }}</span>
@@ -58,7 +57,7 @@ interface Status {
 
         <div class="engine-badge">
           <span class="engine-label">Engine:</span>
-          <span class="engine-value">{{ engineLabel$ | async }}</span>
+          <span class="engine-value">{{ engineLabel }}</span>
         </div>
 
         <button class="btn-icon" title="Settings">⚙️</button>
@@ -272,8 +271,11 @@ interface Status {
   `]
 })
 export class HeaderComponent implements OnInit {
-  status$ = this.apiService.getStatus();
-  engineLabel$ = this.apiService.getStatus().then(s => s.model);
+  // Using AppStore signals for reactive UI
+  constructor(public appStore: AppStore) {}
+  // status and engine label are now derived from the signal
+  get status() { return this.appStore.status(); }
+  get engineLabel() { return this.appStore.status()?.model ?? '';}
 
   marketState() {
     const hour = new Date().getHours();
@@ -294,12 +296,6 @@ export class HeaderComponent implements OnInit {
     }
   }
 
-  constructor(private apiService: ApiService) {}
-
-  ngOnInit(): void {
-    // Auto-refresh status every 30 seconds
-    setInterval(() => {
-      this.status$ = this.apiService.getStatus();
-    }, 30000);
-  }
+  // No manual refresh needed – AppStore updates automatically.
+  ngOnInit(): void {}
 }

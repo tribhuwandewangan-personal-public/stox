@@ -5,9 +5,10 @@
 import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Stock } from '../../core/models/stock.model';
-import { bestPrice, fmtPrice } from '../../core/utils/price';
+import { fmtPrice, bestPrice } from '../../core/utils/price';
 import { getStockBucket, verdictInfo } from '../../core/utils/verdict';
 import { SparklineComponent } from './sparkline.component';
+import { AppStore } from '../../core/stores/app.store';
 
 @Component({
   selector: 'app-stock-card',
@@ -197,12 +198,29 @@ export class StockCardComponent {
   @Input({ required: true }) stock!: Stock;
   @Output() cardClick = new EventEmitter<Stock>();
 
+  constructor(public appStore: AppStore) {}
+
+  /** Find the latest quote for this stock from the AppStore */
+  private get liveQuote() {
+    const q = this.appStore.quotes().find(quote => quote.symbol === this.stock.symbol);
+    return q ?? null;
+  }
+
   get formattedPrice(): string {
+    const quote = this.liveQuote;
+    if (quote) {
+      return fmtPrice(quote.ltp);
+    }
     const p = bestPrice(this.stock);
     return fmtPrice(p.price);
   }
 
   get formattedChange(): string {
+    const quote = this.liveQuote;
+    if (quote && quote.change_pct !== undefined && quote.change_pct !== null) {
+      const sign = quote.change_pct > 0 ? '+' : '';
+      return `${sign}${quote.change_pct.toFixed(2)}%`;
+    }
     const p = bestPrice(this.stock);
     if (p.change_pct === null || p.change_pct === undefined) return '–';
     const sign = p.change_pct > 0 ? '+' : '';
@@ -210,10 +228,11 @@ export class StockCardComponent {
   }
 
   get changeClass(): string {
-    const p = bestPrice(this.stock);
-    if (p.change_pct === null) return 'neutral';
-    if (p.change_pct > 0) return 'positive';
-    if (p.change_pct < 0) return 'negative';
+    const quote = this.liveQuote;
+    const pct = quote?.change_pct;
+    if (pct === null || pct === undefined) return 'neutral';
+    if (pct > 0) return 'positive';
+    if (pct < 0) return 'negative';
     return 'neutral';
   }
 
