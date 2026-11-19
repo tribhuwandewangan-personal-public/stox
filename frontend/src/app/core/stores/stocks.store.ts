@@ -48,7 +48,10 @@ class StocksStore {
   horizonStrategy = computed(() => this.state().horizonStrategy);
   filter = computed(() => this.state().filter);
 
-  // Derived computations
+  // Derived count of stocks with live price (available)
+  availableCount = computed(() =>
+    this.state().stocks.filter(s => s?.price_info?.price != null).length);
+
   horizonCounts = computed(() => {
     const stocks = this.state().stocks;
     let shortCount = 0;

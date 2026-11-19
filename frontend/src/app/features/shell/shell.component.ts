@@ -5,6 +5,7 @@
 
 import { Component, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { TickerBarComponent } from './ticker-bar.component';
 import { HeaderComponent, AppView } from './header.component';
 import { BulletinComponent } from './bulletin.component';
 import { DashboardComponent } from '../dashboard/dashboard.component';
@@ -15,6 +16,7 @@ import { PatternScreenerComponent } from '../screener/pattern-screener.component
   standalone: true,
   imports: [
     CommonModule,
+    TickerBarComponent,
     HeaderComponent,
     BulletinComponent,
     DashboardComponent,
@@ -22,6 +24,9 @@ import { PatternScreenerComponent } from '../screener/pattern-screener.component
   ],
   template: `
     <div class="app-container">
+      <!-- Top Macro Ticker Ribbon -->
+      <app-ticker-bar></app-ticker-bar>
+
       <app-header
         [activeView]="activeView()"
         (viewChange)="onViewChange($event)">

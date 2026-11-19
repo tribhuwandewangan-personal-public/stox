@@ -500,32 +500,13 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
             return
 
         elif path == "/" or path == "/index.html":
-            html_path = os.path.join(PROJECT_ROOT, "static", "index.html")
-            if os.path.exists(html_path):
-                stat = os.stat(html_path)
-                etag = f'"{stat.st_mtime_ns}-{stat.st_size}"'
-                if self.headers.get("If-None-Match") == etag:
-                    self.send_response(304)
-                    self.send_header("ETag", etag)
-                    self.send_header("Cache-Control", "no-cache")
-                    self.end_headers()
-                    return
-                with open(html_path, "rb") as f:
-                    content = f.read()
-                self.send_response(200)
-                self.send_header("Content-type", "text/html; charset=utf-8")
-                self.send_header("Content-Length", str(len(content)))
-                self.send_header("ETag", etag)
-                self.send_header("Cache-Control", "no-cache")   # always revalidate, but 304 skips the 170KB body
-                self.end_headers()
-                self.wfile.write(content)
-            else:
-                missing = b"Dashboard HTML missing."
-                self.send_response(404)
-                self.send_header("Content-type", "text/plain")
-                self.send_header("Content-Length", str(len(missing)))
-                self.end_headers()
-                self.wfile.write(missing)
+            # UI has been replaced by the Angular application.
+            # The backend now only serves API endpoints.
+            # Return 404 for the legacy dashboard page.
+            self.send_response(404)
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"Dashboard UI removed. Use the Angular frontend.")
             return
 
         elif path.startswith("/news_reports/") or path.startswith("/reports/") or path.startswith("/news/"):

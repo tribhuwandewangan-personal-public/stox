@@ -10,10 +10,11 @@ export default defineConfig({
         target: 'http://localhost:8765',
         changeOrigin: true,
         secure: false,
-        ws: true,
+        // No WebSocket proxy for standard API calls
+        ws: false,
         timeout: 30000
       },
-      '/ws': {
+      // '/ws': {
         target: 'http://localhost:8765',
         ws: true,
         changeOrigin: true,

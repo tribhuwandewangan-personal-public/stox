@@ -15,7 +15,7 @@ import { SparklineComponent } from './sparkline.component';
   standalone: true,
   imports: [CommonModule, SparklineComponent],
   template: `
-    <div class="stock-card" [class.stale]="stock.is_stale" (click)="onCardClick()">
+    <div class="stock-card" [class.stale]="stock.is_stale" (click)="onCardClick()" [attr.data-symbol]="stock.symbol">
 
       <!-- Header: Symbol + Verdict -->
       <div class="card-header">

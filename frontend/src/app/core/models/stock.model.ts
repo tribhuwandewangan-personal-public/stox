@@ -12,6 +12,10 @@ export interface Stock {
   has_analysis: boolean;
   synth_output: SynthOutput | null;
   tech_output: TechOutput | null;
+  hist_output?: any;
+  news_output?: any;
+  risk_output?: any;
+  fund_output?: any;
   patterns: PatternResult[];
   events: EventsData;
   sparkline: number[];
@@ -22,6 +26,7 @@ export interface Stock {
 export interface SynthOutput {
   as_of_date: string;
   structured_signal: StructuredSignal;
+  final_report?: string;
 }
 
 export interface StructuredSignal {

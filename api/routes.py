@@ -11,7 +11,7 @@ import urllib.parse
 from datetime import datetime
 from typing import Dict, Any
 from starlette.routing import Route
-from starlette.responses import JSONResponse, FileResponse, HTMLResponse
+from starlette.responses import JSONResponse, FileResponse, HTMLResponse, Response
 from starlette.requests import Request
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -69,7 +69,7 @@ async def status(request: Request) -> JSONResponse:
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
-async def stocks(request: Request) -> JSONResponse:
+async def stocks(request: Request) -> Response:
     """GET /api/stocks: All stocks with latest analysis and live quotes."""
     try:
         cache_mgr = _managers["cache_mgr"]
@@ -79,7 +79,7 @@ async def stocks(request: Request) -> JSONResponse:
         events_engine = _managers["events_engine"]
 
         body = get_stocks_response_body(cache_mgr, queue_mgr, hist_engine, tech_engine, events_engine)
-        return JSONResponse(body)
+        return Response(content=body, media_type="application/json")
     except Exception as e:
         return JSONResponse({"error": str(e), "stocks": []}, status_code=500)
 
@@ -127,7 +127,7 @@ async def history(request: Request) -> JSONResponse:
             return JSONResponse({"error": "Missing symbol", "candles": []})
 
         body = get_history_response_body(sym, days, cache_mgr, tech_engine)
-        return JSONResponse(body)
+        return Response(content=body, media_type="application/json")
     except Exception as e:
         print(f"Error fetching chart data: {e}", flush=True)
         return JSONResponse({"error": str(e), "candles": []}, status_code=500)
