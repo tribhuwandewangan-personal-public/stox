@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Interactive Multi-Agent Analysis, Update & Report Generation Runner for NSE Stock Predictor.
 .DESCRIPTION
@@ -23,6 +23,9 @@ param(
     [switch]$Fast,            # Kept for backward compatibility (ignored: engine is always LLM-free)
     [string]$Symbol = "",
     [switch]$Portfolio,
+    [switch]$AllNse,
+    [string]$SymbolsFile = "",
+    [int]$Limit = 0,
     [switch]$NonInteractive
 )
 
@@ -55,7 +58,7 @@ Write-Host "====================================================================
 
 # Determine if we should run in interactive wizard mode
 # Default to interactive if no specific execution flags were passed
-$isInteractive = (-not $NonInteractive) -and (-not $Force) -and ($Symbol -eq "") -and (-not $Portfolio)
+$isInteractive = (-not $NonInteractive) -and (-not $Force) -and ($Symbol -eq "") -and (-not $Portfolio) -and (-not $AllNse) -and ($SymbolsFile -eq "")
 
 # -----------------------------------------------------------------------------
 # STEP 1: Python Environment & Dependencies
@@ -224,17 +227,18 @@ if ($isInteractive) {
     Write-Host "   and caches calculations for 12 hours unless a full refresh is requested." -ForegroundColor DarkGray
     Write-Host ""
     Write-Host "   Select Execution Mode:" -ForegroundColor White
-    Write-Host "   [1] Incremental Analysis (Default: Fast, re-uses fresh 12h cache for unchanged stocks)" -ForegroundColor White
-    Write-Host "   [2] Complete Fresh Analysis (--force: Re-runs all 6 agents across all stocks from scratch)" -ForegroundColor White
+    Write-Host "   [1] My Curated List (symbols.json) - Incremental Analysis (Default: Fast, 12h cache)" -ForegroundColor White
+    Write-Host "   [2] My Curated List (symbols.json) - Complete Fresh Analysis (--force: Re-evaluates from scratch)" -ForegroundColor White
     Write-Host "   [3] Specific Target Symbol(s) (e.g. RELIANCE,TCS,BEL)" -ForegroundColor White
     Write-Host "   [4] Portfolio Holdings Only (diagnostics for your current holdings)" -ForegroundColor White
+    Write-Host "   [5] All NSE Stocks Analysis (Scans entire NSE market, saves/uses symbols_nse_all.json)" -ForegroundColor Cyan
 
-    $modeSelect = Read-Host "`n   Enter mode [1-4] (Default: 1)"
+    $modeSelect = Read-Host "`n   Enter mode [1-5] (Default: 1)"
 
     switch ($modeSelect.Trim()) {
         "2" {
             $Force = $true
-            Write-Host "   [!] Complete Fresh Analysis selected: Recomputing all 6 agents for every stock." -ForegroundColor Yellow
+            Write-Host "   [!] Complete Fresh Analysis selected: Recomputing all 6 agents for every stock in symbols.json." -ForegroundColor Yellow
         }
         "3" {
             $customSyms = Read-Host "   Enter stock symbol(s) comma-separated (e.g. RELIANCE,TCS,BEL)"
@@ -246,6 +250,21 @@ if ($isInteractive) {
         "4" {
             $portfolioOnly = $true
             Write-Host "   Portfolio-Only mode selected." -ForegroundColor Yellow
+        }
+        "5" {
+            $AllNse = $true
+            Write-Host "   [!] All NSE Stocks Analysis selected." -ForegroundColor Cyan
+            Write-Host "   Will use symbols_nse_all.json (your symbols.json is kept untouched)." -ForegroundColor DarkGray
+            $allNseFile = Join-Path $ScriptDir "symbols_nse_all.json"
+            if (-not (Test-Path $allNseFile)) {
+                Write-Host "   symbols_nse_all.json not found. Fetching full NSE master list..." -ForegroundColor Yellow
+                & $pyExe "$ScriptDir\tools\nse_universe.py" --fetch
+            }
+            $limInput = Read-Host "   Optional: Enter limit on number of stocks to scan (e.g. 50, 100, or Enter for ALL)"
+            if ($limInput.Trim() -match "^\d+$") {
+                $Limit = [int]$limInput.Trim()
+                Write-Host "   Scan limit set to first $Limit stocks." -ForegroundColor Yellow
+            }
         }
         default {
             Write-Host "   Incremental Analysis mode selected (fast, cache-assisted)." -ForegroundColor Green
@@ -341,7 +360,10 @@ if ($runSync -and (-not $portfolioOnly)) {
     Write-Host ""
     Write-Host "[4/5] Syncing split-adjusted historical data and updating Excel dataset..." -ForegroundColor Yellow
     try {
-        & $pyExe "$ScriptDir\tools\historical_data_tools.py" --sync --excel
+        $syncArgs = @("--sync", "--excel")
+        if ($AllNse) { $syncArgs += "--all-nse" }
+        elseif ($SymbolsFile) { $syncArgs += @("--symbols-file", $SymbolsFile) }
+        & $pyExe "$ScriptDir\tools\historical_data_tools.py" @syncArgs
     }
     catch {
         Write-Host "   Data sync notice: Continuing with existing SQLite historical dataset..." -ForegroundColor DarkYellow
@@ -354,13 +376,24 @@ if ($runSync -and (-not $portfolioOnly)) {
 if (-not $portfolioOnly) {
     Write-Host ""
     Write-Host "[5/5] Triggering Multi-Agent Analysis Pipeline (rule-based, no LLM)..." -ForegroundColor Green
-    Write-Host "   Config: $ScriptDir\symbols.json" -ForegroundColor DarkGray
+    if ($AllNse) {
+        Write-Host "   Scope: Complete NSE Market Universe (symbols_nse_all.json)" -ForegroundColor Cyan
+    }
+    elseif ($SymbolsFile) {
+        Write-Host "   Scope: Custom Symbols File ($SymbolsFile)" -ForegroundColor Cyan
+    }
+    else {
+        Write-Host "   Scope: Curated Watchlist ($ScriptDir\symbols.json)" -ForegroundColor DarkGray
+    }
     Write-Host "   Press Ctrl+C at any time to interrupt cleanly." -ForegroundColor DarkGray
     Write-Host ""
 
     $mainArgs = @()
     if ($Force) { $mainArgs += "--force" }
     if ($Symbol -and $Symbol.Trim() -ne "") { $mainArgs += @("--symbol", $Symbol.Trim()) }
+    if ($AllNse) { $mainArgs += "--all-nse" }
+    elseif ($SymbolsFile) { $mainArgs += @("--symbols-file", $SymbolsFile) }
+    if ($Limit -gt 0) { $mainArgs += @("--limit", "$Limit") }
 
     try {
         & $pyExe "$ScriptDir\main.py" @mainArgs
@@ -388,11 +421,13 @@ if ($Portfolio -or $portfolioOnly -or (Test-Path "$ScriptDir\storage\my_holdings
     }
 }
 
+$predReport = if ($AllNse) { "$ScriptDir\reports\NSE_All_Stocks_Predictions_latest.md" } else { "$ScriptDir\reports\NSE_Stock_Predictions_latest.md" }
+
 Write-Host ""
 Write-Host "========================================================================" -ForegroundColor Cyan
 Write-Host "  RUN COMPLETE! Reports and dashboard are ready:" -ForegroundColor Cyan
 Write-Host "  * Realtime Web Dashboard:     $DashUrl" -ForegroundColor Green
-Write-Host "  * Daily Predictions Report:   $ScriptDir\reports\NSE_Stock_Predictions_latest.md" -ForegroundColor Green
+Write-Host "  * Daily Predictions Report:   $predReport" -ForegroundColor Green
 Write-Host "  * Portfolio Action Report:    $ScriptDir\reports\Portfolio_Holdings_Analysis_latest.md" -ForegroundColor Green
 Write-Host "  * Historical Excel Dataset:   $ScriptDir\reports\NSE_Historical_Data.xlsx" -ForegroundColor Green
 Write-Host "========================================================================" -ForegroundColor Cyan

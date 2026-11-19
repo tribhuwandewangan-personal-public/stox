@@ -70,11 +70,12 @@ if sys.stderr is None or getattr(sys.stderr, "closed", False):
 sys.stdout = _SafeStream(sys.stdout)
 sys.stderr = _SafeStream(sys.stderr)
 
-from config import SYMBOLS_FILE_PATH, ENGINE_LABEL, VERBOSE_LOGGING, MAX_PARALLEL_WORKERS, MAX_SYMBOL_WORKERS
+from config import SYMBOLS_FILE_PATH, ALL_NSE_SYMBOLS_FILE_PATH, ENGINE_LABEL, VERBOSE_LOGGING, MAX_PARALLEL_WORKERS, MAX_SYMBOL_WORKERS
 from storage.queue_manager import ValkeyQueueManager
 from storage.cache_manager import CacheManager
 from agents.macro_sentinel import BackgroundMacroSentinel
 from graph import MultiAgentWorkflow
+from tools.nse_universe import ensure_nse_universe
 
 def safe_print(*args, **kwargs):
     try:
@@ -84,16 +85,17 @@ def safe_print(*args, **kwargs):
     except Exception:
         pass
 
-def load_symbols():
-    if not os.path.exists(SYMBOLS_FILE_PATH):
-        print(f"Error: {SYMBOLS_FILE_PATH} not found.")
+def load_symbols(file_path=None):
+    target_path = file_path or SYMBOLS_FILE_PATH
+    if not os.path.exists(target_path):
+        print(f"Error: {target_path} not found.")
         return []
     try:
-        with open(SYMBOLS_FILE_PATH, "r", encoding="utf-8") as f:
+        with open(target_path, "r", encoding="utf-8") as f:
             data = json.load(f)
-            return data.get("symbols", [])
+            return data.get("symbols", []) if isinstance(data, dict) else data
     except Exception as e:
-        print(f"[Error] Failed to parse {SYMBOLS_FILE_PATH}: {e}")
+        print(f"[Error] Failed to parse {target_path}: {e}")
         return []
 
 def render_progress_bar(current: int, total: int, items_this_run: int, elapsed_this_run: float):
@@ -268,6 +270,9 @@ def parse_args():
     parser.add_argument("--force", "-f", action="store_true", help="Force fresh re-analysis of symbols (resets queue and cache)")
     parser.add_argument("--reset", action="store_true", help="Reset persistent queue status to pending and exit")
     parser.add_argument("--symbol", "-s", type=str, default="", help="Comma-separated stock symbol(s) to analyze (e.g. RELIANCE,TCS)")
+    parser.add_argument("--all-nse", action="store_true", help="Analyze all NSE stocks using symbols_nse_all.json (creates/updates if missing)")
+    parser.add_argument("--symbols-file", type=str, default="", help="Path to custom symbols JSON file")
+    parser.add_argument("--limit", type=int, default=0, help="Limit number of symbols to analyze from the list")
     parser.add_argument("--fast", action="store_true", help=argparse.SUPPRESS)  # legacy no-op: the engine is always rule-based
     return parser.parse_args()
 
@@ -281,9 +286,26 @@ def main():
     print(f"  Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 80)
 
-    symbols_list = load_symbols()
+    # Determine which symbols file to use
+    if args.all_nse:
+        print("🌐 Mode: All NSE Stock Universe Analysis")
+        symbols_file = ALL_NSE_SYMBOLS_FILE_PATH
+        if not os.path.exists(symbols_file):
+            print("⏳ symbols_nse_all.json not found. Fetching full NSE listed equity list...")
+            ensure_nse_universe()
+        is_all_nse_run = True
+    elif args.symbols_file:
+        symbols_file = args.symbols_file
+        is_all_nse_run = "all" in os.path.basename(symbols_file).lower()
+        print(f"📁 Mode: Custom Symbols File ({symbols_file})")
+    else:
+        symbols_file = SYMBOLS_FILE_PATH
+        is_all_nse_run = False
+        print("📋 Mode: Curated Watchlist (symbols.json)")
+
+    symbols_list = load_symbols(symbols_file)
     if not symbols_list:
-        print("No stock symbols found in symbols.json.")
+        print(f"No stock symbols found in {symbols_file}.")
         return
 
     # Filter target symbols if specified
@@ -291,9 +313,14 @@ def main():
         target_syms = {s.strip().upper() for s in args.symbol.split(",") if s.strip()}
         symbols_list = [s for s in symbols_list if s.get("symbol", "").upper() in target_syms]
         if not symbols_list:
-            print(f"Error: Specified symbol(s) '{args.symbol}' not found in symbols.json.")
+            print(f"Error: Specified symbol(s) '{args.symbol}' not found in {symbols_file}.")
             return
         print(f"🎯 Filtered Targets ({len(symbols_list)}): {[s.get('symbol') for s in symbols_list]}")
+
+    # Optional limit (e.g. analyze top N)
+    if args.limit and args.limit > 0:
+        symbols_list = symbols_list[:args.limit]
+        print(f"⏱️ Limit Applied: Analyzing first {len(symbols_list)} symbol(s)")
 
     if args.reset:
         queue_mgr = ValkeyQueueManager()
@@ -363,8 +390,9 @@ def main():
 
         # Daily report management: if second (or subsequent) analysis of the day,
         # reuse and update today's existing file instead of creating a new report md file.
+        report_base_name = "NSE_All_Stocks_Predictions" if is_all_nse_run else "NSE_Stock_Predictions"
         today_str = datetime.now().strftime('%Y%m%d')
-        today_prefix = f"NSE_Stock_Predictions_{today_str}"
+        today_prefix = f"{report_base_name}_{today_str}"
         today_files = sorted([
             f for f in os.listdir(reports_dir)
             if f.startswith(today_prefix) and f.endswith(".md") and not f.endswith("_latest.md")
@@ -377,15 +405,17 @@ def main():
         else:
             is_second_run_of_day = False
             timestamp_str = datetime.now().strftime('%Y%m%d_%H%M%S')
-            report_filepath = os.path.join(reports_dir, f"NSE_Stock_Predictions_{timestamp_str}.md")
+            report_filepath = os.path.join(reports_dir, f"{report_base_name}_{timestamp_str}.md")
             safe_print(f"📄 [Report Engine] First run of day. Creating daily report: {os.path.basename(report_filepath)}")
 
-        latest_report_filepath = os.path.join(reports_dir, "NSE_Stock_Predictions_latest.md")
+        latest_report_filepath = os.path.join(reports_dir, f"{report_base_name}_latest.md")
 
         report_markdown = []
-        report_markdown.append("# NSE Multi-Agent Stock Analysis & Prediction Report")
+        report_title = "NSE Complete Market Universe Stock Analysis Report" if is_all_nse_run else "NSE Multi-Agent Stock Analysis & Prediction Report"
+        report_markdown.append(f"# {report_title}")
         report_markdown.append(f"**Generated At**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}  ")
         report_markdown.append(f"**Engine**: {ENGINE_LABEL}  ")
+        report_markdown.append(f"**Scope**: {'All NSE Equities (symbols_nse_all.json)' if is_all_nse_run else 'Curated Watchlist (symbols.json)'}  ")
         report_markdown.append(f"**Total Symbols**: {total_symbols}\n")
         report_markdown.append("---")
 

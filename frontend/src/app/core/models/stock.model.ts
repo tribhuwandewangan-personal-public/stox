@@ -147,3 +147,28 @@ export interface MarketBadge {
   state: 'premarket' | 'open' | 'closing' | 'closed';
   text: string;
 }
+
+export interface PatternPick {
+  symbol: string;
+  name: string;
+  sector: string;
+  last_price: number;
+  pattern_name: string;
+  pattern_category: string;
+  direction: 'Bullish' | 'Bearish';
+  action_verdict: 'BUY' | 'ACCUMULATE' | 'HOLD' | 'REDUCE' | 'SELL';
+  confidence_score: number;
+  entry_range: string;
+  target_price: number | null;
+  stop_loss: number | null;
+  upside_pct: number;
+  downside_pct: number;
+  risk_reward: number;
+  sparkline: number[];
+  timestamp: string;
+}
+
+export interface PatternPicksResponse {
+  count: number;
+  picks: PatternPick[];
+}

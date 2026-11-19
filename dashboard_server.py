@@ -38,9 +38,9 @@ from tools.scheduler import Scheduler
 from tools.symbol_search_tools import search_internet_symbols, add_symbol_to_json, remove_symbol_from_json
 from api.services import (
     safe_json_dumps, get_all_stock_data, get_stocks_response_body, get_history_response_body,
-    _load_symbols_list, NaNSafeEncoder, SYNTH_AGENT, TECH_AGENT, HIST_AGENT, NEWS_AGENT,
-    RISK_AGENT, FUND_AGENT, STALE_SYNTH_HOURS, STOCKS_CACHE_SECONDS, _stocks_lock, _stocks_cache,
-    _pattern_memo
+    get_top_pattern_picks, _load_symbols_list, NaNSafeEncoder, SYNTH_AGENT, TECH_AGENT, HIST_AGENT,
+    NEWS_AGENT, RISK_AGENT, FUND_AGENT, STALE_SYNTH_HOURS, STOCKS_CACHE_SECONDS, _stocks_lock,
+    _stocks_cache, _pattern_memo
 )
 from tools import events_bus
 
@@ -487,6 +487,15 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                 body = safe_json_dumps(cached)
             except Exception as e:
                 body = safe_json_dumps({"error": str(e), "stocks": []})
+            self._send_json(200, body)
+            return
+
+        elif path == "/api/patterns/top" or path == "/api/pattern-screener":
+            try:
+                picks = get_top_pattern_picks(cache_mgr, tech_engine)
+                body = safe_json_dumps({"count": len(picks), "picks": picks})
+            except Exception as e:
+                body = safe_json_dumps({"error": str(e), "picks": []})
             self._send_json(200, body)
             return
 

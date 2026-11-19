@@ -10,7 +10,8 @@ import {
   ChartData,
   QuotesResponse,
   SearchResult,
-  QueueStatus
+  QueueStatus,
+  PatternPicksResponse
 } from '../models/stock.model';
 
 const API_BASE = '/api';
@@ -157,6 +158,15 @@ export class ApiService {
    */
   static reAnalyzeStock(symbol: string): Promise<any> {
     return this.triggerAnalysis(symbol);
+  }
+
+  /**
+   * GET /api/patterns/top: Pattern screener — top stocks by chart pattern signals.
+   * Queries all analyzed stocks (not just watchlist).
+   */
+  static getPatternPicks(minUpside: number = 0): Promise<PatternPicksResponse> {
+    const params = minUpside > 0 ? `?min_upside=${minUpside}` : '';
+    return fetchJson<PatternPicksResponse>(`/patterns/top${params}`);
   }
 }
 

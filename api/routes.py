@@ -23,7 +23,7 @@ from tools.web_security import valid_symbol, resolve_within
 from tools.quote_tools import build_quotes_response
 from tools.outcome_tracker import compute_accuracy
 from tools.symbol_search_tools import search_internet_symbols, add_symbol_to_json, remove_symbol_from_json
-from api.services import safe_json_dumps, get_stocks_response_body, get_history_response_body
+from api.services import safe_json_dumps, get_stocks_response_body, get_history_response_body, get_top_pattern_picks
 from api.services import _load_symbols_list
 
 
@@ -372,6 +372,18 @@ async def market_scanner_trigger(request: Request) -> JSONResponse:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 
 
+async def top_patterns(request: Request) -> JSONResponse:
+    """GET /api/patterns/top: High-conviction technical chart patterns across all analyzed stocks."""
+    try:
+        cache_mgr = _managers["cache_mgr"]
+        tech_engine = _managers["tech_engine"]
+        min_upside = float(request.query_params.get("min_upside", 0.0))
+        picks = get_top_pattern_picks(cache_mgr, tech_engine, min_upside=min_upside)
+        return JSONResponse({"count": len(picks), "picks": picks})
+    except Exception as e:
+        return JSONResponse({"error": str(e), "picks": []}, status_code=500)
+
+
 async def favicon(request: Request) -> Response:
     """GET /favicon.ico: Empty response."""
     return Response(status_code=204)
@@ -384,6 +396,8 @@ routes = [
     Route("/api/quotes", endpoint=quotes, methods=["GET"]),
     Route("/api/accuracy", endpoint=accuracy, methods=["GET"]),
     Route("/api/history", endpoint=history, methods=["GET"]),
+    Route("/api/patterns/top", endpoint=top_patterns, methods=["GET"]),
+    Route("/api/pattern-screener", endpoint=top_patterns, methods=["GET"]),
     Route("/api/events", endpoint=events, methods=["GET"]),
     Route("/api/search-symbol", endpoint=search_symbol, methods=["GET"]),
     Route("/api/portfolio", endpoint=portfolio, methods=["GET"]),

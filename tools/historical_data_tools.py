@@ -484,21 +484,38 @@ class HistoricalDataEngine:
 
 def main():
     import argparse
+    from tools.nse_universe import ensure_nse_universe
+    try:
+        from config import ALL_NSE_SYMBOLS_FILE_PATH
+    except ImportError:
+        ALL_NSE_SYMBOLS_FILE_PATH = "symbols_nse_all.json"
+
     parser = argparse.ArgumentParser(description="Reliable Historical Data Sync & Excel Export")
     parser.add_argument("--sync", action="store_true", help="Download/update historical candles from reliable source")
     parser.add_argument("--excel", action="store_true", help="Export historical database to Excel (.xlsx)")
     parser.add_argument("--force", action="store_true", help="Force re-download even if cache is fresh")
+    parser.add_argument("--all-nse", action="store_true", help="Sync all NSE stocks from symbols_nse_all.json")
+    parser.add_argument("--symbols-file", type=str, default="", help="Path to custom symbols JSON file")
     args = parser.parse_args()
 
     engine = HistoricalDataEngine()
 
-    if not os.path.exists(SYMBOLS_FILE_PATH):
-        print(f"Error: {SYMBOLS_FILE_PATH} not found.")
+    if args.all_nse:
+        sym_file = ALL_NSE_SYMBOLS_FILE_PATH
+        if not os.path.exists(sym_file):
+            ensure_nse_universe()
+    elif args.symbols_file:
+        sym_file = args.symbols_file
+    else:
+        sym_file = SYMBOLS_FILE_PATH
+
+    if not os.path.exists(sym_file):
+        print(f"Error: {sym_file} not found.")
         return
 
-    with open(SYMBOLS_FILE_PATH, "r", encoding="utf-8") as f:
+    with open(sym_file, "r", encoding="utf-8") as f:
         symbols_data = json.load(f)
-        symbols = symbols_data.get("symbols", [])
+        symbols = symbols_data.get("symbols", []) if isinstance(symbols_data, dict) else symbols_data
 
     # Default action: sync and export if no flags provided
     do_sync = args.sync or (not args.sync and not args.excel)

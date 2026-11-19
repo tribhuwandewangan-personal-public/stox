@@ -313,3 +313,174 @@ def get_history_response_body(sym: str, days: int, cache_mgr, tech_engine) -> by
             while len(_history_memo) > _HISTORY_MEMO_MAX:
                 _history_memo.popitem(last=False)
     return body
+
+
+# ===================================================================================== Pattern Screener
+def _extract_numeric_val(val: Any) -> Optional[float]:
+    if val is None:
+        return None
+    if isinstance(val, (int, float)):
+        return float(val) if not (isinstance(val, float) and (val != val or val == float('inf') or val == float('-inf'))) else None
+    import re
+    match = re.search(r'([0-9]+\.?[0-9]*)', str(val).replace(',', ''))
+    return float(match.group(1)) if match else None
+
+
+def get_top_pattern_picks(cache_mgr, tech_engine, min_upside: float = 0.0) -> List[Dict[str, Any]]:
+    """
+    Extracts, ranks, and returns all stocks across the database that have confirmed,
+    high-conviction technical chart patterns (e.g. Inverse H&S, Saucer, MA Crossovers,
+    Wyckoff Spring, TTM Squeeze, Bull Flags), sorted by profit upside and Reward:Risk ratio.
+    """
+    import sqlite3
+    from config import ALL_NSE_SYMBOLS_FILE_PATH
+
+    # Build comprehensive symbol metadata lookup from both symbols.json and symbols_nse_all.json
+    sym_meta: Dict[str, Dict[str, str]] = {}
+    for fpath in (ALL_NSE_SYMBOLS_FILE_PATH, SYMBOLS_FILE_PATH):
+        if os.path.exists(fpath):
+            try:
+                with open(fpath, "r", encoding="utf-8") as f:
+                    s_data = json.load(f)
+                    items = s_data.get("symbols", []) if isinstance(s_data, dict) else s_data
+                    for item in items:
+                        k = (item.get("symbol") or "").upper().strip()
+                        if k and k not in sym_meta:
+                            sym_meta[k] = {
+                                "name": item.get("name") or k,
+                                "sector": item.get("sector") or "Indian Equities"
+                            }
+            except Exception:
+                pass
+
+    quotes = cache_mgr.get_all_quotes()
+
+    # Query latest synthesizer outputs across all analyzed stocks
+    picks: List[Dict[str, Any]] = []
+    try:
+        conn = sqlite3.connect(cache_mgr.db_path)
+        c = conn.cursor()
+        c.execute("""
+            SELECT a.symbol, a.output_data, a.timestamp
+            FROM agent_runs_cache a
+            INNER JOIN (
+                SELECT symbol, MAX(timestamp) as max_ts
+                FROM agent_runs_cache
+                WHERE agent_name = 'Master Prediction Synthesizer Agent'
+                GROUP BY symbol
+            ) latest ON a.symbol = latest.symbol AND a.timestamp = latest.max_ts
+            WHERE a.agent_name = 'Master Prediction Synthesizer Agent'
+        """)
+        rows = c.fetchall()
+        conn.close()
+    except Exception as e:
+        print(f"⚠️ [Pattern Screener] Query error: {e}", flush=True)
+        return []
+
+    for sym, out_str, ts in rows:
+        sym_clean = sym.upper().strip()
+        try:
+            data = json.loads(out_str)
+        except Exception:
+            continue
+
+        sig = data.get("structured_signal", {})
+        pattern_str = sig.get("chart_patterns") or ""
+        if not pattern_str or pattern_str == "N/A":
+            continue
+
+        verdict = str(sig.get("action_verdict", "HOLD")).upper()
+        conf_score = _extract_numeric_val(sig.get("confidence_score") or sig.get("confidence_percentage")) or 70.0
+
+        # Prices & targets
+        raw_lp = _extract_numeric_val(data.get("last_price"))
+        quote_lp = quotes.get(sym_clean, {}).get("ltp")
+        last_price = quote_lp or raw_lp
+
+        target_price = _extract_numeric_val(sig.get("when_to_sell_target")) or _extract_numeric_val(sig.get("target_num"))
+        entry_raw = sig.get("when_to_buy_entry") or "Near current levels"
+        entry_val = _extract_numeric_val(entry_raw) or last_price
+        stop_loss = _extract_numeric_val(sig.get("stop_loss")) or _extract_numeric_val(sig.get("stop_num"))
+
+        # Fallback price from candles if quote missing
+        sparkline = []
+        try:
+            candles = cache_mgr.get_cached_candles(sym_clean, limit_days=25)
+            if candles:
+                sparkline = [round(float(c.get("CLOSE_PRICE", 0)), 2) for c in candles]
+                if not last_price and sparkline:
+                    last_price = sparkline[-1]
+        except Exception:
+            sparkline = []
+
+        if not last_price or last_price <= 0:
+            continue
+
+        # Expected Profit Upside %
+        if target_price and target_price > last_price:
+            upside_pct = round(((target_price - last_price) / last_price) * 100, 2)
+        else:
+            upside_pct = 0.0
+
+        # Downside Risk %
+        if stop_loss and stop_loss < last_price:
+            downside_pct = round(((last_price - stop_loss) / last_price) * 100, 2)
+        else:
+            downside_pct = 4.0  # conservative 4% assumption
+
+        # Reward to Risk ratio
+        if downside_pct > 0 and upside_pct > 0:
+            rr_ratio = round(upside_pct / downside_pct, 2)
+        else:
+            rr_ratio = _extract_numeric_val(sig.get("reward_to_risk_ratio")) or 1.5
+
+        if upside_pct < min_upside and min_upside > 0:
+            continue
+
+        # Meta
+        meta = sym_meta.get(sym_clean, {"name": sym_clean, "sector": "Indian Equities"})
+
+        # Classify pattern category for intuitive frontend filtering
+        p_lower = pattern_str.lower()
+        if "cross" in p_lower or "moving average" in p_lower:
+            category = "Moving Average"
+        elif "saucer" in p_lower or "rounding bottom" in p_lower or "cup" in p_lower:
+            category = "Accumulation & Cup"
+        elif "head" in p_lower or "shoulder" in p_lower or "wyckoff" in p_lower or "double" in p_lower:
+            category = "Reversal"
+        elif "flag" in p_lower or "pennant" in p_lower or "triangle" in p_lower or "squeeze" in p_lower:
+            category = "Breakout & Continuation"
+        elif "star" in p_lower or "engulfing" in p_lower or "candle" in p_lower:
+            category = "Candlestick"
+        else:
+            category = "Classical Chart"
+
+        picks.append({
+            "symbol": sym_clean,
+            "name": meta["name"],
+            "sector": meta["sector"],
+            "last_price": round(last_price, 2),
+            "pattern_name": pattern_str,
+            "pattern_category": category,
+            "direction": "Bullish" if ("bull" in p_lower or "golden" in p_lower or "inverse" in p_lower or "bottom" in p_lower or "spring" in p_lower or upside_pct > 0) else "Bearish",
+            "action_verdict": verdict,
+            "confidence_score": conf_score,
+            "entry_range": entry_raw,
+            "target_price": round(target_price, 2) if target_price else None,
+            "stop_loss": round(stop_loss, 2) if stop_loss else None,
+            "upside_pct": upside_pct,
+            "downside_pct": round(downside_pct, 2),
+            "risk_reward": rr_ratio,
+            "sparkline": sparkline,
+            "timestamp": ts[:10] if ts else ""
+        })
+
+    # Sort descending by: Bullish actionable verdicts first, then Reward:Risk ratio, then Upside %
+    picks.sort(key=lambda x: (
+        x["action_verdict"] in ("BUY", "ACCUMULATE"),
+        x["upside_pct"] > 0,
+        x["risk_reward"],
+        x["upside_pct"]
+    ), reverse=True)
+
+    return picks
