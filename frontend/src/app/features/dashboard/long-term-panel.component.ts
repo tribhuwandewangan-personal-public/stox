@@ -26,10 +26,18 @@ import { fmtPrice } from '../../core/utils/price';
           </div>
 
           <!-- Target -->
-          @if (signal.long_term_target) {
+          @if (targetDisplay) {
             <div class="metric">
               <span class="label">Price Target</span>
-              <span class="value">{{ fmtPrice(signal.long_term_target) }}</span>
+              <span class="value">{{ targetDisplay }} <strong style="color:var(--accent-green);" *ngIf="signal.long_term_upside_pct">({{ signal.long_term_upside_pct }})</strong></span>
+            </div>
+          }
+
+          <!-- Moat -->
+          @if (signal.long_term_moat) {
+            <div class="metric">
+              <span class="label">Competitive Moat</span>
+              <span class="value">{{ signal.long_term_moat }}</span>
             </div>
           }
 
@@ -157,6 +165,14 @@ export class LongTermPanelComponent {
   @Input() signal: LongTermSignal | null = null;
 
   fmtPrice = fmtPrice;
+
+  get targetDisplay(): string | null {
+    if (!this.signal?.long_term_target) return null;
+    if (typeof this.signal.long_term_target === 'string') {
+      return this.signal.long_term_target.startsWith('Rs.') ? this.signal.long_term_target : `Rs. ${this.signal.long_term_target}`;
+    }
+    return fmtPrice(this.signal.long_term_target);
+  }
 
   get verdictColor(): string {
     if (!this.signal?.long_term_verdict) return 'var(--text-muted)';

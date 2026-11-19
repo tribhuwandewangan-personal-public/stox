@@ -7,12 +7,15 @@ import { Stock } from '../models/stock.model';
 import { signal, computed } from '@angular/core';
 import { verdictToBucket, VerdictBucket, getStockBucket } from '../utils/verdict';
 
+export type HorizonStrategy = 'ALL' | 'SHORT' | 'LONG';
+
 interface StocksStoreState {
   stocks: Stock[];
   loading: boolean;
   error: string | null;
   lastUpdated: Date | null;
   selectedSymbol: string | null;
+  horizonStrategy: HorizonStrategy;
   filter: {
     sector: string | null;
     verdict: VerdictBucket | null;
@@ -26,6 +29,7 @@ const initialState: StocksStoreState = {
   error: null,
   lastUpdated: null,
   selectedSymbol: null,
+  horizonStrategy: 'ALL',
   filter: {
     sector: null,
     verdict: null,
@@ -41,7 +45,32 @@ class StocksStore {
   loading = computed(() => this.state().loading);
   error = computed(() => this.state().error);
   selectedSymbol = computed(() => this.state().selectedSymbol);
+  horizonStrategy = computed(() => this.state().horizonStrategy);
   filter = computed(() => this.state().filter);
+
+  // Derived computations
+  horizonCounts = computed(() => {
+    const stocks = this.state().stocks;
+    let shortCount = 0;
+    let longCount = 0;
+
+    for (const s of stocks) {
+      const v = (s.synth_output?.structured_signal?.action_verdict || '').toUpperCase();
+      if (v.includes('BUY') || v.includes('ACCUMULATE')) {
+        shortCount++;
+      }
+      const lt = s.long_term_signal || s.synth_output?.structured_signal?.long_term_signal;
+      if (lt?.is_top_wealth_pick) {
+        longCount++;
+      }
+    }
+
+    return {
+      all: stocks.length,
+      short: shortCount,
+      long: longCount
+    };
+  });
 
   // Derived computations
   sectors = computed(() => {
@@ -71,8 +100,21 @@ class StocksStore {
    * Filtered and sorted stocks based on current filter state.
    */
   filteredStocks = computed(() => {
-    const { filter, stocks } = this.state();
+    const { filter, stocks, horizonStrategy } = this.state();
     let result = [...stocks];
+
+    // Filter by Horizon Strategy (ALL, SHORT, LONG)
+    if (horizonStrategy === 'SHORT') {
+      result = result.filter(s => {
+        const v = (s.synth_output?.structured_signal?.action_verdict || '').toUpperCase();
+        return v.includes('BUY') || v.includes('ACCUMULATE');
+      });
+    } else if (horizonStrategy === 'LONG') {
+      result = result.filter(s => {
+        const lt = s.long_term_signal || s.synth_output?.structured_signal?.long_term_signal;
+        return !!lt?.is_top_wealth_pick;
+      });
+    }
 
     // Filter by sector
     if (filter.sector) {
@@ -152,6 +194,10 @@ class StocksStore {
 
   selectSymbol(symbol: string | null): void {
     this.updateState(s => ({ ...s, selectedSymbol: symbol }));
+  }
+
+  setHorizonStrategy(horizonStrategy: HorizonStrategy): void {
+    this.updateState(s => ({ ...s, horizonStrategy }));
   }
 
   setSectorFilter(sector: string | null): void {

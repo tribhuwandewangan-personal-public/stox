@@ -162,16 +162,59 @@ export class EventsPanelComponent {
   @Input() events: EventsData = {};
 
   get macroCatalysts(): string[] {
-    return this.events?.upcoming_macro_catalysts || [];
+    const catalysts = this.events?.upcoming_macro_catalysts || [];
+    return catalysts.map(c => {
+      if (typeof c === 'string') return c;
+      if (c && typeof c === 'object') {
+        const name = c.event_name || c.name || '';
+        const date = c.date ? ` (${c.date})` : '';
+        const note = c.note ? `: ${c.note}` : '';
+        return `${name}${date}${note}`.trim();
+      }
+      return String(c);
+    }).filter(Boolean);
   }
 
   get eventsList(): Array<{ name: string; emoji: string; date?: string }> {
+    const list: Array<{ name: string; emoji: string; date?: string }> = [];
+
+    if (this.events?.earnings_date) {
+      list.push({
+        name: `Quarterly Results (${this.events.earnings_quarter || 'Earnings'})`,
+        emoji: '📊',
+        date: this.events.earnings_date
+      });
+    }
+
+    if (this.events?.dividend_amount && this.events.dividend_amount !== 'N/A') {
+      list.push({
+        name: `Dividend: ${this.events.dividend_amount}`,
+        emoji: '💰',
+        date: this.events.dividend_ex_date || undefined
+      });
+    }
+
+    if (this.events?.corporate_action) {
+      list.push({
+        name: this.events.corporate_action,
+        emoji: '📢'
+      });
+    }
+
     const events = this.events?.upcoming_events || {};
-    return Object.entries(events).map(([name, details]: [string, any]) => ({
-      name,
-      emoji: this.getEmojiForEvent(name),
-      date: details?.date || undefined
-    }));
+    if (typeof events === 'object') {
+      for (const [name, details] of Object.entries(events)) {
+        const d = details as any;
+        const dateStr = typeof d === 'string' ? d : (d?.date || undefined);
+        list.push({
+          name,
+          emoji: this.getEmojiForEvent(name),
+          date: dateStr
+        });
+      }
+    }
+
+    return list;
   }
 
   get hasMacroCatalysts(): boolean {
@@ -179,7 +222,7 @@ export class EventsPanelComponent {
   }
 
   get hasEvents(): boolean {
-    return Object.keys(this.events?.upcoming_events || {}).length > 0;
+    return this.eventsList.length > 0;
   }
 
   private getEmojiForEvent(eventName: string): string {

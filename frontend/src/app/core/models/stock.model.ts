@@ -27,17 +27,27 @@ export interface SynthOutput {
 export interface StructuredSignal {
   action_verdict: 'BUY' | 'ACCUMULATE' | 'HOLD' | 'REDUCE' | 'SELL';
   confidence_score: number;
+  confidence_rating?: string;
+  confidence_percentage?: number;
+  when_to_buy_entry?: string;
+  when_to_sell_target?: string;
+  short_term_target?: string;
+  short_term_horizon?: string;
+  stop_loss?: string;
+  risk_reward_ratio?: string;
+  holding_horizon?: string;
   entry_low?: number;
   entry_high?: number;
   target_num?: number;
   stop_num?: number;
-  when_to_sell_target?: string;
-  stop_loss?: string;
   long_term_signal?: LongTermSignal;
-  long_term_target?: number;
+  long_term_target?: number | string;
   long_term_verdict?: string;
   long_term_horizon?: string;
   suggested_long_term_peers?: string[];
+  key_rationale?: string;
+  actionable_recommendation?: string;
+  evidence_score?: number;
 }
 
 export interface TechOutput {
@@ -49,8 +59,20 @@ export interface TechOutput {
 
 export interface PatternResult {
   name: string;
-  score: number;
-  bearish: boolean;
+  category?: string;
+  type?: string;
+  direction?: 'Bullish' | 'Bearish' | 'Neutral';
+  quality_score?: number;
+  score?: number;
+  bearish?: boolean;
+  significance?: string;
+  confidence?: string;
+  status?: string;
+  entry_trigger?: number;
+  target_price?: number;
+  stop_loss?: number;
+  risk_reward_ratio?: number;
+  description?: string;
 }
 
 export interface PriceInfo {
@@ -58,19 +80,37 @@ export interface PriceInfo {
   change_pct: number | null;
   prev_close: number | null;
   source: 'quote' | 'close' | 'analysis' | 'unknown';
-  as_of_date: string | null;
+  as_of?: string | null;
+  as_of_date?: string | null;
+  analysis_price?: number | null;
+  analysis_as_of?: string | null;
+  drift_pct?: number | null;
 }
 
 export interface EventsData {
-  upcoming_macro_catalysts?: string[];
+  symbol?: string;
+  earnings_date?: string | null;
+  earnings_quarter?: string | null;
+  dividend_ex_date?: string | null;
+  dividend_amount?: string | null;
+  corporate_action?: string | null;
+  impact?: string;
+  source?: string;
+  upcoming_macro_catalysts?: any[];
   upcoming_events?: any;
 }
 
 export interface LongTermSignal {
-  long_term_target: number | null;
+  symbol?: string;
+  long_term_target: number | string | null;
+  long_term_target_num?: number | null;
+  long_term_upside_pct?: string | null;
   long_term_verdict: string;
-  long_term_horizon: string;
-  suggested_long_term_peers: string[];
+  long_term_horizon?: string;
+  long_term_moat?: string | null;
+  long_term_thesis?: string | null;
+  suggested_long_term_peers?: string[];
+  is_top_wealth_pick?: boolean;
 }
 
 export interface Quote {

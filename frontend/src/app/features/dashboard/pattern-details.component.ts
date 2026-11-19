@@ -17,16 +17,25 @@ import { PatternResult } from '../../core/models/stock.model';
       @if (patterns.length > 0) {
         <div class="pattern-list">
           @for (pattern of patterns; track pattern.name) {
-            <div class="pattern-item" [class.bearish]="pattern.bearish">
+            <div class="pattern-item" [class.bearish]="isBearish(pattern)">
               <div class="pattern-header">
-                <span class="pattern-name">{{ pattern.name }}</span>
-                <span class="pattern-icon">{{ pattern.bearish ? '📉' : '📈' }}</span>
+                <div class="name-box">
+                  <span class="pattern-name">{{ pattern.name }}</span>
+                  <span class="pattern-type" *ngIf="pattern.type">{{ pattern.type }}</span>
+                </div>
+                <span class="pattern-icon">{{ isBearish(pattern) ? '📉' : '📈' }}</span>
               </div>
               <div class="pattern-score">
                 <div class="score-bar">
-                  <div class="score-fill" [style.width.%]="pattern.score * 100"></div>
+                  <div class="score-fill" [style.width.%]="getScorePercent(pattern)"></div>
                 </div>
-                <span class="score-text">{{ (pattern.score * 100).toFixed(0) }}%</span>
+                <span class="score-text">{{ getScorePercent(pattern) }}%</span>
+              </div>
+              <p class="pattern-desc" *ngIf="pattern.description">{{ pattern.description }}</p>
+              <div class="pattern-levels" *ngIf="pattern.target_price || pattern.stop_loss">
+                <span *ngIf="pattern.target_price">Target: <strong class="accent-green">Rs. {{ pattern.target_price }}</strong></span>
+                <span *ngIf="pattern.stop_loss">SL: <strong class="accent-red">Rs. {{ pattern.stop_loss }}</strong></span>
+                <span *ngIf="pattern.risk_reward_ratio">R:R: <strong>{{ pattern.risk_reward_ratio }}</strong></span>
               </div>
             </div>
           }
@@ -127,6 +136,36 @@ import { PatternResult } from '../../core/models/stock.model';
       text-align: right;
     }
 
+    .name-box {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .pattern-type {
+      font-size: 10px;
+      color: #94a3b8;
+      background: rgba(255, 255, 255, 0.05);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+    .pattern-desc {
+      font-size: 11px;
+      color: #cbd5e1;
+      margin: 4px 0 2px 0;
+      line-height: 1.35;
+    }
+    .pattern-levels {
+      display: flex;
+      gap: 10px;
+      font-size: 10px;
+      color: #94a3b8;
+      margin-top: 2px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .accent-green { color: #10b981; }
+    .accent-red   { color: #ef4444; }
+
     .no-data {
       text-align: center;
       padding: 20px 12px;
@@ -147,4 +186,15 @@ import { PatternResult } from '../../core/models/stock.model';
 })
 export class PatternDetailsComponent {
   @Input() patterns: PatternResult[] = [];
+
+  isBearish(p: PatternResult): boolean {
+    if (p.direction) return p.direction === 'Bearish';
+    return !!p.bearish;
+  }
+
+  getScorePercent(p: PatternResult): number {
+    if (p.quality_score != null) return Math.round(p.quality_score);
+    if (p.score != null) return Math.round(p.score * (p.score <= 1 ? 100 : 1));
+    return 70;
+  }
 }
