@@ -107,12 +107,26 @@ export interface ChartData {
 }
 
 export interface Candle {
-  DATE: string;
-  OPEN_PRICE: number;
-  HIGH_PRICE: number;
-  LOW_PRICE: number;
-  CLOSE_PRICE: number;
-  VOLUME: number;
+  DATE?: string;
+  OPEN_PRICE?: number;
+  HIGH_PRICE?: number;
+  LOW_PRICE?: number;
+  CLOSE_PRICE?: number;
+  VOLUME?: number;
+
+  date?: string;
+  open?: number;
+  high?: number;
+  low?: number;
+  close?: number;
+  volume?: number;
+  sma_20?: number | null;
+  sma_50?: number | null;
+  sma_200?: number | null;
+  bb_upper?: number | null;
+  bb_middle?: number | null;
+  bb_lower?: number | null;
+  rsi?: number | null;
 }
 
 export interface SearchResult {

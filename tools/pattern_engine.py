@@ -1349,6 +1349,129 @@ class QuantitativePatternEngine:
 
         return patterns
 
+    # Pattern 12: Moving Average Crossovers & Trend Regimes (Golden Cross, Death Cross, 20/50 Cross)
+    @classmethod
+    def detect_ma_crossover_patterns(cls, df: pd.DataFrame) -> List[Dict[str, Any]]:
+        patterns = []
+        if len(df) < 25:
+            return patterns
+
+        close = df['CLOSE_PRICE']
+        sma_20 = close.rolling(window=20).mean()
+        sma_50 = close.rolling(window=50).mean()
+        sma_200 = close.rolling(window=200).mean() if len(close) >= 200 else None
+
+        last_p = float(close.iloc[-1])
+
+        # Scan recent 7 bars for 20/50 crossover
+        for offset in range(1, min(8, len(df))):
+            idx_curr = -offset
+            idx_prev = -offset - 1
+            if abs(idx_prev) > len(sma_50) or pd.isna(sma_50.iloc[idx_prev]) or pd.isna(sma_20.iloc[idx_prev]):
+                continue
+
+            prev_diff = sma_20.iloc[idx_prev] - sma_50.iloc[idx_prev]
+            curr_diff = sma_20.iloc[idx_curr] - sma_50.iloc[idx_curr]
+
+            # Bullish 20/50 Cross
+            if prev_diff <= 0 and curr_diff > 0:
+                bars_ago = offset - 1
+                bars_text = "current bar" if bars_ago == 0 else f"{bars_ago} bars ago"
+                patterns.append({
+                    "name": "Bullish MA Crossover (20/50)",
+                    "category": "Moving Average",
+                    "type": "Bullish Trend Crossover",
+                    "direction": "Bullish",
+                    "quality_score": 86 if bars_ago <= 1 else 78,
+                    "significance": "High",
+                    "confidence": "High",
+                    "status": "Confirmed",
+                    "entry_trigger": round(last_p, 2),
+                    "target_price": round(last_p * 1.08, 2),
+                    "stop_loss": round(float(sma_50.iloc[-1] * 0.98), 2),
+                    "risk_reward_ratio": 2.2,
+                    "description": f"Fast 20-day SMA crossed above 50-day SMA ({bars_text}), confirming an active intermediate bullish trend.",
+                    "key_levels": {"sma_20": round(float(sma_20.iloc[-1]), 2), "sma_50": round(float(sma_50.iloc[-1]), 2)},
+                    "metrics": {"bars_ago": bars_ago, "crossover": "bullish_20_50"}
+                })
+                break
+
+            # Bearish 20/50 Cross
+            elif prev_diff >= 0 and curr_diff < 0:
+                bars_ago = offset - 1
+                bars_text = "current bar" if bars_ago == 0 else f"{bars_ago} bars ago"
+                patterns.append({
+                    "name": "Bearish MA Crossover (20/50)",
+                    "category": "Moving Average",
+                    "type": "Bearish Trend Crossover",
+                    "direction": "Bearish",
+                    "quality_score": 86 if bars_ago <= 1 else 78,
+                    "significance": "High",
+                    "confidence": "High",
+                    "status": "Confirmed",
+                    "entry_trigger": round(last_p, 2),
+                    "target_price": round(last_p * 0.92, 2),
+                    "stop_loss": round(float(sma_50.iloc[-1] * 1.02), 2),
+                    "risk_reward_ratio": 2.0,
+                    "description": f"Fast 20-day SMA crossed below 50-day SMA ({bars_text}), confirming an active intermediate bearish breakdown.",
+                    "key_levels": {"sma_20": round(float(sma_20.iloc[-1]), 2), "sma_50": round(float(sma_50.iloc[-1]), 2)},
+                    "metrics": {"bars_ago": bars_ago, "crossover": "bearish_20_50"}
+                })
+                break
+
+        # Check Golden Cross / Death Cross (50/200) if 200 bars are available
+        if sma_200 is not None:
+            for offset in range(1, min(11, len(df))):
+                idx_curr = -offset
+                idx_prev = -offset - 1
+                if abs(idx_prev) > len(sma_200) or pd.isna(sma_200.iloc[idx_prev]) or pd.isna(sma_50.iloc[idx_prev]):
+                    continue
+                prev_diff = sma_50.iloc[idx_prev] - sma_200.iloc[idx_prev]
+                curr_diff = sma_50.iloc[idx_curr] - sma_200.iloc[idx_curr]
+
+                if prev_diff <= 0 and curr_diff > 0:
+                    bars_ago = offset - 1
+                    patterns.append({
+                        "name": "Golden Cross (50/200 MA)",
+                        "category": "Moving Average",
+                        "type": "Major Bullish Long-Term Trend",
+                        "direction": "Bullish",
+                        "quality_score": 92,
+                        "significance": "Very High",
+                        "confidence": "High",
+                        "status": "Confirmed",
+                        "entry_trigger": round(last_p, 2),
+                        "target_price": round(last_p * 1.15, 2),
+                        "stop_loss": round(float(sma_200.iloc[-1] * 0.97), 2),
+                        "risk_reward_ratio": 2.8,
+                        "description": f"Major institutional Golden Cross: 50-day SMA crossed above 200-day SMA ({bars_ago} bars ago).",
+                        "key_levels": {"sma_50": round(float(sma_50.iloc[-1]), 2), "sma_200": round(float(sma_200.iloc[-1]), 2)},
+                        "metrics": {"bars_ago": bars_ago, "crossover": "golden_cross"}
+                    })
+                    break
+                elif prev_diff >= 0 and curr_diff < 0:
+                    bars_ago = offset - 1
+                    patterns.append({
+                        "name": "Death Cross (50/200 MA)",
+                        "category": "Moving Average",
+                        "type": "Major Bearish Long-Term Breakdown",
+                        "direction": "Bearish",
+                        "quality_score": 92,
+                        "significance": "Very High",
+                        "confidence": "High",
+                        "status": "Confirmed",
+                        "entry_trigger": round(last_p, 2),
+                        "target_price": round(last_p * 0.85, 2),
+                        "stop_loss": round(float(sma_200.iloc[-1] * 1.03), 2),
+                        "risk_reward_ratio": 2.5,
+                        "description": f"Major institutional Death Cross: 50-day SMA crossed below 200-day SMA ({bars_ago} bars ago).",
+                        "key_levels": {"sma_50": round(float(sma_50.iloc[-1]), 2), "sma_200": round(float(sma_200.iloc[-1]), 2)},
+                        "metrics": {"bars_ago": bars_ago, "crossover": "death_cross"}
+                    })
+                    break
+
+        return patterns
+
     # =========================================================================
     # Master Scanner
     # =========================================================================
@@ -1375,6 +1498,7 @@ class QuantitativePatternEngine:
         all_detected.extend(self.detect_triangles(df_calc, swings))
         all_detected.extend(self.detect_double_patterns(df_calc, swings))
         all_detected.extend(self.detect_candlestick_patterns(df_calc))
+        all_detected.extend(self.detect_ma_crossover_patterns(df_calc))
 
         # Smart conflict resolution for directly opposing reversal patterns
         # 1. H&S vs Inverse H&S: Keep only the higher conviction pattern

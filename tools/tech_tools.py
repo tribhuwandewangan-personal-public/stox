@@ -385,6 +385,7 @@ class TechnicalAnalysisEngine:
                 "volume": int(row.get('VOLUME', 0)),
                 "sma_20": round(float(row['SMA_20']), 2) if pd.notna(row.get('SMA_20')) else None,
                 "sma_50": round(float(row['SMA_50']), 2) if pd.notna(row.get('SMA_50')) else None,
+                "sma_200": round(float(row['SMA_200']), 2) if pd.notna(row.get('SMA_200')) else None,
                 "bb_upper": round(float(row['BB_UPPER']), 2) if pd.notna(row.get('BB_UPPER')) else None,
                 "bb_middle": round(float(row['SMA_20']), 2) if pd.notna(row.get('SMA_20')) else None,
                 "bb_lower": round(float(row['BB_LOWER']), 2) if pd.notna(row.get('BB_LOWER')) else None,
