@@ -455,14 +455,22 @@ class HistoricalDataEngine:
 
         return results
 
-    def export_to_excel(self, symbols: List[Dict[str, Any]], excel_path: str = HISTORICAL_EXCEL_PATH) -> str:
+    def export_to_excel(self, symbols: List[Dict[str, Any]], excel_path: str = HISTORICAL_EXCEL_PATH, max_individual_sheets: int = 50) -> str:
         """
-        Exports the synchronized historical data to a rich Excel workbook (.xlsx).
+        Exports synchronized historical data to an Excel workbook (.xlsx).
         - Sheet 1: Master Summary (All stocks with 52W H/L, Returns, Surge, Volume)
-        - Dedicated Sheets: Per stock OHLCV history with indicators
+        - Dedicated Sheets: Per stock OHLCV history with indicators only for smaller watchlists
+          (or up to `max_individual_sheets` symbols). For large universes (e.g. 2,400 NSE stocks),
+          individual 500-day candle sheets are omitted to keep the file lightweight (~1 MB)
+          and generation fast, while SQLite preserves the complete candle database.
         """
         os.makedirs(os.path.dirname(excel_path), exist_ok=True)
-        print(f"\n📊 Exporting historical market data to Excel: {excel_path}...")
+        total_syms = len(symbols)
+        include_detail_sheets = total_syms <= max_individual_sheets
+        print(f"\n📊 Exporting historical market data for {total_syms} stocks to Excel: {excel_path}...")
+        if not include_detail_sheets:
+            print(f"ℹ️ Large universe detected ({total_syms} stocks > {max_individual_sheets}). "
+                  f"Writing comprehensive Master Summary sheet. Full OHLCV history preserved in SQLite.")
 
         summary_rows = []
         stock_dfs = {}
@@ -473,22 +481,23 @@ class HistoricalDataEngine:
             sector = item.get("sector", "")
             
             summary = self.get_historical_summary(sym)
-            df = self.load_symbol_history(sym, limit_days=500)
             
-            if not df.empty:
-                df_export = df.copy()
-                df_export['Date'] = df_export['DATE'].dt.strftime('%Y-%m-%d')
-                df_export['Open'] = df_export['OPEN_PRICE'].round(2)
-                df_export['High'] = df_export['HIGH_PRICE'].round(2)
-                df_export['Low'] = df_export['LOW_PRICE'].round(2)
-                df_export['Close'] = df_export['CLOSE_PRICE'].round(2)
-                df_export['Volume'] = df_export['VOLUME']
-                df_export['Daily_Return_Pct'] = (df_export['Close'].pct_change() * 100).round(2)
-                df_export['SMA_50'] = df_export['Close'].rolling(50).mean().round(2)
-                df_export['SMA_200'] = df_export['Close'].rolling(200).mean().round(2)
-                
-                export_cols = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'Daily_Return_Pct', 'SMA_50', 'SMA_200']
-                stock_dfs[sym] = df_export[export_cols].sort_values('Date', ascending=False)
+            if include_detail_sheets:
+                df = self.load_symbol_history(sym, limit_days=500)
+                if not df.empty:
+                    df_export = df.copy()
+                    df_export['Date'] = df_export['DATE'].dt.strftime('%Y-%m-%d')
+                    df_export['Open'] = df_export['OPEN_PRICE'].round(2)
+                    df_export['High'] = df_export['HIGH_PRICE'].round(2)
+                    df_export['Low'] = df_export['LOW_PRICE'].round(2)
+                    df_export['Close'] = df_export['CLOSE_PRICE'].round(2)
+                    df_export['Volume'] = df_export['VOLUME']
+                    df_export['Daily_Return_Pct'] = (df_export['Close'].pct_change() * 100).round(2)
+                    df_export['SMA_50'] = df_export['Close'].rolling(50).mean().round(2)
+                    df_export['SMA_200'] = df_export['Close'].rolling(200).mean().round(2)
+                    
+                    export_cols = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'Daily_Return_Pct', 'SMA_50', 'SMA_200']
+                    stock_dfs[sym] = df_export[export_cols].sort_values('Date', ascending=False)
 
             summary_rows.append({
                 "Symbol": sym,
@@ -513,12 +522,15 @@ class HistoricalDataEngine:
             # 1. Master Summary Sheet
             df_summary.to_excel(writer, sheet_name="Market_Summary", index=False)
             
-            # 2. Individual Stock Sheets (truncated sheet names if >31 chars)
+            # 2. Individual Stock Sheets (if applicable)
             for sym, df_stock in stock_dfs.items():
                 sheet_name = sym[:31]
                 df_stock.to_excel(writer, sheet_name=sheet_name, index=False)
 
-        print(f"✅ Excel export successfully created with {len(stock_dfs)} stock worksheets!")
+        if include_detail_sheets:
+            print(f"✅ Excel export successfully created with Market_Summary + {len(stock_dfs)} stock detail worksheets!")
+        else:
+            print(f"✅ Excel summary successfully created: {excel_path} ({len(df_summary)} stocks, 1 sheet)")
         return excel_path
 
 
@@ -537,6 +549,7 @@ def main():
     parser.add_argument("--all-nse", action="store_true", help="Sync all NSE stocks from symbols_nse_all.json")
     parser.add_argument("--symbols-file", type=str, default="", help="Path to custom symbols JSON file")
     parser.add_argument("--report-failures", action="store_true", help="Show ticker failure tracker summary + unavailable symbols")
+    parser.add_argument("--max-sheets", type=int, default=50, help="Max individual stock sheets in Excel export (default: 50)")
     args = parser.parse_args()
 
     engine = HistoricalDataEngine()
@@ -584,7 +597,7 @@ def main():
         engine.sync_all_symbols(symbols, force=args.force)
 
     if do_excel:
-        engine.export_to_excel(symbols)
+        engine.export_to_excel(symbols, max_individual_sheets=args.max_sheets)
 
 
 if __name__ == "__main__":
