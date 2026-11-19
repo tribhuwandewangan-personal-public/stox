@@ -1,6 +1,6 @@
 {
   "description": "List of NSE stock symbols for multi-agent RAG analysis and prediction",
-  "updated_at": "2026-11-15",
+  "updated_at": "2026-11-19",
   "default_timeframe_days": 1825,
   "symbols": [
     {
@@ -366,9 +366,9 @@
       "exchange": "NSE"
     },
     {
-      "symbol": "TATAELEXI",
-      "name": "TATAELEXI Limited",
-      "sector": "Indian Equities",
+      "symbol": "TATAELXSI",
+      "name": "Tata Elxsi Limited",
+      "sector": "Technology",
       "exchange": "NSE"
     },
     {
@@ -393,6 +393,30 @@
       "symbol": "RADICO",
       "name": "RADICO KHAITAN LTD",
       "sector": "Consumer Defensive",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "LTFOODS",
+      "name": "LT FOODS LIMITED",
+      "sector": "Consumer Defensive",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "HSCL",
+      "name": "HIMADRI SPECIALITY CHEM L",
+      "sector": "Basic Materials",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "NETWEB",
+      "name": "NETWEB TECH INDIA LTD",
+      "sector": "Technology",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "WABAG",
+      "name": "VA TECH WABAG LTD",
+      "sector": "Industrials",
       "exchange": "NSE"
     }
   ]

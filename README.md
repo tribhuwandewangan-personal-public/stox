@@ -1,5 +1,16 @@
 # NSE-Data-bank & Multi-Agent Stock Predictor
 
+> [!CAUTION]
+> ### ⚠️ Regulatory & Legal Disclaimer — Strictly For Educational Use
+> **"Investments in securities market are subject to market risks. Read all the related documents carefully before investing."**
+>
+> - **NOT SEBI REGISTERED**: The author(s), maintainer(s), and contributors are **NOT** registered with the Securities and Exchange Board of India (SEBI) as Research Analysts (under SEBI Research Analysts Regulations, 2014) or Investment Advisers (under SEBI Investment Advisers Regulations, 2013).
+> - **LEARNING PROJECT ONLY**: This repository is an open-source technical proof-of-concept exploring multi-agent rule-based systems and quantitative software engineering. **It is NOT intended for, and must NOT be used for, live trading, investment execution, or financial speculation.**
+> - **NO FINANCIAL ADVICE**: No output (scores, verdicts, price targets, stop losses, or confidence levels) constitutes investment advice, stock tips, or a recommendation to buy/sell securities.
+> - **ZERO LIABILITY**: The creators assume zero liability for any financial losses or damages resulting from the use of or reliance on this software.
+>
+> 👉 **Read the full statutory disclosure in [DISCLAIMER.md](DISCLAIMER.md).**
+
 This repository contains corporate-action adjusted historical stock market data paired with a zero-cost, **fully deterministic multi-agent stock analysis system** (rule-based, **no LLM**, no API keys). Historical data is automatically synced to SQLite (`storage/cache.db`) and exported to Excel ([`reports/NSE_Historical_Data.xlsx`](file:///c:/Users/tdewa/Documents/LearnPython/NSE-Data-bank/reports/NSE_Historical_Data.xlsx)).
 
 ---
@@ -117,3 +128,15 @@ All parsed metrics, news, macro sentiment, and agent reports are stored incremen
 ```bash
 python -m unittest discover -s tests -v
 ```
+
+---
+
+## ⚖️ Legal & SEBI Statutory Disclaimer
+
+1. **Not a SEBI Registered Entity**: The author(s) and contributors are not registered with SEBI under SEBI (Research Analysts) Regulations, 2014, or SEBI (Investment Advisers) Regulations, 2013.
+2. **Educational / Academic Project**: This software is an experimental prototype demonstrating agent orchestration, technical indicators, and data caching algorithms. It should not be used as the basis for any real-world trading or investment decisions.
+3. **No Financial Advice or Tips**: All indicators, signals, patterns, targets, and verdicts are purely synthetic algorithmic outputs computed by deterministic heuristic rules. Nothing herein constitutes financial, legal, or investment advice.
+4. **Market Risk Notice**: *"Investments in securities market are subject to market risks. Read all the related documents carefully before investing."*
+5. **No Warranties / Limitation of Liability**: The repository is provided "as is", without warranty of any kind. Authors and contributors are not liable for any financial losses, capital erosion, or damages resulting from the use of this project.
+
+For complete regulatory disclosures, please refer to [**`DISCLAIMER.md`**](DISCLAIMER.md).

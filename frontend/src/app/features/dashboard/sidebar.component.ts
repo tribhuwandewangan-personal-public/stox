@@ -83,222 +83,30 @@ const VERDICTS: VerdictBucket[] = ['buy', 'accumulate', 'hold', 'reduce', 'sell'
     </div>
   `,
   styles: [`
+  .sidebar {
+    width: 180px;
+    flex-shrink: 0;
+    background: linear-gradient(180deg, rgba(30, 41, 59, 0.6), rgba(18, 26, 43, 0.8));
+    border-right: 1px solid rgba(56, 189, 248, 0.15);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    overflow-y: auto;
+    border-radius: 12px 0 0 12px;
+  }
+
+  @media (max-width: 768px) {
     .sidebar {
-      width: 240px;
-      background: linear-gradient(180deg, rgba(30, 41, 59, 0.6), rgba(18, 26, 43, 0.8));
-      border-right: 1px solid rgba(56, 189, 248, 0.15);
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-      overflow-y: auto;
-      border-radius: 12px 0 0 12px;
-    }
-
-    @media (max-width: 768px) {
-      .sidebar {
-        width: 100%;
-        border-right: none;
-        border-bottom: 1px solid rgba(56, 189, 248, 0.15);
-        border-radius: 0;
-        padding: 12px;
-        gap: 16px;
-      }
-    }
-
-    .sidebar-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-bottom: 1px solid rgba(56, 189, 248, 0.1);
-      padding-bottom: 12px;
-    }
-
-    .sidebar-header h3 {
-      font-size: 14px;
-      font-weight: 700;
-      color: #fff;
-      margin: 0;
-    }
-
-    .clear-btn {
-      background: none;
-      border: 1px solid rgba(239, 68, 68, 0.4);
-      color: var(--accent-red);
-      font-size: 11px;
-      padding: 4px 8px;
-      border-radius: 4px;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .clear-btn:hover {
-      background: rgba(239, 68, 68, 0.1);
-      border-color: var(--accent-red);
-    }
-
-    .search-box {
-      position: relative;
-    }
-
-    .search-input {
       width: 100%;
-      background: rgba(15, 23, 42, 0.6);
-      border: 1px solid rgba(56, 189, 248, 0.2);
-      border-radius: 6px;
-      padding: 8px 12px 8px 30px;
-      font-size: 12px;
-      color: #fff;
-      transition: all 0.2s;
+      border-right: none;
+      border-bottom: 1px solid rgba(56, 189, 248, 0.15);
+      border-radius: 0;
+      padding: 12px;
+      gap: 16px;
     }
-
-    .search-input::placeholder {
-      color: var(--text-muted);
-    }
-
-    .search-input:focus {
-      outline: none;
-      border-color: var(--accent-blue);
-      background: rgba(15, 23, 42, 0.8);
-    }
-
-    .search-icon {
-      position: absolute;
-      left: 10px;
-      top: 50%;
-      transform: translateY(-50%);
-      font-size: 12px;
-      opacity: 0.5;
-    }
-
-    .filter-section {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .section-label {
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      color: var(--text-muted);
-      letter-spacing: 0.3px;
-    }
-
-    .chips {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-
-    .chip {
-      background: rgba(56, 189, 248, 0.1);
-      border: 1px solid rgba(56, 189, 248, 0.2);
-      color: var(--accent-blue);
-      font-size: 11px;
-      padding: 4px 10px;
-      border-radius: 12px;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .chip:hover {
-      background: rgba(56, 189, 248, 0.2);
-      border-color: var(--accent-blue);
-    }
-
-    .chip.active {
-      background: rgba(56, 189, 248, 0.3);
-      border-color: var(--accent-blue);
-      color: #fff;
-    }
-
-    .verdict-tabs {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    .verdict-tab {
-      background: rgba(56, 189, 248, 0.08);
-      border: 1px solid rgba(56, 189, 248, 0.15);
-      color: var(--text-secondary);
-      padding: 8px 10px;
-      border-radius: 6px;
-      font-size: 11px;
-      cursor: pointer;
-      transition: all 0.2s;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      text-align: left;
-    }
-
-    .verdict-tab:hover {
-      background: rgba(56, 189, 248, 0.15);
-      border-color: rgba(56, 189, 248, 0.3);
-    }
-
-    .verdict-tab.active {
-      background: rgba(56, 189, 248, 0.25);
-      border-color: var(--accent-blue);
-      color: #fff;
-    }
-
-    .verdict-tab .icon {
-      font-size: 12px;
-    }
-
-    .verdict-tab .label {
-      flex: 1;
-      text-transform: capitalize;
-      font-weight: 600;
-    }
-
-    .verdict-tab .count {
-      font-size: 10px;
-      color: var(--text-muted);
-    }
-
-    .stock-list {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      max-height: 150px;
-      overflow-y: auto;
-    }
-
-    .stock-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 6px 8px;
-      border-radius: 4px;
-      background: rgba(15, 23, 42, 0.4);
-      font-size: 11px;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .stock-item:hover:not(.more) {
-      background: rgba(56, 189, 248, 0.15);
-    }
-
-    .stock-item.more {
-      justify-content: center;
-      color: var(--text-muted);
-      cursor: default;
-    }
-
-    .stock-symbol {
-      font-weight: 600;
-      color: #fff;
-    }
-
-    .stock-price {
-      color: var(--text-secondary);
-    }
-  `]
+  }
+`]
 })
 export class SidebarComponent {
   searchTerm = signal('');

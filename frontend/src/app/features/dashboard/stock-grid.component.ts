@@ -28,10 +28,12 @@ import { StockCardComponent } from './stock-card.component';
   styles: [`
     .stock-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
       gap: 16px;
-      flex: 1;
-      overflow-y: auto;
+      width: 100%;
+      padding: 16px;
+      box-sizing: border-box;
+      align-content: start;
     }
 
     @media (max-width: 1024px) {

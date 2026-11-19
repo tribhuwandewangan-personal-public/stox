@@ -1,0 +1,62 @@
+{
+  "root": "AppRootComponent",
+  "components": [
+    {
+      "name": "AppRootComponent",
+      "path": "src/app/app-root",
+      "selector": "app-root",
+      "children": [
+        "AppHeaderComponent",
+        "TickerBarComponent",
+        "BulletinCardComponent",
+        "EventsBannerComponent",
+        "HorizonFilterBarComponent",
+        "StockGridComponent"
+      ]
+    },
+    {
+      "name": "AppHeaderComponent",
+      "path": "src/app/features/shell/header",
+      "selector": "app-header",
+      "children": []
+    },
+    {
+      "name": "TickerBarComponent",
+      "path": "src/app/features/dashboard/ticker-bar",
+      "selector": "app-ticker-bar",
+      "children": []
+    },
+    {
+      "name": "BulletinCardComponent",
+      "path": "src/app/features/shell/bulletin",
+      "selector": "app-bulletin",
+      "children": []
+    },
+    {
+      "name": "EventsBannerComponent",
+      "path": "src/app/features/dashboard/events-banner",
+      "selector": "app-events-banner",
+      "children": []
+    },
+    {
+      "name": "HorizonFilterBarComponent",
+      "path": "src/app/features/dashboard/horizon-filter-bar",
+      "selector": "app-horizon-filter-bar",
+      "children": []
+    },
+    {
+      "name": "StockGridComponent",
+      "path": "src/app/features/dashboard/stock-grid",
+      "selector": "app-stock-grid",
+      "children": [
+        "StockCardComponent"
+      ]
+    },
+    {
+      "name": "StockCardComponent",
+      "path": "src/app/features/dashboard/stock-card",
+      "selector": "app-stock-card",
+      "children": []
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+﻿{
+  "$schema": "https://raw.githubusercontent.com/google/antigravity/main/schemas/mcp-config.schema.json",
+  "type": "angular",
+  "projectRoot": ".",
+  "serveCommand": "npm run start",
+  "buildCommand": "npm run build",
+  "port": 4200,
+  "watchGlobs": [
+    "src/**/*.ts",
+    "src/**/*.html",
+    "src/**/*.scss",
+    "src/**/*.css"
+  ],
+  "proxyConfig": "proxy.conf.json",
+  "environment": {
+    "NODE_ENV": "development"
+  }
+}

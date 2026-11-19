@@ -3,7 +3,7 @@
  * Ports canvas drawing logic from legacy static/index.html
  */
 
-import { Component, Input, ViewChild, ElementRef, OnInit, OnDestroy } from '@angular/core';
+import { Component, Input, ViewChild, ElementRef, OnInit, AfterViewInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Candle } from '../../core/models/stock.model';
 
@@ -24,7 +24,8 @@ import { Candle } from '../../core/models/stock.model';
     .chart-container {
       position: relative;
       width: 100%;
-      height: 300px;
+      height: 100%;
+      min-height: 300px;
       background: rgba(15, 23, 42, 0.4);
       border-radius: 8px;
       border: 1px solid rgba(56, 189, 248, 0.2);
@@ -55,7 +56,7 @@ import { Candle } from '../../core/models/stock.model';
     }
   `]
 })
-export class CandleChartComponent implements OnInit, OnDestroy {
+export class CandleChartComponent implements OnInit, AfterViewInit, OnDestroy {
   @Input() candles: Candle[] = [];
   @ViewChild('chartCanvas', { static: false }) canvasRef!: ElementRef<HTMLCanvasElement>;
 
@@ -67,8 +68,15 @@ export class CandleChartComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    setTimeout(() => this.draw());
+    // Retry draw after a short delay to ensure layout is complete
+    setTimeout(() => this.draw(), 50);
+    setTimeout(() => this.draw(), 200);
     this.setupResizeObserver();
+  }
+
+  ngAfterViewInit(): void {
+    this.setupResizeObserver();
+    setTimeout(() => this.draw(), 0);
   }
 
   ngOnDestroy(): void {
@@ -95,16 +103,26 @@ export class CandleChartComponent implements OnInit, OnDestroy {
     if (!ctx) return;
 
     const rect = canvas.getBoundingClientRect();
+    // Fall back to offsetWidth/Height if getBoundingClientRect returns zero
+    const rawWidth = rect.width || canvas.offsetWidth || canvas.parentElement?.offsetWidth || 600;
+    const rawHeight = rect.height || canvas.offsetHeight || canvas.parentElement?.offsetHeight || 300;
+
+    if (rawWidth < 10 || rawHeight < 10) {
+      // Not yet laid out, try again shortly
+      setTimeout(() => this.draw(), 100);
+      return;
+    }
+
     const dpr = window.devicePixelRatio || 1;
 
-    canvas.width = Math.max(1, rect.width * dpr);
-    canvas.height = Math.max(1, rect.height * dpr);
+    canvas.width = Math.max(1, rawWidth * dpr);
+    canvas.height = Math.max(1, rawHeight * dpr);
 
     ctx.scale(dpr, dpr);
-    ctx.clearRect(0, 0, rect.width, rect.height);
+    ctx.clearRect(0, 0, rawWidth, rawHeight);
 
-    const width = rect.width;
-    const height = rect.height;
+    const width = rawWidth;
+    const height = rawHeight;
 
     // Calculate price range
     let minPrice = Infinity;

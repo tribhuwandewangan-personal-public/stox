@@ -8,10 +8,12 @@
     "build": "ng build",
     "build:prod": "ng build --configuration production",
     "test": "ng test",
+    "e2e": "playwright test",
     "lint": "ng lint"
   },
   "private": true,
   "dependencies": {
+    "tslib": "^2.6.2",
     "@angular/animations": "^22.0.0",
     "@angular/cdk": "^22.2.6",
     "@angular/common": "^22.0.0",
@@ -25,7 +27,6 @@
     "@fontsource/jetbrains-mono": "^5.0.0",
     "@fontsource/outfit": "^5.0.0",
     "rxjs": "^7.8.0",
-    "tslib": "^2.6.0",
     "zone.js": "^0.15.0"
   },
   "devDependencies": {
@@ -39,3 +40,4 @@
     "vitest": "^2.1.0"
   }
 }
+

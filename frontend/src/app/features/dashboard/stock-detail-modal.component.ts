@@ -117,7 +117,8 @@ import { bestPrice, fmtPrice } from '../../core/utils/price';
       background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(18, 26, 43, 0.95));
       border: 1px solid rgba(56, 189, 248, 0.3);
       border-radius: 12px;
-      max-width: 1000px;
+      width: 90vw;
+      max-width: 90vw;
       max-height: 90vh;
       overflow-y: auto;
       display: flex;
@@ -246,6 +247,9 @@ import { bestPrice, fmtPrice } from '../../core/utils/price';
     .chart-section {
       padding: 20px;
       border-bottom: 1px solid rgba(56, 189, 248, 0.1);
+      height: 420px;
+      min-height: 420px;
+      box-sizing: border-box;
     }
 
     .chart-placeholder {

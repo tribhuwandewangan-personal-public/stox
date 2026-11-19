@@ -29,19 +29,24 @@ import { stocksStore } from '../../core/stores/stocks.store';
     <app-stock-detail-modal></app-stock-detail-modal>
   `,
   styles: [`
-    .dashboard-container {
-      display: flex;
-      flex: 1;
-      gap: 0;
-      overflow: hidden;
-    }
+  .dashboard-container {
+    display: flex;
+    flex: 1;
+    gap: 0;
+    overflow: hidden;
+  }
 
-    @media (max-width: 768px) {
-      .dashboard-container {
-        flex-direction: column;
-      }
+  .dashboard-container > app-stock-grid {
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  @media (max-width: 768px) {
+    .dashboard-container {
+      flex-direction: column;
     }
-  `]
+  }
+`]
 })
 export class DashboardComponent {
   onStockSelect(stock: Stock): void {

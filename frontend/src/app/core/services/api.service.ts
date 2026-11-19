@@ -48,6 +48,19 @@ async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
 })
 export class ApiService {
   /**
+   * GET /api/ticker: Live ticker data.
+   */
+  static getTickerData(): Promise<any> {
+    return fetchJson<any>('/ticker');
+  }
+
+  /**
+   * GET /api/bulletin: Market bulletin text.
+   */
+  static getBulletin(): Promise<string> {
+    return fetchJson<string>('/bulletin');
+  }
+  /**
    * GET /api/status: Server status, queue, macro.
    */
   getStatus(): Promise<any> {

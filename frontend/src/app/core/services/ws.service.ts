@@ -22,13 +22,14 @@ export class WebSocketService {
   private url: string;
   private handlers: Map<string, Set<WSHandler>> = new Map();
   private stateListeners: Set<StateListener> = new Set();
+  private maxReconnectAttempts = 10; // Stop trying after 10 failed attempts
   private reconnectTimer: number | null = null;
   private reconnectAttempts = 0;
-  private reconnectDelay = 1000; // Start at 1s
-  private maxReconnectDelay = 30000; // Cap at 30s
+  private reconnectDelay = 3000; // Start at 3s (was 1s — too aggressive)
+  private maxReconnectDelay = 60000; // Cap at 60s (was 30s)
   private pollTimer: number | null = null;
   private state: 'connected' | 'connecting' | 'disconnected' = 'disconnected';
-  private pollInterval = 20000; // 20s fallback polling
+  private pollInterval = 30000; // 30s fallback polling (was 20s)
 
   constructor() {
     // Determine WebSocket URL (http → ws, https → wss)
@@ -181,6 +182,12 @@ export class WebSocketService {
   private scheduleReconnect(): void {
     if (this.reconnectTimer !== null) {
       return; // Already scheduled
+    }
+
+    // Stop reconnecting after too many failures to avoid flooding proxy
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.warn('[WS] Max reconnect attempts reached. Polling only.');
+      return;
     }
 
     this.reconnectAttempts++;

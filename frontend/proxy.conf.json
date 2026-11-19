@@ -3,25 +3,28 @@
     "target": "http://localhost:8765",
     "secure": false,
     "changeOrigin": true,
-    "pathRewrite": {}
+    "logLevel": "warn"
   },
   "/ws": {
     "target": "http://localhost:8765",
     "ws": true,
     "secure": false,
     "changeOrigin": true,
-    "pathRewrite": {}
+    "logLevel": "warn",
+    "on": {
+      "error": "function(err, req, res) { if (err.code === 'ECONNABORTED' || err.code === 'ECONNRESET') return; console.warn('[proxy]', err.message); }"
+    }
   },
   "/news_reports": {
     "target": "http://localhost:8765",
     "secure": false,
     "changeOrigin": true,
-    "pathRewrite": {}
+    "logLevel": "warn"
   },
   "/reports": {
     "target": "http://localhost:8765",
     "secure": false,
     "changeOrigin": true,
-    "pathRewrite": {}
+    "logLevel": "warn"
   }
 }
