@@ -139,16 +139,26 @@ class HistoricalDataEngine:
         Fetches corporate-action adjusted daily OHLCV candles from reliable market feeds.
         Primary: <SYMBOL>.NS (NSE)
         Fallback: <SYMBOL>.BO (BSE)
+        Uses ticker_validator for smart candidate list + failure tracking.
         If `start` (YYYY-MM-DD) is given only candles from that date are downloaded, otherwise `period`.
         """
         import yfinance as yf
 
         symbol_clean = symbol.upper().strip()
-        alias_map = {
-            "TATAMOTORS": ["TMPV.NS", "TMCV.NS", "TATAMOTORS.NS", "TATAMOTORS.BO"],
-            "NSE": ["NSE.BO", "NSE.NS"]
-        }
-        candidates = alias_map.get(symbol_clean, [f"{symbol_clean}.NS", f"{symbol_clean}.BO"])
+
+        # Use smart candidate builder (handles special chars, known overrides, .NS → .BO fallback)
+        try:
+            from tools.ticker_validator import build_yf_candidates, get_tracker, _is_sme_or_derivative
+            # Skip symbols known to be SME / derivatives / unavailable upfront
+            if _is_sme_or_derivative(symbol_clean):
+                return pd.DataFrame()
+            tracker = get_tracker()
+            if tracker.is_unavailable(symbol_clean):
+                return pd.DataFrame()
+            candidates = build_yf_candidates(symbol_clean)
+        except ImportError:
+            tracker = None
+            candidates = [f"{symbol_clean}.NS", f"{symbol_clean}.BO"]
 
         df_history = pd.DataFrame()
 
@@ -162,11 +172,15 @@ class HistoricalDataEngine:
 
                 if df is not None and not df.empty:
                     df_history = df.copy()
+                    if tracker:
+                        tracker.record_success(symbol_clean)
                     break
             except Exception:
                 continue
 
         if df_history.empty:
+            if tracker:
+                tracker.record_failure(symbol_clean)
             return pd.DataFrame()
 
         # Never store candles without a close price
@@ -208,8 +222,9 @@ class HistoricalDataEngine:
         Yahoo returns today's in-progress bar while the session runs. Storing it would freeze an intraday price
         in as that day's close, so a bar for a not-yet-final session is dropped (live prices come from the
         quote layer instead).
+        If the newly listed stock only has 1 bar, retain it so it is not dropped to empty.
         """
-        if df is None or df.empty:
+        if df is None or len(df) <= 1:
             return df
         today = market_calendar.now_ist().date()
         if df['DATE'].iloc[-1].date() == today and not market_calendar.is_session_complete(today):
@@ -384,9 +399,34 @@ class HistoricalDataEngine:
     def sync_all_symbols(self, symbols: List[Dict[str, Any]], force: bool = False, max_workers: int = 6) -> Dict[str, bool]:
         """
         Synchronizes historical data for all symbols and caches to SQLite (parallel, incremental).
+        Pre-filters SME/derivative/persistently-unavailable symbols to avoid wasting fetch time.
         """
+        # Pre-filter: separate fetchable from skip-worthy symbols
+        try:
+            from tools.ticker_validator import filter_fetchable_symbols, get_tracker
+            fetchable, skipped = filter_fetchable_symbols(symbols)
+            tracker = get_tracker()
+            # Also skip symbols that have hit the persistent-unavailable threshold
+            unavail_set = set(tracker.get_unavailable_symbols())
+            prev_len = len(fetchable)
+            fetchable = [s for s in fetchable if s.get("symbol", "").upper() not in unavail_set]
+            perm_skipped = prev_len - len(fetchable)
+            if skipped or perm_skipped:
+                print(f"⚡ Pre-filter: {len(fetchable)} fetchable | "
+                      f"{len(skipped)} SME/derivative | "
+                      f"{perm_skipped} persistently unavailable (skipped)")
+        except ImportError:
+            fetchable = symbols
+            skipped = []
+
         results: Dict[str, bool] = {}
-        total = len(symbols)
+        # Mark skipped as False immediately
+        for s in skipped:
+            sym = s.get("symbol", "").upper()
+            if sym:
+                results[sym] = False
+
+        total = len(fetchable)
         print(f"📥 Syncing reliable historical data for {total} symbols...")
 
         def _sync(item):
@@ -399,18 +439,18 @@ class HistoricalDataEngine:
                 return sym, None, time.time() - t0, e
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, min(max_workers, total or 1))) as pool:
-            futures = [pool.submit(_sync, item) for item in symbols]
+            futures = [pool.submit(_sync, item) for item in fetchable]
             for idx, fut in enumerate(concurrent.futures.as_completed(futures), 1):
                 sym, df, elapsed, err = fut.result()
                 if err is not None:
-                    print(f"  [{idx:2d}/{total:2d}] ❌ {sym:<10} | Error: {err}")
+                    print(f"  [{idx:4d}/{total}] ❌ {sym:<14} | Error: {err}")
                     results[sym] = False
                 elif df is not None and len(df) > 0:
                     latest_d = df.iloc[-1]['DATE'].strftime('%Y-%m-%d')
-                    print(f"  [{idx:2d}/{total:2d}] ✅ {sym:<10} | {len(df):4d} candles synced | Latest: {latest_d} ({elapsed:.2f}s)")
+                    print(f"  [{idx:4d}/{total}] ✅ {sym:<14} | {len(df):4d} candles | Latest: {latest_d} ({elapsed:.1f}s)")
                     results[sym] = True
                 else:
-                    print(f"  [{idx:2d}/{total:2d}] ⚠️ {sym:<10} | No candles returned ({elapsed:.2f}s)")
+                    print(f"  [{idx:4d}/{total}] ⚠️  {sym:<14} | No candles returned ({elapsed:.1f}s)")
                     results[sym] = False
 
         return results
@@ -496,9 +536,28 @@ def main():
     parser.add_argument("--force", action="store_true", help="Force re-download even if cache is fresh")
     parser.add_argument("--all-nse", action="store_true", help="Sync all NSE stocks from symbols_nse_all.json")
     parser.add_argument("--symbols-file", type=str, default="", help="Path to custom symbols JSON file")
+    parser.add_argument("--report-failures", action="store_true", help="Show ticker failure tracker summary + unavailable symbols")
     args = parser.parse_args()
 
     engine = HistoricalDataEngine()
+
+    # Optional: show failure tracker report
+    if args.report_failures:
+        try:
+            from tools.ticker_validator import TickerFailureTracker
+            tracker = TickerFailureTracker()
+            summary = tracker.get_summary()
+            unavail = tracker.get_unavailable_symbols()
+            print("\n📊 Ticker Failure Tracker Summary:")
+            for k, v in summary.items():
+                print(f"   {k}: {v}")
+            if unavail:
+                print(f"\n🚫 Symbols marked unavailable ({len(unavail)}):")
+                for s in sorted(unavail):
+                    print(f"   • {s}")
+        except Exception as e:
+            print(f"Could not load failure tracker: {e}")
+        return
 
     if args.all_nse:
         sym_file = ALL_NSE_SYMBOLS_FILE_PATH
