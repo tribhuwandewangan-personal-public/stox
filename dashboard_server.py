@@ -478,6 +478,34 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json(200, body)
             return
 
+        elif path.startswith("/api/forensic-recommendation") or path.startswith("/api/recommendation"):
+            query = urllib.parse.parse_qs(parsed_path.query)
+            sym = query.get("symbol", [""])[0].upper().strip()
+            if sym and not valid_symbol(sym):
+                self._send_json(400, {"error": "Invalid symbol"})
+                return
+
+            price_str = query.get("price", [""])[0].strip()
+            price_val = None
+            try:
+                if price_str:
+                    price_val = float(price_str)
+            except Exception:
+                pass
+
+            try:
+                from tools.forensic_financial_engine import ForensicFinancialEngine
+                forensic_engine = ForensicFinancialEngine(cache_manager=cache_mgr)
+                if sym:
+                    data = forensic_engine.analyze_company(sym, price_override=price_val)
+                else:
+                    data = {"error": "Missing symbol parameter"}
+                body = safe_json_dumps(data)
+            except Exception as e:
+                body = safe_json_dumps({"error": str(e), "symbol": sym, "verdict": "ERROR"})
+            self._send_json(200, body)
+            return
+
         elif path.startswith("/api/market-scanner"):
             try:
                 from tools.market_scanner import get_latest_cached_scan, run_market_scan

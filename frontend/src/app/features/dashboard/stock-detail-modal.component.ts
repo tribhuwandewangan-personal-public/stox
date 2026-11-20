@@ -150,6 +150,25 @@ import { parseMarkdown } from '../../core/utils/markdown';
               <div class="stat-line">
                 <span><b>📦 Order Backlog / Catalyst:</b> <span class="text-light">{{ f.order_book_catalyst ? '📦 ' + f.order_book_catalyst : 'No major order backlog announced' }}</span></span>
               </div>
+
+              <!-- Forensic Due Diligence & Recommendation Banner -->
+              <div class="forensic-box" *ngIf="forensicData() as fd">
+                <div class="forensic-header">
+                  <span class="forensic-title">🔍 Due-Diligence Audit:</span>
+                  <span class="forensic-verdict-badge">{{ fd.verdict_badge }}</span>
+                </div>
+                <div class="stat-row-split" *ngIf="fd.fair_value">
+                  <span><b>🎯 Sustainable Value:</b> Rs. {{ fd.fair_value }}</span>
+                  <span><b>Margin of Safety:</b> <b [style.color]="fd.margin_of_safety_pct > 0 ? '#34d399' : '#f87171'">{{ fd.margin_of_safety_pct > 0 ? '+' : '' }}{{ fd.margin_of_safety_pct }}%</b></span>
+                </div>
+                <div class="stat-row-split" *ngIf="fd.cash_conversion">
+                  <span><b>💰 CFO / PAT:</b> {{ (fd.cash_conversion.cfo_to_pat_ratio * 100).toFixed(0) }}%</span>
+                  <span *ngIf="fd.earnings_quality && fd.earnings_quality.distortion_pct > 0"><b>Distortion:</b> <b [style.color]="fd.earnings_quality.distortion_pct > 20 ? '#f87171' : '#f59e0b'">{{ fd.earnings_quality.distortion_pct }}%</b></span>
+                </div>
+                <div class="forensic-flags" *ngIf="fd.red_flags && fd.red_flags.length > 0">
+                  <div class="flag-item" *ngFor="let rf of fd.red_flags">⚠️ {{ rf }}</div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -535,6 +554,39 @@ import { parseMarkdown } from '../../core/utils/markdown';
     .stat-line { display: flex; flex-wrap: wrap; gap: 4px; }
     .stat-row-split { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
 
+    .forensic-box {
+      margin-top: 10px;
+      padding: 10px 12px;
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .forensic-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.82rem;
+    }
+    .forensic-title { font-weight: 700; color: #f59e0b; }
+    .forensic-verdict-badge { font-weight: 600; font-size: 0.78rem; }
+    .forensic-flags {
+      margin-top: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .flag-item {
+      font-size: 0.72rem;
+      color: #fca5a5;
+      background: rgba(239, 68, 68, 0.12);
+      padding: 3px 6px;
+      border-radius: 4px;
+      border-left: 2px solid #ef4444;
+    }
+
     .mono-code {
       font-family: 'JetBrains Mono', monospace;
       color: #f1f5f9;
@@ -669,6 +721,12 @@ export class StockDetailModalComponent implements OnInit, AfterViewInit, OnDestr
     const s = this.selectedStock;
     if (!s) return null;
     return s.fund_output?.raw_fundamentals || {};
+  });
+
+  forensicData = computed(() => {
+    const s = this.selectedStock;
+    if (!s) return null;
+    return s.fund_output?.forensic_analysis || null;
   });
 
   techLevels = computed(() => {

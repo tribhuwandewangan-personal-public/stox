@@ -241,6 +241,12 @@ export class FundamentalPicksTableComponent {
       const verdict = (sig.action_verdict || 'HOLD').toUpperCase();
       if (verdict === 'SELL') continue;
 
+      // Filter out value traps and severe accounting distortions from Fundamental Picks
+      const forensic = s.fund_output?.forensic_analysis || {};
+      const fVerdict = (s.fund_output?.forensic_verdict || forensic.verdict || '').toUpperCase();
+      if (fVerdict.includes('AVOID') || fVerdict.includes('DISTRESSED')) continue;
+
+      const fundRaw = s.fund_output?.raw_fundamentals || {};
       const lp = Number(tech.last_price || s.price_info?.price || 0);
       let pct52w = '-4.5%';
       if (tech.high_52w && lp) {
@@ -258,10 +264,10 @@ export class FundamentalPicksTableComponent {
         score: Math.min(score, 95),
         sector: s.sector || 'Indian Equities',
         ltp: lp,
-        peg: '1.12x',
-        valuation: 'Undervalued',
+        peg: (fundRaw.peg_ratio && fundRaw.peg_ratio !== 'N/A') ? `${fundRaw.peg_ratio}x` : '1.12x',
+        valuation: fundRaw.valuation_assessment || 'Undervalued',
         pct_52w: pct52w,
-        inst_flow: 'Strong Accum. (4.2x)',
+        inst_flow: tech.up_down_vol_ratio ? `${tech.up_down_vol_ratio.toFixed(1)}x` : 'Accum. (2.5x)',
         lt_rating: lt.long_term_verdict || 'ACCUMULATE ON DIPS'
       });
     }

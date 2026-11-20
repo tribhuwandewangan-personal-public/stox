@@ -91,6 +91,15 @@ export class ApiService {
   }
 
   /**
+   * GET /api/forensic-recommendation?symbol=XXX: Forensic analysis and due-diligence recommendation.
+   */
+  static getForensicRecommendation(symbol: string, price?: number): Promise<any> {
+    const params = new URLSearchParams({ symbol });
+    if (price) params.append('price', String(price));
+    return fetchJson<any>(`/forensic-recommendation?${params}`);
+  }
+
+  /**
    * GET /api/history?symbol=XXX&days=90: Chart data for a stock.
    */
   static getHistory(symbol: string, days: number = 90): Promise<ChartData> {

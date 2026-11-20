@@ -14,13 +14,6 @@ export default defineConfig({
         ws: false,
         timeout: 30000
       },
-      // '/ws': {
-        target: 'http://localhost:8765',
-        ws: true,
-        changeOrigin: true,
-        secure: false,
-        timeout: 30000
-      },
       '/news_reports': {
         target: 'http://localhost:8765',
         changeOrigin: true,

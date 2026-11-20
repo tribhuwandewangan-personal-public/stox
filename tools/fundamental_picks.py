@@ -78,6 +78,12 @@ def score_fundamental_pick(sym: str, synth_res: dict, tech_res: dict | None, fun
     if pct52w is not None and pct52w >= -3.0:
         return None                               # too close to 52W high — not a right-time entry
 
+    # Forensic Due-Diligence Gate: Disqualify value traps, distorted earnings, or distressed leverage
+    forensic = (fund_res or {}).get("forensic_analysis") or {}
+    forensic_verdict = str((fund_res or {}).get("forensic_verdict") or forensic.get("verdict") or "").upper()
+    if forensic_verdict in ("AVOID_OR_VALUE_TRAP", "HIGH_RISK_DISTRESSED", "AVOID_OVERVALUED"):
+        return None
+
     # ── Score ─────────────────────────────────────────────────────────────────
     score = 0
     reasons = []
@@ -180,6 +186,19 @@ def score_fundamental_pick(sym: str, synth_res: dict, tech_res: dict | None, fun
     if any(kw in upcoming_ev for kw in catalyst_keywords):
         score += 3; reasons.append("Near Catalyst")
 
+    # 9. Forensic Quality & Cash Conversion Bonus
+    cfo_ratio = _safe_float(forensic.get("cash_conversion", {}).get("cfo_to_pat_ratio"))
+    distortion = _safe_float(forensic.get("earnings_quality", {}).get("distortion_pct"))
+    if forensic_verdict in ("STRONG_BUY", "BUY"):
+        score += 10
+        reasons.append("Audited Clean Earnings")
+    if cfo_ratio is not None and cfo_ratio >= 0.85:
+        score += 6
+        reasons.append(f"High Cash Realization ({cfo_ratio*100:.0f}% CFO/PAT)")
+    elif cfo_ratio is not None and cfo_ratio < 0.50:
+        score -= 8
+        reasons.append("Paper Profit / Weak Cash Flow")
+
     # Build timing reason tag (most informative single reason)
     timing_reason = _pick_primary_reason(reasons, pct52w, ud_ratio, val_text, swing_low20, last_price)
 
@@ -196,6 +215,9 @@ def score_fundamental_pick(sym: str, synth_res: dict, tech_res: dict | None, fun
         "reasons":      reasons,
         "timing_tag":   timing_reason,
         "action":       verdict,
+        "forensic_badge": forensic.get("verdict_badge") or "⚪ UNAUDITED",
+        "cfo_to_pat":   cfo_ratio,
+        "distortion_pct": distortion,
     }
 
 

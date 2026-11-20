@@ -50,6 +50,11 @@ import { SparklineComponent } from './sparkline.component';
         </span>
       </div>
 
+      <!-- Forensic Due Diligence Badge -->
+      <div class="forensic-badge-row" *ngIf="forensicBadge">
+        <span class="forensic-pill">{{ forensicBadge }}</span>
+      </div>
+
       <!-- Event chips -->
       <div class="events-row" *ngIf="eventLabels.length">
         <span class="event-chip" *ngFor="let ev of eventLabels">{{ ev }}</span>
@@ -247,6 +252,21 @@ import { SparklineComponent } from './sparkline.component';
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
+    }
+    .forensic-badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 2px;
+    }
+    .forensic-pill {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 8px;
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      color: #f1f5f9;
     }
     .pattern-pill {
       font-size: 11px;
@@ -493,6 +513,10 @@ export class StockCardComponent {
   get verdictLabel(): string  { return this._vi.label; }
   get verdictColor(): string  { return this._vi.color; }
   get verdictBg(): string     { return this._vi.bgColor; }
+
+  get forensicBadge(): string | null {
+    return this.stock.fund_output?.forensic_badge || null;
+  }
 
   /* ── Price ── */
   get formattedPrice(): string {

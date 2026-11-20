@@ -273,6 +273,22 @@ def _fundamental_signal(fund: Optional[dict]) -> Optional[Tuple[float, str]]:
         value += 0.15
         notes.append("contract pipeline / order inflow")
 
+    # 6. Forensic Due-Diligence & Earnings Normalization
+    forensic = fund.get("forensic_analysis") or {}
+    forensic_verdict = fund.get("forensic_verdict") or forensic.get("verdict")
+    distortion_pct = _to_float(forensic.get("earnings_quality", {}).get("distortion_pct"))
+    cfo_ratio = _to_float(forensic.get("cash_conversion", {}).get("cfo_to_pat_ratio"))
+
+    if forensic_verdict in ("AVOID_OR_VALUE_TRAP", "HIGH_RISK_DISTRESSED") or (distortion_pct and distortion_pct > 35.0):
+        value -= 0.55
+        notes.append(f"forensic red flag ({forensic.get('verdict_badge', 'DISTORTED EARNINGS')})")
+    elif cfo_ratio is not None and cfo_ratio < 0.50:
+        value -= 0.30
+        notes.append(f"weak cash conversion (CFO/PAT {cfo_ratio*100:.0f}%)")
+    elif forensic_verdict in ("STRONG_BUY", "BUY") and cfo_ratio and cfo_ratio >= 0.85:
+        value += 0.25
+        notes.append("clean audited earnings & robust operating cash flow")
+
     if not notes:
         return None
     return _clamp(value), "valuation: " + ", ".join(notes)

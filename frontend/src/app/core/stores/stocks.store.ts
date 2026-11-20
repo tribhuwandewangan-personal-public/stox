@@ -4,6 +4,7 @@
  */
 
 import { Stock } from '../models/stock.model';
+import { Company } from '../models/company.model';
 import { signal, computed } from '@angular/core';
 import { verdictToBucket, VerdictBucket, getStockBucket } from '../utils/verdict';
 

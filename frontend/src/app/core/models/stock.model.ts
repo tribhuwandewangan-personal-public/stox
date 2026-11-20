@@ -92,6 +92,40 @@ export interface PriceInfo {
   drift_pct?: number | null;
 }
 
+export interface ForensicAnalysis {
+  verdict: 'STRONG_BUY' | 'BUY' | 'HOLD' | 'AVOID_OR_VALUE_TRAP' | 'HIGH_RISK_DISTRESSED' | 'AVOID_OVERVALUED' | 'UNAUDITED';
+  verdict_badge: string;
+  confidence_score: number;
+  fair_value: number;
+  margin_of_safety_pct: number;
+  earnings_quality?: {
+    reported_pat: number;
+    adjusted_pat: number;
+    sustainable_pat: number;
+    distortion_pct: number;
+    quality_grade: string;
+  };
+  cash_conversion?: {
+    cfo: number;
+    fcf: number;
+    cfo_to_pat_ratio: number;
+    working_capital_divergence: boolean;
+    conversion_status: string;
+  };
+  subsidiary_attribution?: {
+    minority_share_pct: number;
+    parent_attributable_pct: number;
+    subsidiary_leakage_flag: boolean;
+  };
+  solvency_health?: {
+    net_cash_positive: boolean;
+    solvency_rating: string;
+  };
+  red_flags: string[];
+  positive_catalysts: string[];
+  investment_thesis: string;
+}
+
 export interface EventsData {
   symbol?: string;
   earnings_date?: string | null;
