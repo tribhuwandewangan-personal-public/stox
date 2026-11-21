@@ -329,6 +329,53 @@ def evaluate_stock_strength(sym: str, meta: Dict[str, str], yf_ticker) -> Option
             elif de_val > 150.0:
                 score -= 5
 
+        # Forensic Due Diligence & Governance Quality Overlay
+        forensic_grade = "SOUND"
+        forensic_verdict = "UNAUDITED"
+        intrinsic_fair_val = "N/A"
+        mos_pct_val = None
+        try:
+            from tools.forensic_financial_engine import ForensicFinancialEngine
+            forensic_engine = ForensicFinancialEngine()
+            f_res = forensic_engine.analyze_company(sym, price_override=last_p)
+            gov = f_res.get("governance_telemetry", {})
+            forensic_grade = gov.get("governance_grade", "SOUND")
+            forensic_verdict = f_res.get("verdict", "N/A")
+            v_met = f_res.get("valuation_metrics", {})
+            fair_v = v_met.get("intrinsic_fair_value") or f_res.get("fair_value")
+            if fair_v is not None and isinstance(fair_v, (int, float)):
+                intrinsic_fair_val = round(float(fair_v), 2)
+            mos_pct_val = v_met.get("margin_of_safety_pct") or f_res.get("margin_of_safety_pct")
+
+            # Intrinsic Valuation bonus / penalty
+            if mos_pct_val is not None and isinstance(mos_pct_val, (int, float)):
+                if mos_pct_val >= 15.0:
+                    score += 8
+                    signals.append(f"Deep Margin of Safety (+{mos_pct_val:.0f}% vs Intrinsic Value)")
+                elif mos_pct_val <= -20.0:
+                    score -= 8
+                    signals.append(f"Price Stretched vs Intrinsic ({mos_pct_val:.0f}% Overvalued)")
+
+            # Governance penalty / reward
+            if forensic_grade == "HIGH_RISK":
+                score -= 20
+                signals.append("⚠️ HIGH RISK Governance / Promoter Pledge Warning")
+            elif forensic_grade == "SOUND":
+                score += 3
+                signals.append("Clean Governance & Promoter Integrity")
+
+            # Peer Relative Valuation context
+            peers = f_res.get("peer_benchmarks", {})
+            peer_comp = peers.get("peer_comparison", {})
+            if peer_comp.get("pe_vs_peers") == "CHEAPER" and peer_comp.get("roe_vs_peers") == "SUPERIOR":
+                score += 5
+                signals.append("Undervalued vs Sector Peers with Superior ROE")
+        except Exception:
+            pass
+
+        # Clamp score between 0 and 100
+        score = max(0, min(100, score))
+
         # Strength Tier
         if score >= 80:
             tier = "⭐ TOP LEADER"
@@ -354,7 +401,11 @@ def evaluate_stock_strength(sym: str, meta: Dict[str, str], yf_ticker) -> Option
             "rvol": rvol,
             "pe_ratio": round(pe_val, 2) if isinstance(pe_val, (int, float)) else "N/A",
             "peg_ratio": peg if peg is not None else "N/A",
+            "intrinsic_fair_value": intrinsic_fair_val,
+            "margin_of_safety_pct": mos_pct_val,
             "roe_pct": round(roe_val * 100, 1) if isinstance(roe_val, (int, float)) else "N/A",
+            "forensic_verdict": forensic_verdict,
+            "governance_grade": forensic_grade,
             "signals": signals,
             "evaluated_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
@@ -463,17 +514,21 @@ def _generate_markdown_report(results: List[Dict[str, Any]], scanned_count: int)
         "",
         "---",
         "",
-        "| Rank | Symbol | Company | Sector | LTP | Strength Score | Tier | % from 52W High | 20D Inst Flow | RSI | PEG | Top Signals |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|"
+        "| Rank | Symbol | Company | Sector | LTP | Strength Score | Tier | % from 52W High | 20D Inst Flow | RSI | PEG | Intrinsic Value | Top Signals |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|"
     ]
 
     for idx, r in enumerate(results, 1):
         top_sigs = "; ".join(r["signals"][:2]) if r["signals"] else "Strong alignment"
         peg_disp = f"{r['peg_ratio']}x" if r['peg_ratio'] != "N/A" else "N/A"
+        iv_disp = f"Rs. {r['intrinsic_fair_value']}" if r.get("intrinsic_fair_value") not in ("N/A", None) else "N/A"
+        if r.get("margin_of_safety_pct") is not None:
+            m = r["margin_of_safety_pct"]
+            iv_disp += f" ({'+' if m > 0 else ''}{m:.0f}%)"
         md.append(
             f"| {idx} | **{r['symbol']}** | {r['name']} | {r['sector']} | Rs. {r['last_price']:,.2f} | "
             f"**{r['strength_score']}/100** | {r['tier']} | {r['pct_from_52w_high']:+.1f}% | "
-            f"{r['up_down_vol_ratio']:.2f}x | {r['rsi_14']:.1f} | {peg_disp} | {top_sigs} |"
+            f"{r['up_down_vol_ratio']:.2f}x | {r['rsi_14']:.1f} | {peg_disp} | {iv_disp} | {top_sigs} |"
         )
 
     md.append("")

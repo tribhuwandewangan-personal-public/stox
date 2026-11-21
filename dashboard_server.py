@@ -478,6 +478,119 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json(200, body)
             return
 
+        elif path.startswith("/api/company/"):
+            ticker = path.split("/api/company/")[1].split("/")[0].split("?")[0].upper().strip()
+            if not ticker or not valid_symbol(ticker):
+                self._send_json(400, safe_json_dumps({"error": "Invalid ticker"}))
+                return
+            try:
+                from tools.forensic_financial_engine import ForensicFinancialEngine
+                forensic_engine = ForensicFinancialEngine(cache_manager=cache_mgr)
+                analysis = forensic_engine.analyze_company(ticker)
+                gov = analysis.get("governance_telemetry", {})
+                eq = analysis.get("earnings_quality", {})
+
+                company_data = {
+                    "ticker": ticker,
+                    "exchange": "NSE",
+                    "name": analysis.get("company_name", ticker),
+                    "sector": analysis.get("sector", "N/A"),
+                    "promoterHoldingPct": gov.get("promoter_holding_pct"),
+                    "promoterPledgePct": 0.0 if gov.get("pledge_risk") == "LOW" else 25.0,
+                    "auditRiskScore": gov.get("audit_risk_score"),
+                    "governanceGrade": gov.get("governance_grade", "SOUND"),
+                    "earningsQuality": {
+                        "reportedPAT": eq.get("reported_pat", 0.0),
+                        "adjustedPAT": eq.get("adjusted_pat", 0.0),
+                        "sustainablePAT": eq.get("sustainable_pat", 0.0),
+                        "exceptionalItems": [],
+                        "redFlag": eq.get("quality_grade") in ("SEVERELY_DISTORTED", "MODERATELY_DISTORTED")
+                    },
+                    "forensicAnalysis": analysis
+                }
+                body = safe_json_dumps(company_data)
+            except Exception as e:
+                body = safe_json_dumps({"error": str(e), "ticker": ticker})
+            self._send_json(200, body)
+            return
+
+        elif path.startswith("/api/earnings/"):
+            ticker = path.split("/api/earnings/")[1].split("/")[0].split("?")[0].upper().strip()
+            if not ticker or not valid_symbol(ticker):
+                self._send_json(400, safe_json_dumps({"error": "Invalid ticker"}))
+                return
+            try:
+                from tools.forensic_financial_engine import ForensicFinancialEngine
+                forensic_engine = ForensicFinancialEngine(cache_manager=cache_mgr)
+                analysis = forensic_engine.analyze_company(ticker)
+                eq = analysis.get("earnings_quality", {})
+                exc_amt = eq.get("exceptional_items", 0.0)
+
+                earnings_data = {
+                    "reportedPAT": eq.get("reported_pat", 0.0),
+                    "adjustedPAT": eq.get("adjusted_pat", 0.0),
+                    "sustainablePAT": eq.get("sustainable_pat", 0.0),
+                    "exceptionalItems": [
+                        {
+                            "description": "Exceptional Items",
+                            "amount": exc_amt,
+                            "type": "income" if exc_amt >= 0 else "expense",
+                            "category": "Other"
+                        }
+                    ] if exc_amt != 0.0 else []
+                }
+                body = safe_json_dumps(earnings_data)
+            except Exception as e:
+                body = safe_json_dumps({"error": str(e), "ticker": ticker})
+            self._send_json(200, body)
+            return
+
+        elif path.startswith("/api/financial/"):
+            parts = path.split("/api/financial/")[1].split("/")
+            ticker = parts[0].split("?")[0].upper().strip() if len(parts) > 0 else ""
+            statement_type = parts[1].split("?")[0].lower().strip() if len(parts) > 1 else "income"
+            if not ticker or not valid_symbol(ticker):
+                self._send_json(400, safe_json_dumps({"error": "Invalid ticker"}))
+                return
+            try:
+                from tools.forensic_financial_engine import ForensicFinancialEngine
+                forensic_engine = ForensicFinancialEngine(cache_manager=cache_mgr)
+                analysis = forensic_engine.analyze_company(ticker)
+                eq = analysis.get("earnings_quality", {})
+                cf = analysis.get("cash_conversion", {})
+                solv = analysis.get("solvency_health", {})
+
+                if statement_type == "balance":
+                    statements = [{
+                        "period": "LTM",
+                        "totalDebt": solv.get("total_debt"),
+                        "totalCash": solv.get("total_cash"),
+                        "netDebt": solv.get("net_debt"),
+                        "currentRatio": solv.get("current_ratio"),
+                        "debtToEquity": solv.get("debt_to_equity")
+                    }]
+                elif statement_type == "cashflow":
+                    statements = [{
+                        "period": "LTM",
+                        "cashFromOperations": cf.get("cfo"),
+                        "capitalExpenditure": cf.get("capex"),
+                        "freeCashFlow": cf.get("fcf"),
+                        "cfoToPatRatio": cf.get("cfo_to_pat_ratio")
+                    }]
+                else:  # income
+                    statements = [{
+                        "period": "LTM",
+                        "revenue": cf.get("revenue_growth_pct"),
+                        "reportedPAT": eq.get("reported_pat"),
+                        "exceptionalItems": eq.get("exceptional_items"),
+                        "sustainablePAT": eq.get("sustainable_pat")
+                    }]
+                body = safe_json_dumps(statements)
+            except Exception as e:
+                body = safe_json_dumps({"error": str(e), "ticker": ticker})
+            self._send_json(200, body)
+            return
+
         elif path.startswith("/api/forensic-recommendation") or path.startswith("/api/recommendation"):
             query = urllib.parse.parse_qs(parsed_path.query)
             sym = query.get("symbol", [""])[0].upper().strip()

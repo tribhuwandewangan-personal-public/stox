@@ -13,6 +13,8 @@ interface FundPickRow {
   sector: string;
   ltp: number;
   peg: string;
+  intrinsic_value: string;
+  margin_of_safety: number | null;
   valuation: string;
   pct_52w: string;
   inst_flow: string;
@@ -50,6 +52,7 @@ interface FundPickRow {
                   <th>SECTOR</th>
                   <th>LTP</th>
                   <th>PEG</th>
+                  <th>INTRINSIC VALUE</th>
                   <th>VALUATION</th>
                   <th>% FROM 52W HIGH</th>
                   <th>INST. FLOW</th>
@@ -69,6 +72,12 @@ interface FundPickRow {
                     <td class="col-sec">{{ p.sector }}</td>
                     <td class="col-mono">₹{{ p.ltp | number:'1.2-2' }}</td>
                     <td class="col-mono">{{ p.peg }}</td>
+                    <td class="col-mono">
+                      <span>{{ p.intrinsic_value }}</span>
+                      <small *ngIf="p.margin_of_safety !== null" [style.color]="p.margin_of_safety >= 0 ? '#34d399' : '#f87171'" style="margin-left: 4px; font-weight: 600;">
+                        ({{ p.margin_of_safety > 0 ? '+' : '' }}{{ p.margin_of_safety.toFixed(0) }}%)
+                      </small>
+                    </td>
                     <td>
                       <span class="val-pill" [class.undervalued]="p.valuation.includes('Undervalued')">{{ p.valuation }}</span>
                     </td>
@@ -259,12 +268,22 @@ export class FundamentalPicksTableComponent {
       if (verdict.includes('BUY')) score += 10;
       if (sig.confidence_percentage && sig.confidence_percentage > 85) score += 5;
 
+      // Intrinsic value and margin of safety
+      const fVal = forensic?.fair_value || forensic?.valuation_metrics?.intrinsic_fair_value;
+      const mos = forensic?.margin_of_safety_pct ?? forensic?.valuation_metrics?.margin_of_safety_pct ?? null;
+      let ivDisplay = 'N/A';
+      if (fVal && fVal > 0) {
+        ivDisplay = `₹${Number(fVal).toFixed(2)}`;
+      }
+
       list.push({
         symbol: s.symbol,
         score: Math.min(score, 95),
         sector: s.sector || 'Indian Equities',
         ltp: lp,
         peg: (fundRaw.peg_ratio && fundRaw.peg_ratio !== 'N/A') ? `${fundRaw.peg_ratio}x` : '1.12x',
+        intrinsic_value: ivDisplay,
+        margin_of_safety: typeof mos === 'number' ? mos : null,
         valuation: fundRaw.valuation_assessment || 'Undervalued',
         pct_52w: pct52w,
         inst_flow: tech.up_down_vol_ratio ? `${tech.up_down_vol_ratio.toFixed(1)}x` : 'Accum. (2.5x)',

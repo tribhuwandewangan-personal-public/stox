@@ -165,6 +165,15 @@ import { parseMarkdown } from '../../core/utils/markdown';
                   <span><b>💰 CFO / PAT:</b> {{ (fd.cash_conversion.cfo_to_pat_ratio * 100).toFixed(0) }}%</span>
                   <span *ngIf="fd.earnings_quality && fd.earnings_quality.distortion_pct > 0"><b>Distortion:</b> <b [style.color]="fd.earnings_quality.distortion_pct > 20 ? '#f87171' : '#f59e0b'">{{ fd.earnings_quality.distortion_pct }}%</b></span>
                 </div>
+                <!-- Governance Telemetry -->
+                <div class="stat-row-split" *ngIf="fd.governance_telemetry">
+                  <span><b>🏛️ Governance:</b> <b [style.color]="fd.governance_telemetry.governance_grade === 'SOUND' ? '#34d399' : (fd.governance_telemetry.governance_grade === 'HIGH_RISK' ? '#f87171' : '#f59e0b')">{{ fd.governance_telemetry.governance_grade }}</b></span>
+                  <span *ngIf="fd.governance_telemetry.promoter_holding_pct"><b>Promoter:</b> {{ fd.governance_telemetry.promoter_holding_pct }}%</span>
+                </div>
+                <!-- Peer Benchmarks -->
+                <div class="stat-line" *ngIf="fd.peer_benchmarks?.peer_verdict">
+                  <span><b>👥 Peer Valuation:</b> <span class="text-sky">{{ fd.peer_benchmarks.peer_verdict }}</span></span>
+                </div>
                 <div class="forensic-flags" *ngIf="fd.red_flags && fd.red_flags.length > 0">
                   <div class="flag-item" *ngFor="let rf of fd.red_flags">⚠️ {{ rf }}</div>
                 </div>
@@ -235,6 +244,60 @@ import { parseMarkdown } from '../../core/utils/markdown';
               <button class="peer-btn" *ngFor="let p of lt.suggested_long_term_peers" (click)="openPeer(p)">
                 {{ p }} ↗
               </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Financial Statements Deep-Dive (Income, Balance, Cashflow) -->
+        <div class="detail-card financials-tab-card" *ngIf="companyProfile() as cp">
+          <div class="detail-card-title text-amber" style="justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span>📑</span> Audited Financial Statements &amp; Quality Metrics
+            </div>
+            <div class="fin-tabs">
+              <button class="fin-tab-btn" [class.active]="activeFinTab() === 'income'" (click)="activeFinTab.set('income')">Income</button>
+              <button class="fin-tab-btn" [class.active]="activeFinTab() === 'balance'" (click)="activeFinTab.set('balance')">Balance Sheet</button>
+              <button class="fin-tab-btn" [class.active]="activeFinTab() === 'cashflow'" (click)="activeFinTab.set('cashflow')">Cash Flow</button>
+            </div>
+          </div>
+
+          <!-- Income Tab -->
+          <div class="fin-tab-content" *ngIf="activeFinTab() === 'income'">
+            <div class="stat-row-split" *ngIf="cp.earningsQuality">
+              <span><b>Reported PAT:</b> Rs. {{ cp.earningsQuality.reportedPAT }} Cr</span>
+              <span><b>Adjusted PAT:</b> Rs. {{ cp.earningsQuality.adjustedPAT }} Cr</span>
+              <span><b>Sustainable PAT:</b> <strong class="text-green">Rs. {{ cp.earningsQuality.sustainablePAT }} Cr</strong></span>
+            </div>
+            <div class="stat-line" style="margin-top: 6px;" *ngIf="cp.governanceGrade">
+              <span><b>Governance Status:</b> <strong [style.color]="cp.governanceGrade === 'SOUND' ? '#34d399' : '#f87171'">{{ cp.governanceGrade }}</strong></span>
+              <span *ngIf="cp.promoterHoldingPct != null" style="margin-left: 12px;"><b>Promoter Stake:</b> {{ cp.promoterHoldingPct }}%</span>
+              <span *ngIf="cp.promoterPledgePct != null" style="margin-left: 12px;"><b>Pledged:</b> {{ cp.promoterPledgePct }}%</span>
+            </div>
+          </div>
+
+          <!-- Balance Sheet Tab -->
+          <div class="fin-tab-content" *ngIf="activeFinTab() === 'balance'">
+            <div class="stat-row-split" *ngIf="cp.forensicAnalysis?.solvency_health as solv">
+              <span><b>Total Debt:</b> Rs. {{ solv.total_debt }} Cr</span>
+              <span><b>Total Cash:</b> Rs. {{ solv.total_cash }} Cr</span>
+              <span><b>Net Debt:</b> <strong [style.color]="solv.net_debt <= 0 ? '#34d399' : '#f87171'">Rs. {{ solv.net_debt }} Cr</strong></span>
+            </div>
+            <div class="stat-line" style="margin-top: 6px;" *ngIf="cp.forensicAnalysis?.solvency_health as solv">
+              <span><b>Solvency Rating:</b> <span class="text-sky">{{ solv.solvency_rating }}</span></span>
+              <span style="margin-left: 12px;"><b>Interest Coverage:</b> {{ solv.estimated_interest_coverage }}x</span>
+            </div>
+          </div>
+
+          <!-- Cash Flow Tab -->
+          <div class="fin-tab-content" *ngIf="activeFinTab() === 'cashflow'">
+            <div class="stat-row-split" *ngIf="cp.forensicAnalysis?.cash_conversion as cf">
+              <span><b>CFO:</b> Rs. {{ cf.cfo }} Cr</span>
+              <span><b>Capex:</b> Rs. {{ cf.capex }} Cr</span>
+              <span><b>Free Cash Flow:</b> <strong class="text-green">Rs. {{ cf.fcf }} Cr</strong></span>
+            </div>
+            <div class="stat-line" style="margin-top: 6px;" *ngIf="cp.forensicAnalysis?.cash_conversion as cf">
+              <span><b>CFO / PAT Conversion:</b> <strong [style.color]="cf.cfo_to_pat_ratio >= 0.8 ? '#34d399' : '#f87171'">{{ (cf.cfo_to_pat_ratio * 100).toFixed(0) }}%</strong></span>
+              <span style="margin-left: 12px;"><b>Conversion Status:</b> {{ cf.conversion_status }}</span>
             </div>
           </div>
         </div>
@@ -660,6 +723,35 @@ import { parseMarkdown } from '../../core/utils/markdown';
     }
     .peer-btn:hover { background: #38bdf8; color: #090d16; }
 
+    .financials-tab-card {
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+    }
+    .fin-tabs {
+      display: flex;
+      gap: 6px;
+    }
+    .fin-tab-btn {
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      color: #94a3b8;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 0.72rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .fin-tab-btn.active {
+      background: rgba(245, 158, 11, 0.2);
+      border-color: #f59e0b;
+      color: #f59e0b;
+      font-weight: 600;
+    }
+    .fin-tab-content {
+      margin-top: 8px;
+      font-size: 0.8rem;
+    }
+
     .synthesizer-report-box {
       background: rgba(0, 0, 0, 0.35);
       padding: 20px;
@@ -698,6 +790,7 @@ export class StockDetailModalComponent implements OnInit, AfterViewInit, OnDestr
   isLoadingChart = signal<boolean>(false);
   isAnalyzing = signal<boolean>(false);
   chartTooltip = signal<string>('');
+  activeFinTab = signal<'income' | 'balance' | 'cashflow'>('income');
 
   get selectedStock(): Stock | null {
     return this.stocksStore.selectedStock();
@@ -727,6 +820,27 @@ export class StockDetailModalComponent implements OnInit, AfterViewInit, OnDestr
     const s = this.selectedStock;
     if (!s) return null;
     return s.fund_output?.forensic_analysis || null;
+  });
+
+  companyProfile = computed(() => {
+    const fd = this.forensicData();
+    const s = this.selectedStock;
+    if (!fd && !s) return null;
+    const gov = fd?.governance_telemetry || {};
+    const eq = fd?.earnings_quality || {};
+    return {
+      ticker: s?.symbol,
+      name: s?.name,
+      governanceGrade: gov.governance_grade || 'SOUND',
+      promoterHoldingPct: gov.promoter_holding_pct,
+      promoterPledgePct: gov.pledge_risk === 'HIGH' ? 25.0 : 0.0,
+      earningsQuality: eq ? {
+        reportedPAT: eq.reported_pat,
+        adjustedPAT: eq.adjusted_pat,
+        sustainablePAT: eq.sustainable_pat
+      } : null,
+      forensicAnalysis: fd
+    };
   });
 
   techLevels = computed(() => {

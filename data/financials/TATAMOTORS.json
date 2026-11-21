@@ -1,0 +1,19 @@
+{
+  "source": "BSE/NSE Annual & Quarterly Filings (Ind-AS)",
+  "company_name": "Tata Motors Ltd",
+  "sector": "Automobile",
+  "sales": 437928.00,
+  "sales_prior": 345967.00,
+  "net_profit": 31807.00,
+  "other_income": 3120.00,
+  "special_items": 0.00,
+  "cash_from_operations": 54200.00,
+  "capex": 23000.00,
+  "debtors": 18450.00,
+  "debtors_prior": 17200.00,
+  "borrowings": 107000.00,
+  "cash_equivalents": 38000.00,
+  "contingent_liabilities": 1420.00,
+  "promoter_holding": 46.36,
+  "pledge_pct": 0.00
+}

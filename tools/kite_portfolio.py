@@ -439,6 +439,24 @@ class KitePortfolioEngine:
             elif ud_ratio >= 1.25 and short_verdict in ("BUY", "ACCUMULATE"):
                 swing_action = f"🟢 INSTITUTIONAL ACCUMULATION ({ud_ratio:.2f}x) — Add on dips near entry floor"
 
+            # 3. Forensic Governance & Peer Benchmarks
+            forensic_grade = "SOUND"
+            forensic_flags = []
+            peer_verdict = ""
+            try:
+                from tools.forensic_financial_engine import ForensicFinancialEngine
+                f_engine = ForensicFinancialEngine(cache_manager=self.cache_manager)
+                f_data = f_engine.analyze_company(sym, price_override=ltp)
+                gov = f_data.get("governance_telemetry", {})
+                forensic_grade = gov.get("governance_grade", "SOUND")
+                forensic_flags = gov.get("governance_flags", [])
+                peer_verdict = f_data.get("peer_benchmarks", {}).get("peer_verdict", "")
+
+                if forensic_grade == "HIGH_RISK":
+                    lt_action = "🚨 HIGH GOVERNANCE / PLEDGE RISK — Trim position; forensic red flags detected"
+            except Exception:
+                pass
+
             evaluated_holdings.append({
                 "symbol": sym,
                 "company_name": c_name,
@@ -469,6 +487,10 @@ class KitePortfolioEngine:
                 "peg_ratio": peg,
                 "net_cash_status": net_cash,
                 "order_catalyst": order_catalyst,
+                # Forensic Governance & Peer Telemetry
+                "governance_grade": forensic_grade,
+                "governance_flags": forensic_flags,
+                "peer_verdict": peer_verdict,
             })
 
         # Calculate Sector Percentages

@@ -579,7 +579,14 @@ class MasterPredictionSynthesizerAgent:
                 action = f"Accumulate on dips in {entry} with protective stop loss at Rs. {sl} targeting Rs. {target}."
 
         from tools.long_term_strategy import long_term_engine
-        lt_eval = long_term_engine.evaluate_long_term_stock(symbol, company_name, last_price=lp, short_verdict=verdict)
+        raw_sector = (context.get("fundamental") or {}).get("sector") if context else None
+        lt_eval = long_term_engine.evaluate_long_term_stock(
+            symbol,
+            company_name,
+            sector=raw_sector or "",
+            last_price=lp,
+            short_verdict=verdict
+        )
 
         return {
             "action_verdict": verdict,
@@ -646,6 +653,15 @@ class MasterPredictionSynthesizerAgent:
             symbol, company_name, last_price, raw_tech, raw_risk, detected_patterns, events_data, context
         )
 
+        # Intrinsic Valuation & Margin of Safety
+        forensic_data = agent_outputs.get("fundamental", {}).get("forensic_analysis", {})
+        fair_val = forensic_data.get("fair_value") or forensic_data.get("valuation_metrics", {}).get("intrinsic_fair_value")
+        mos_val = forensic_data.get("margin_of_safety_pct") or forensic_data.get("valuation_metrics", {}).get("margin_of_safety_pct")
+        if fair_val is not None:
+            parsed["intrinsic_fair_value"] = fair_val
+        if mos_val is not None:
+            parsed["margin_of_safety_pct"] = mos_val
+
         # Format patterns / events summaries for the report
         if detected_patterns:
             patterns_text = "; ".join([
@@ -705,6 +721,9 @@ class MasterPredictionSynthesizerAgent:
             peg_str = f" (PEG: {peg_val})" if (peg_val and peg_val != "N/A") else ""
             val_str = f" [{val_assessment}]" if val_assessment and val_assessment != "Unavailable" else ""
             fund_profile_parts.append(f"P/E: {pe_val}{peg_str}{val_str}")
+        if fair_val is not None:
+            mos_str = f" ({'+' if mos_val > 0 else ''}{mos_val:.0f}%)" if mos_val is not None else ""
+            fund_profile_parts.append(f"Intrinsic Value: Rs. {fair_val:.2f}{mos_str}")
         if de_val and de_val != "N/A":
             fund_profile_parts.append(f"D/E: {de_val}")
         if cr_val and cr_val != "N/A":

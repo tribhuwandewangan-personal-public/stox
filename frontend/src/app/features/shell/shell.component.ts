@@ -10,6 +10,7 @@ import { HeaderComponent, AppView } from './header.component';
 import { BulletinComponent } from './bulletin.component';
 import { DashboardComponent } from '../dashboard/dashboard.component';
 import { PatternScreenerComponent } from '../screener/pattern-screener.component';
+import { PortfolioModalComponent } from '../dashboard/portfolio-modal.component';
 
 @Component({
   selector: 'app-shell',
@@ -21,6 +22,7 @@ import { PatternScreenerComponent } from '../screener/pattern-screener.component
     BulletinComponent,
     DashboardComponent,
     PatternScreenerComponent,
+    PortfolioModalComponent,
   ],
   template: `
     <div class="app-container">
@@ -29,7 +31,8 @@ import { PatternScreenerComponent } from '../screener/pattern-screener.component
 
       <app-header
         [activeView]="activeView()"
-        (viewChange)="onViewChange($event)">
+        (viewChange)="onViewChange($event)"
+        (openPortfolio)="showPortfolioModal.set(true)">
       </app-header>
 
       <app-bulletin></app-bulletin>
@@ -41,6 +44,12 @@ import { PatternScreenerComponent } from '../screener/pattern-screener.component
         <!-- Pattern Screener view -->
         <app-pattern-screener *ngIf="activeView() === 'screener'"></app-pattern-screener>
       </main>
+
+      <!-- Portfolio Diagnostics Modal -->
+      <app-portfolio-modal
+        *ngIf="showPortfolioModal()"
+        (close)="showPortfolioModal.set(false)">
+      </app-portfolio-modal>
 
       <footer class="app-footer">
         <div class="footer-content">
@@ -96,6 +105,7 @@ import { PatternScreenerComponent } from '../screener/pattern-screener.component
 })
 export class ShellComponent {
   activeView = signal<AppView>('watchlist');
+  showPortfolioModal = signal<boolean>(false);
 
   onViewChange(view: AppView): void {
     this.activeView.set(view);

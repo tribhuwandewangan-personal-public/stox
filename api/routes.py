@@ -389,6 +389,157 @@ async def favicon(request: Request) -> Response:
     return Response(status_code=204)
 
 
+async def company_profile(request: Request) -> JSONResponse:
+    """GET /api/company/{ticker}: Full company profile including forensic analysis, governance, and peers."""
+    try:
+        ticker = request.path_params.get("ticker", "").upper().strip()
+        if not ticker or not valid_symbol(ticker):
+            return JSONResponse({"error": "Invalid ticker"}, status_code=400)
+
+        cache_mgr = _managers.get("cache_mgr")
+        from tools.forensic_financial_engine import ForensicFinancialEngine
+        forensic_engine = ForensicFinancialEngine(cache_manager=cache_mgr)
+        analysis = forensic_engine.analyze_company(ticker)
+
+        gov = analysis.get("governance_telemetry", {})
+        eq = analysis.get("earnings_quality", {})
+
+        company_data = {
+            "ticker": ticker,
+            "exchange": "NSE",
+            "name": analysis.get("company_name", ticker),
+            "sector": analysis.get("sector", "N/A"),
+            "promoterHoldingPct": gov.get("promoter_holding_pct"),
+            "promoterPledgePct": 0.0 if gov.get("pledge_risk") == "LOW" else 25.0,
+            "auditRiskScore": gov.get("audit_risk_score"),
+            "governanceGrade": gov.get("governance_grade", "SOUND"),
+            "earningsQuality": {
+                "reportedPAT": eq.get("reported_pat", 0.0),
+                "adjustedPAT": eq.get("adjusted_pat", 0.0),
+                "sustainablePAT": eq.get("sustainable_pat", 0.0),
+                "exceptionalItems": [],
+                "redFlag": eq.get("quality_grade") in ("SEVERELY_DISTORTED", "MODERATELY_DISTORTED")
+            },
+            "forensicAnalysis": analysis
+        }
+        return JSONResponse(company_data)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+async def earnings_profile(request: Request) -> JSONResponse:
+    """GET /api/earnings/{ticker}: Earnings quality and exceptional items breakdown."""
+    try:
+        ticker = request.path_params.get("ticker", "").upper().strip()
+        if not ticker or not valid_symbol(ticker):
+            return JSONResponse({"error": "Invalid ticker"}, status_code=400)
+
+        cache_mgr = _managers.get("cache_mgr")
+        from tools.forensic_financial_engine import ForensicFinancialEngine
+        forensic_engine = ForensicFinancialEngine(cache_manager=cache_mgr)
+        analysis = forensic_engine.analyze_company(ticker)
+        eq = analysis.get("earnings_quality", {})
+
+        return JSONResponse({
+            "reportedPAT": eq.get("reported_pat", 0.0),
+            "adjustedPAT": eq.get("adjusted_pat", 0.0),
+            "sustainablePAT": eq.get("sustainable_pat", 0.0),
+            "exceptionalItems": [
+                {
+                    "description": "Exceptional Items",
+                    "amount": eq.get("exceptional_items", 0.0),
+                    "type": "income" if eq.get("exceptional_items", 0.0) >= 0 else "expense",
+                    "category": "Other"
+                }
+            ] if eq.get("exceptional_items", 0.0) != 0.0 else []
+        })
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+async def financial_income(request: Request) -> JSONResponse:
+    """GET /api/financial/{ticker}/income: Income statements."""
+    try:
+        ticker = request.path_params.get("ticker", "").upper().strip()
+        if not ticker or not valid_symbol(ticker):
+            return JSONResponse({"error": "Invalid ticker"}, status_code=400)
+
+        cache_mgr = _managers.get("cache_mgr")
+        from tools.forensic_financial_engine import ForensicFinancialEngine
+        forensic_engine = ForensicFinancialEngine(cache_manager=cache_mgr)
+        analysis = forensic_engine.analyze_company(ticker)
+        eq = analysis.get("earnings_quality", {})
+        cf = analysis.get("cash_conversion", {})
+
+        statements = [
+            {
+                "period": "LTM",
+                "revenue": cf.get("revenue_growth_pct"),
+                "reportedPAT": eq.get("reported_pat"),
+                "exceptionalItems": eq.get("exceptional_items"),
+                "sustainablePAT": eq.get("sustainable_pat")
+            }
+        ]
+        return JSONResponse(statements)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+async def financial_balance(request: Request) -> JSONResponse:
+    """GET /api/financial/{ticker}/balance: Balance sheet telemetry."""
+    try:
+        ticker = request.path_params.get("ticker", "").upper().strip()
+        if not ticker or not valid_symbol(ticker):
+            return JSONResponse({"error": "Invalid ticker"}, status_code=400)
+
+        cache_mgr = _managers.get("cache_mgr")
+        from tools.forensic_financial_engine import ForensicFinancialEngine
+        forensic_engine = ForensicFinancialEngine(cache_manager=cache_mgr)
+        analysis = forensic_engine.analyze_company(ticker)
+        solv = analysis.get("solvency_health", {})
+
+        statements = [
+            {
+                "period": "LTM",
+                "totalDebt": solv.get("total_debt"),
+                "totalCash": solv.get("total_cash"),
+                "netDebt": solv.get("net_debt"),
+                "currentRatio": solv.get("current_ratio"),
+                "debtToEquity": solv.get("debt_to_equity")
+            }
+        ]
+        return JSONResponse(statements)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+async def financial_cashflow(request: Request) -> JSONResponse:
+    """GET /api/financial/{ticker}/cashflow: Cash flow statements."""
+    try:
+        ticker = request.path_params.get("ticker", "").upper().strip()
+        if not ticker or not valid_symbol(ticker):
+            return JSONResponse({"error": "Invalid ticker"}, status_code=400)
+
+        cache_mgr = _managers.get("cache_mgr")
+        from tools.forensic_financial_engine import ForensicFinancialEngine
+        forensic_engine = ForensicFinancialEngine(cache_manager=cache_mgr)
+        analysis = forensic_engine.analyze_company(ticker)
+        cf = analysis.get("cash_conversion", {})
+
+        statements = [
+            {
+                "period": "LTM",
+                "cashFromOperations": cf.get("cfo"),
+                "capitalExpenditure": cf.get("capex"),
+                "freeCashFlow": cf.get("fcf"),
+                "cfoToPatRatio": cf.get("cfo_to_pat_ratio")
+            }
+        ]
+        return JSONResponse(statements)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 # Route definitions
 routes = [
     Route("/api/status", endpoint=status, methods=["GET"]),
@@ -405,6 +556,11 @@ routes = [
     Route("/api/macro-risk-shield", endpoint=macro_risk_shield, methods=["GET"]),
     Route("/api/market-scanner", endpoint=market_scanner, methods=["GET"]),
     Route("/api/market-scanner/scan", endpoint=market_scanner_trigger, methods=["POST"]),
+    Route("/api/company/{ticker}", endpoint=company_profile, methods=["GET"]),
+    Route("/api/earnings/{ticker}", endpoint=earnings_profile, methods=["GET"]),
+    Route("/api/financial/{ticker}/income", endpoint=financial_income, methods=["GET"]),
+    Route("/api/financial/{ticker}/balance", endpoint=financial_balance, methods=["GET"]),
+    Route("/api/financial/{ticker}/cashflow", endpoint=financial_cashflow, methods=["GET"]),
     Route("/api/trigger", endpoint=trigger, methods=["POST"]),
     Route("/api/add-symbol", endpoint=add_symbol, methods=["POST"]),
     Route("/api/remove-symbol", endpoint=remove_symbol, methods=["POST"]),

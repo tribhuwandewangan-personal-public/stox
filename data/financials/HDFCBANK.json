@@ -1,0 +1,19 @@
+{
+  "source": "BSE/NSE Annual & Quarterly Filings (Ind-AS)",
+  "company_name": "HDFC Bank Ltd",
+  "sector": "Banking",
+  "sales": 285400.00,
+  "sales_prior": 192800.00,
+  "net_profit": 64060.00,
+  "other_income": 0.00,
+  "special_items": 0.00,
+  "cash_from_operations": 88500.00,
+  "capex": 6200.00,
+  "debtors": 0.00,
+  "debtors_prior": 0.00,
+  "borrowings": 310000.00,
+  "cash_equivalents": 195000.00,
+  "contingent_liabilities": 2500.00,
+  "promoter_holding": 0.00,
+  "pledge_pct": 0.00
+}

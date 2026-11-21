@@ -87,6 +87,15 @@ import { SparklineComponent } from './sparkline.component';
             <span class="item-label">🛒 ENTRY ZONE</span>
             <span class="item-value">{{ entryZone }}</span>
           </div>
+          <div class="swing-item" *ngIf="intrinsicValueDisplay">
+            <span class="item-label">💎 INTRINSIC VALUE</span>
+            <span class="item-value accent-cyan">
+              {{ intrinsicValueDisplay }}
+              <small *ngIf="marginOfSafetyPct !== null" [style.color]="marginOfSafetyPct >= 0 ? '#34d399' : '#f87171'" style="font-weight: 600;">
+                ({{ marginOfSafetyPct > 0 ? '+' : '' }}{{ marginOfSafetyPct.toFixed(0) }}%)
+              </small>
+            </span>
+          </div>
           <div class="swing-item" *ngIf="swingTarget">
             <span class="item-label">🎯 SWING TARGET</span>
             <span class="item-value accent-green">{{ swingTarget }}</span>
@@ -407,6 +416,7 @@ import { SparklineComponent } from './sparkline.component';
     }
     .accent-green { color: #10b981; }
     .accent-red   { color: #ef4444; }
+    .accent-cyan  { color: #38bdf8; }
 
     /* Long-term */
     .lt-section {
@@ -712,6 +722,23 @@ export class StockCardComponent {
     if (s.stop_loss) return s.stop_loss;
     if (s.stop_num != null) return fmtPrice(s.stop_num);
     return null;
+  }
+  get intrinsicValueDisplay(): string | null {
+    const sig = this.stock.synth_output?.structured_signal;
+    const forensic = this.stock.fund_output?.forensic_analysis;
+    const fVal = sig?.intrinsic_fair_value || forensic?.fair_value || forensic?.valuation_metrics?.intrinsic_fair_value;
+    if (fVal && fVal !== 'N/A') {
+      const num = Number(fVal);
+      if (!isNaN(num) && num > 0) return fmtPrice(num);
+      return String(fVal);
+    }
+    return null;
+  }
+  get marginOfSafetyPct(): number | null {
+    const sig = this.stock.synth_output?.structured_signal;
+    const forensic = this.stock.fund_output?.forensic_analysis;
+    const mos = sig?.margin_of_safety_pct ?? forensic?.margin_of_safety_pct ?? forensic?.valuation_metrics?.margin_of_safety_pct ?? null;
+    return typeof mos === 'number' && !isNaN(mos) ? mos : null;
   }
   get horizon(): string | null {
     const s = this.stock.synth_output?.structured_signal;

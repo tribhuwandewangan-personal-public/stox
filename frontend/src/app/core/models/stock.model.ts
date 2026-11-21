@@ -45,6 +45,8 @@ export interface StructuredSignal {
   entry_high?: number;
   target_num?: number;
   stop_num?: number;
+  intrinsic_fair_value?: number | string;
+  margin_of_safety_pct?: number;
   long_term_signal?: LongTermSignal;
   long_term_target?: number | string;
   long_term_verdict?: string;

@@ -40,7 +40,7 @@ export type AppView = 'watchlist' | 'screener';
           <span>🛡️</span> Risk: <strong class="risk-val">LOW</strong>
         </button>
 
-        <button class="header-btn btn-portfolio" title="View Zerodha Kite Portfolio Holdings, Diagnostics & Actions">
+        <button class="header-btn btn-portfolio" (click)="openPortfolio.emit()" title="View Zerodha Kite Portfolio Holdings, Diagnostics & Actions">
           <span>💼</span> My Portfolio
         </button>
 
@@ -308,6 +308,7 @@ export type AppView = 'watchlist' | 'screener';
 export class HeaderComponent implements OnInit {
   @Input()  activeView: AppView = 'watchlist';
   @Output() viewChange = new EventEmitter<AppView>();
+  @Output() openPortfolio = new EventEmitter<void>();
 
   constructor(public appStore: AppStore) {}
 

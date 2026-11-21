@@ -15,6 +15,8 @@ from typing import Dict, Any, List, Optional
 import math
 from storage.cache_manager import CacheManager
 from tools.fundamental_tools import FundamentalAnalysisEngine
+from tools.peer_benchmark_engine import PeerBenchmarkEngine
+from tools.local_financials_parser import LocalFinancialsParser
 
 
 def _num(val: Any, default: Optional[float] = None) -> Optional[float]:
@@ -32,6 +34,7 @@ class ForensicFinancialEngine:
     def __init__(self, cache_manager: Optional[CacheManager] = None):
         self.cache_manager = cache_manager or CacheManager()
         self.fund_engine = FundamentalAnalysisEngine(cache_manager=self.cache_manager)
+        self.local_parser = LocalFinancialsParser()
 
     def analyze_company(
         self,
@@ -71,11 +74,19 @@ class ForensicFinancialEngine:
 
         val = self._calculate_sustainable_valuation(eq, cf, solv, fund_data, market_price)
 
+        # 6b. Governance & Promoter Pledging Telemetry
+        gov = self._audit_governance_telemetry(symbol_clean, fund_data)
+
+        # 7b. Automated Peer Valuation Comparison
+        sector_name = stmts.get("sector") or fund_data.get("sector", "")
+        peer_engine = PeerBenchmarkEngine()
+        peer_benchmarks = peer_engine.compute_peer_benchmarks(symbol_clean, sector_name, self.fund_engine)
+
         # 8. Forensic Red Flags & Positive Catalysts
-        red_flags, catalysts = self._compile_forensic_signals(eq, cf, sub, solv, val)
+        red_flags, catalysts = self._compile_forensic_signals(eq, cf, sub, solv, val, gov, peer_benchmarks)
 
         # 9. Deterministic Investment Recommendation Verdict
-        rec = self._synthesize_recommendation(eq, cf, solv, val, red_flags, catalysts, market_price)
+        rec = self._synthesize_recommendation(eq, cf, solv, val, red_flags, catalysts, market_price, gov)
 
         return {
             "symbol": symbol_clean,
@@ -92,6 +103,8 @@ class ForensicFinancialEngine:
             "subsidiary_attribution": sub,
             "solvency_health": solv,
             "valuation_metrics": val,
+            "governance_telemetry": gov,
+            "peer_benchmarks": peer_benchmarks,
             "red_flags": red_flags,
             "positive_catalysts": catalysts,
             "investment_thesis": rec["investment_thesis"],
@@ -126,9 +139,15 @@ class ForensicFinancialEngine:
 
     def _extract_statement_data(self, symbol: str, fund_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Gathers statement items from yfinance or stored telemetry.
+        Gathers statement items from local Indian financials cache (Screener/BSE/NSE feed)
+        or falls back to yfinance and stored telemetry.
         Provides robust defaults if certain line items are missing.
         """
+        # 1. Check local Indian statements feed first (offline resilience)
+        local_stmt = self.local_parser.load_local_statement(symbol)
+        if local_stmt:
+            return local_stmt
+
         data: Dict[str, Any] = {
             "source": "Standardized Telemetry",
             "revenue": 0.0,
@@ -425,13 +444,162 @@ class ForensicFinancialEngine:
             "valuation_verdict": "UNDERVALUED" if margin_of_safety_pct > 15.0 else ("OVERVALUED" if margin_of_safety_pct < -15.0 else "FAIRLY_VALUED")
         }
 
+    def _audit_governance_telemetry(
+        self,
+        symbol: str,
+        fund_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Fetches promoter holding data and governance risk signals from yfinance.
+        Flags promoter pledging risk, audit risk, and board governance concerns.
+        Returns a governance_telemetry dict with deterministic grade and flags.
+        Strictly read-only. No order placement.
+        """
+        governance_flags: List[str] = []
+        promoter_holding_pct: Optional[float] = None
+        promoter_holding_flag = False
+        pledge_risk = "LOW"
+        audit_risk_score: Optional[float] = None
+        board_risk_score: Optional[float] = None
+        compensation_risk_score: Optional[float] = None
+
+        try:
+            import yfinance as yf
+            ticker = yf.Ticker(f"{symbol}.NS")
+
+            # --- Promoter / Insider Holding % ---
+            try:
+                major_holders = getattr(ticker, "major_holders", None)
+                if major_holders is not None and not major_holders.empty:
+                    # yfinance major_holders: row 0 = % held by insiders, row 1 = % held by institutions
+                    for idx in range(len(major_holders)):
+                        label = str(major_holders.iloc[idx, 1]).lower() if major_holders.shape[1] > 1 else ""
+                        value_raw = major_holders.iloc[idx, 0]
+                        if "insider" in label or "promoter" in label:
+                            pct = _num(value_raw)
+                            if pct is not None:
+                                # yfinance returns a decimal (e.g. 0.52 for 52%)
+                                promoter_holding_pct = round(pct * 100.0, 2) if pct <= 1.0 else round(pct, 2)
+                            break
+                    # Fallback: first row is insider %
+                    if promoter_holding_pct is None:
+                        pct = _num(major_holders.iloc[0, 0])
+                        if pct is not None:
+                            promoter_holding_pct = round(pct * 100.0, 2) if pct <= 1.0 else round(pct, 2)
+            except Exception:
+                pass
+
+            if promoter_holding_pct is not None and promoter_holding_pct < 30.0:
+                promoter_holding_flag = True
+                governance_flags.append(
+                    f"Low promoter/insider holding: {promoter_holding_pct:.1f}% (<30% threshold). "
+                    "Suggests limited skin-in-the-game or possible stake dilution."
+                )
+
+            # --- Pledge Risk from Insider Transactions ---
+            try:
+                insider_tx = getattr(ticker, "insider_transactions", None)
+                if insider_tx is not None and not insider_tx.empty:
+                    total_shares = 0.0
+                    pledged_estimate = 0.0
+                    for _, row in insider_tx.iterrows():
+                        shares = _num(row.get("Shares", row.get("shares", 0)))
+                        tx_text = str(row.get("Transaction", row.get("transaction", ""))).lower()
+                        if shares and shares > 0:
+                            total_shares += abs(shares)
+                            # Treat "pledge", "hypothecate" transactions as pledged
+                            if any(kw in tx_text for kw in ("pledge", "hypothecate", "encumber", "collateral")):
+                                pledged_estimate += abs(shares)
+
+                    if total_shares > 0 and pledged_estimate > 0:
+                        pledge_pct = round((pledged_estimate / total_shares) * 100.0, 2)
+                        if pledge_pct > 20.0:
+                            pledge_risk = "HIGH"
+                            governance_flags.append(
+                                f"High promoter pledge risk: ~{pledge_pct:.1f}% of insider shares estimated as pledged "
+                                "(>20% threshold). Collateral call risk in market downturn."
+                            )
+                        elif pledge_pct > 10.0:
+                            pledge_risk = "MODERATE"
+                            governance_flags.append(
+                                f"Moderate pledge risk: ~{pledge_pct:.1f}% of insider shares estimated as pledged."
+                            )
+            except Exception:
+                pass
+
+            # --- Audit & Board Risk from ticker.info ---
+            try:
+                info = getattr(ticker, "info", {}) or {}
+                audit_raw = _num(info.get("auditRisk"))
+                board_raw = _num(info.get("boardRisk"))
+                comp_raw = _num(info.get("compensationRisk"))
+
+                if audit_raw is not None:
+                    audit_risk_score = audit_raw
+                    if audit_raw >= 7:
+                        governance_flags.append(
+                            f"High audit risk score: {audit_raw:.0f}/10 (Refinitiv ESG). "
+                            "Elevated accounting opacity or auditor concerns."
+                        )
+                    elif audit_raw >= 5:
+                        governance_flags.append(
+                            f"Moderate audit risk score: {audit_raw:.0f}/10."
+                        )
+
+                if board_raw is not None:
+                    board_risk_score = board_raw
+                    if board_raw >= 7:
+                        governance_flags.append(
+                            f"High board governance risk: {board_raw:.0f}/10. "
+                            "Board independence or oversight concerns flagged."
+                        )
+
+                if comp_raw is not None:
+                    compensation_risk_score = comp_raw
+                    if comp_raw >= 7:
+                        governance_flags.append(
+                            f"High compensation risk: {comp_raw:.0f}/10. "
+                            "Excessive executive pay relative to performance."
+                        )
+            except Exception:
+                pass
+
+        except Exception:
+            pass
+
+        # --- Governance Grade ---
+        risk_count = len(governance_flags)
+        has_high_pledge = pledge_risk == "HIGH"
+        has_high_audit = audit_risk_score is not None and audit_risk_score >= 7
+        has_high_board = board_risk_score is not None and board_risk_score >= 7
+
+        if has_high_pledge or (risk_count >= 3) or (has_high_audit and promoter_holding_flag):
+            governance_grade = "HIGH_RISK"
+        elif risk_count >= 1 or has_high_audit or has_high_board:
+            governance_grade = "ELEVATED_RISK"
+        else:
+            governance_grade = "SOUND"
+
+        return {
+            "promoter_holding_pct": promoter_holding_pct,
+            "promoter_holding_flag": promoter_holding_flag,
+            "pledge_risk": pledge_risk,
+            "audit_risk_score": audit_risk_score,
+            "board_risk_score": board_risk_score,
+            "compensation_risk_score": compensation_risk_score,
+            "governance_grade": governance_grade,
+            "governance_flags": governance_flags,
+        }
+
     def _compile_forensic_signals(
         self,
         eq: Dict[str, Any],
         cf: Dict[str, Any],
         sub: Dict[str, Any],
         solv: Dict[str, Any],
-        val: Dict[str, Any]
+        val: Dict[str, Any],
+        gov: Optional[Dict[str, Any]] = None,
+        peer_benchmarks: Optional[Dict[str, Any]] = None
     ) -> tuple[List[str], List[str]]:
         """Compiles rule-based red flags and positive fundamental catalysts."""
         red_flags: List[str] = []
@@ -499,6 +667,23 @@ class ForensicFinancialEngine:
                 f"Stretched valuation: Market price is {abs(val['margin_of_safety_pct'])}% above sustainable core earnings power."
             )
 
+        # 6. Governance Signals
+        if gov:
+            for flag in gov.get("governance_flags", []):
+                red_flags.append(f"[Governance] {flag}")
+            if gov.get("governance_grade") == "SOUND" and not gov.get("promoter_holding_flag"):
+                catalysts.append("Sound governance: Promoter holding healthy, low pledge and audit risk.")
+
+        # 7. Peer Benchmarking Signals
+        if peer_benchmarks:
+            peer_comp = peer_benchmarks.get("peer_comparison", {})
+            pe_vs = peer_comp.get("pe_vs_peers")
+            roe_vs = peer_comp.get("roe_vs_peers")
+            if pe_vs == "EXPENSIVE" and eq.get("distortion_pct", 0) >= 15.0:
+                red_flags.append("[Peer Valuation] Premium valuation commanded despite non-trivial earnings distortion relative to peers.")
+            elif pe_vs == "CHEAPER" and roe_vs == "SUPERIOR":
+                catalysts.append(f"[Peer Valuation] Favorable relative value: {peer_benchmarks.get('peer_verdict')}")
+
         return red_flags, catalysts
 
     def _synthesize_recommendation(
@@ -509,7 +694,8 @@ class ForensicFinancialEngine:
         val: Dict[str, Any],
         red_flags: List[str],
         catalysts: List[str],
-        market_price: float
+        market_price: float,
+        gov: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Synthesizes all findings into a deterministic decision:
@@ -518,12 +704,27 @@ class ForensicFinancialEngine:
           - HOLD
           - AVOID_OR_VALUE_TRAP
           - HIGH_RISK_DISTRESSED
+        If governance_grade == HIGH_RISK, verdict is forced to AVOID_OR_VALUE_TRAP.
         """
         mos = val["margin_of_safety_pct"]
         num_flags = len(red_flags)
         cfo_ratio = cf["cfo_to_pat_ratio"]
         distortion = eq["distortion_pct"]
         is_leveraged = solv["solvency_rating"] in ("OVER_LEVERAGED", "DEBT_SERVICE_STRESS")
+
+        # Governance override — HIGH_RISK governance forces AVOID_OR_VALUE_TRAP
+        governance_grade = gov.get("governance_grade", "SOUND") if gov else "SOUND"
+        if governance_grade == "HIGH_RISK":
+            return {
+                "verdict": "AVOID_OR_VALUE_TRAP",
+                "verdict_badge": "🔴 AVOID / VALUE TRAP",
+                "confidence_score": 87,
+                "investment_thesis": (
+                    "Governance red flags override quantitative merit: HIGH_RISK governance grade detected "
+                    "(elevated promoter pledge, audit risk, or critically low promoter holding). "
+                    "Capital preservation demands avoidance until governance concerns are resolved."
+                )
+            }
 
         # Deterministic Rules
         if is_leveraged and cfo_ratio < 0.50:

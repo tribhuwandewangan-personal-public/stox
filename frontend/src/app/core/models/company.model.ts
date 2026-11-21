@@ -67,6 +67,13 @@ export interface Company {
   supplierConcentration?: { [supplier: string]: number };
   earningsQuality?: EarningsQuality;
   /**
+   * Governance telemetry fields populated from forensic engine output.
+   */
+  promoterHoldingPct?: number;
+  promoterPledgePct?: number;
+  auditRiskScore?: number;
+  governanceGrade?: 'SOUND' | 'ELEVATED_RISK' | 'HIGH_RISK';
+  /**
    * Provenance information – URL of the source filing, retrieval date etc.
    */
   sourceUrl?: string;

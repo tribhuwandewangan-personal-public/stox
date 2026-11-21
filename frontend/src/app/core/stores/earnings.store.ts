@@ -1,7 +1,9 @@
-import { signal, computed } from '@angular/core';
+// src/app/core/stores/earnings.store.ts
+import { Injectable, signal, computed } from '@angular/core';
 import { EarningsQualityResult } from '../models/earnings.model';
 import { EarningsService } from '../services/earnings.service';
 
+@Injectable({ providedIn: 'root' })
 export class EarningsStore {
   private _data = signal<EarningsQualityResult | null>(null);
   private _loading = signal<boolean>(false);
@@ -29,5 +31,3 @@ export class EarningsStore {
   loading = computed(() => this._loading());
   error = computed(() => this._error());
 }
-
-export const earningsStore = new EarningsStore(new EarningsService(new (require('@angular/common/http').HttpClient)()));

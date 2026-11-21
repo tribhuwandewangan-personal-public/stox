@@ -5,10 +5,11 @@
  * for reactive consumption in the UI.
  */
 
-import { signal, computed } from '@angular/core';
+import { Injectable, signal, computed } from '@angular/core';
 import { Company } from '../models/company.model';
 import { CompanyService } from '../services/company.service';
 
+@Injectable({ providedIn: 'root' })
 export class CompanyStore {
   private _company = signal<Company | null>(null);
   private _loading = signal<boolean>(false);
@@ -37,5 +38,3 @@ export class CompanyStore {
   loading = computed(() => this._loading());
   error = computed(() => this._error());
 }
-
-export const companyStore = new CompanyStore(new CompanyService(new (require('@angular/common/http').HttpClient)()));

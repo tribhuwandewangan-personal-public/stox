@@ -1,0 +1,19 @@
+{
+  "source": "BSE/NSE Annual & Quarterly Filings (Ind-AS)",
+  "company_name": "Reliance Industries Ltd",
+  "sector": "Energy & Conglomerate",
+  "sales": 901064.00,
+  "sales_prior": 877835.00,
+  "net_profit": 69621.00,
+  "other_income": 16400.00,
+  "special_items": 0.00,
+  "cash_from_operations": 142000.00,
+  "capex": 88000.00,
+  "debtors": 28400.00,
+  "debtors_prior": 25200.00,
+  "borrowings": 315000.00,
+  "cash_equivalents": 185000.00,
+  "contingent_liabilities": 4500.00,
+  "promoter_holding": 50.31,
+  "pledge_pct": 0.00
+}

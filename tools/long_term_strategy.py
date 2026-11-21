@@ -6,6 +6,8 @@ short-term swing and technical indicators.
 """
 
 from typing import Dict, Any, List, Optional
+import os
+import json
 
 
 class LongTermStrategyEngine:
@@ -65,6 +67,36 @@ class LongTermStrategyEngine:
                 "moat_type": "Wide Moat (Retail CASA & Credit Expansion)",
                 "catalyst_theme": "Double-digit credit growth, pristine asset quality & gold loan AUM",
                 "top_long_term_peers": ["HDFCBANK", "ICICIBANK", "SBIN", "MUTHOOTFIN"]
+            },
+            "FMCG & Consumer": {
+                "base_cagr": "12-16% p.a.",
+                "moat_type": "Wide Moat (Brand Equity & Distribution Reach)",
+                "catalyst_theme": "Rural demand recovery, premiumization & direct-to-consumer expansion",
+                "top_long_term_peers": ["ITC", "NESTLEIND", "BRITANNIA", "RADICO", "LTFOODS"]
+            },
+            "Energy, Oil & Power": {
+                "base_cagr": "13-17% p.a.",
+                "moat_type": "Wide Moat (Integrated Natural Resources & Grid Infrastructure)",
+                "catalyst_theme": "Power transmission capex, green hydrogen & renewable generation transition",
+                "top_long_term_peers": ["RELIANCE", "NTPC", "POWERGRID", "TATAPOWER"]
+            },
+            "Chemicals & Materials": {
+                "base_cagr": "15-20% p.a.",
+                "moat_type": "Narrow to Wide Moat (Specialty Chem Complex Synthesis)",
+                "catalyst_theme": "Import substitution, agrochem/fluorochem expansion & global supply diversification",
+                "top_long_term_peers": ["AETHER", "HSCL", "LINDEINDIA", "PIDILITIND"]
+            },
+            "Telecommunications & Media": {
+                "base_cagr": "14-18% p.a.",
+                "moat_type": "Duopoly Moat (Spectrum & Digital Infrastructure)",
+                "catalyst_theme": "ARPU expansion, 5G enterprise monetization & cloud connectivity",
+                "top_long_term_peers": ["BHARTIARTL", "TATACOMM", "STLTECH"]
+            },
+            "Packaging & Industrials": {
+                "base_cagr": "13-17% p.a.",
+                "moat_type": "Moderate Moat (Contract Manufacturing & Industrial Supply)",
+                "catalyst_theme": "FMCG/pharma packaging consolidation, water treatment & industrial EPC",
+                "top_long_term_peers": ["AGI", "MOLDTKPAC", "WABAG", "CARBORUNIV"]
             }
         }
 
@@ -265,12 +297,42 @@ class LongTermStrategyEngine:
             }
 
         # Dynamic heuristic based on sector and short-term verdict
-        sector_clean = sector or "Equities"
+        sector_clean = sector or ""
         matched_sec = None
-        for sec_key in self.sector_profiles:
-            if sec_key.lower() in sector_clean.lower() or sector_clean.lower() in sec_key.lower():
-                matched_sec = self.sector_profiles[sec_key]
-                break
+
+        # 1. Direct sector profile match
+        if sector_clean:
+            for sec_key in self.sector_profiles:
+                if sec_key.lower() in sector_clean.lower() or sector_clean.lower() in sec_key.lower():
+                    matched_sec = self.sector_profiles[sec_key]
+                    break
+
+        # 2. Try matching via peer_benchmark_engine canonical sector mapping
+        if not matched_sec and sector_clean:
+            try:
+                from tools.peer_benchmark_engine import _resolve_sector, SECTOR_PEER_MAP
+                canon_key = _resolve_sector(sector_clean)
+                if canon_key and canon_key in SECTOR_PEER_MAP:
+                    canon_peers = [p for p in SECTOR_PEER_MAP[canon_key] if p != sym]
+                    # Map canonical to appropriate profile
+                    sec_map_name = {
+                        "IT": "Information Technology",
+                        "BANKING": "Banking & Financial Services",
+                        "PHARMA": "Healthcare & Pharmaceuticals",
+                        "AUTO": "Auto Ancillaries",
+                        "FMCG": "FMCG & Consumer",
+                        "ENERGY": "Energy, Oil & Power",
+                        "METALS": "Metals & Mining",
+                        "INFRA": "Capital Goods & Construction",
+                        "CONSUMER": "FMCG & Consumer",
+                        "NBFC": "Banking & Financial Services",
+                    }.get(canon_key)
+                    if sec_map_name and sec_map_name in self.sector_profiles:
+                        matched_sec = dict(self.sector_profiles[sec_map_name])
+                        if canon_peers:
+                            matched_sec["top_long_term_peers"] = canon_peers
+            except Exception:
+                pass
 
         if not matched_sec:
             # Fallback profile
@@ -298,8 +360,29 @@ class LongTermStrategyEngine:
         lt_target, lt_target_str = _target(mult)
         upside_pct = round((mult - 1.0) * 100, 1)
 
+        # Dynamically discover additional sector peers from symbols.json if available
+        dyn_peers = list(matched_sec.get("top_long_term_peers", []))
+        try:
+            from config import SYMBOLS_FILE_PATH
+            if os.path.exists(SYMBOLS_FILE_PATH):
+                with open(SYMBOLS_FILE_PATH, "r", encoding="utf-8") as f:
+                    sdata = json.load(f)
+                    sym_list = sdata.get("symbols", []) if isinstance(sdata, dict) else sdata
+                    if sector_clean:
+                        matching_symbols = [
+                            s["symbol"].upper() for s in sym_list
+                            if isinstance(s, dict) and s.get("symbol")
+                            and (s.get("sector", "").lower() in sector_clean.lower() or sector_clean.lower() in s.get("sector", "").lower())
+                            and s["symbol"].upper() != sym
+                        ]
+                        for ms in matching_symbols:
+                            if ms not in dyn_peers:
+                                dyn_peers.append(ms)
+        except Exception:
+            pass
+
         # Remove self from peers
-        peers = [p for p in matched_sec["top_long_term_peers"] if p != sym]
+        peers = [p for p in dyn_peers if p != sym]
         if not peers:
             peers = ["LT", "RELIANCE"]
 
@@ -313,7 +396,7 @@ class LongTermStrategyEngine:
             "target_basis": "indicative_scenario",
             "long_term_moat": matched_sec["moat_type"],
             "long_term_thesis": f"Beneficiary of {matched_sec['catalyst_theme']}. Expected earnings CAGR: {matched_sec['base_cagr']}.{basis_note}",
-            "suggested_long_term_peers": peers[:3],
+            "suggested_long_term_peers": peers[:4],
             "is_top_wealth_pick": is_pick
         }
 

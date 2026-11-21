@@ -1,0 +1,19 @@
+{
+  "source": "BSE/NSE Annual & Quarterly Filings (Ind-AS)",
+  "company_name": "Infosys Ltd",
+  "sector": "Information Technology",
+  "sales": 153670.00,
+  "sales_prior": 146767.00,
+  "net_profit": 26248.00,
+  "other_income": 3150.00,
+  "special_items": 0.00,
+  "cash_from_operations": 29800.00,
+  "capex": 3800.00,
+  "debtors": 31200.00,
+  "debtors_prior": 29800.00,
+  "borrowings": 0.00,
+  "cash_equivalents": 21500.00,
+  "contingent_liabilities": 250.00,
+  "promoter_holding": 14.71,
+  "pledge_pct": 0.00
+}

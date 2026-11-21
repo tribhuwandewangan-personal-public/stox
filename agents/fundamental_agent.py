@@ -72,9 +72,12 @@ class FundamentalAgent:
             forensic_res = {"verdict": "UNAUDITED", "red_flags": [], "verdict_badge": "⚪ UNAUDITED", "error": str(e)}
 
         forensic_flags = forensic_res.get("red_flags", [])
+        peer_benchmarks = forensic_res.get("peer_benchmarks", {})
         forensic_summary = f" | Forensic Due-Diligence: {forensic_res.get('verdict_badge', 'N/A')}"
         if forensic_flags:
             forensic_summary += f" [⚠️ Red Flags: {'; '.join(forensic_flags[:2])}]"
+        if peer_benchmarks.get("peer_verdict"):
+            forensic_summary += f" [📊 Peers: {peer_benchmarks.get('peer_verdict')}]"
 
         if fund_data.get("available", True):
             roe_txt = f"{roe}%" if roe != "N/A" else "N/A"
@@ -103,5 +106,6 @@ class FundamentalAgent:
             "forensic_verdict": forensic_res.get("verdict"),
             "forensic_badge": forensic_res.get("verdict_badge"),
             "forensic_red_flags": forensic_res.get("red_flags", []),
+            "peer_benchmarks": peer_benchmarks,
             "analysis": analysis_text
         }

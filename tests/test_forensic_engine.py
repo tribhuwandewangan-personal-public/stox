@@ -125,6 +125,73 @@ class TestForensicFinancialEngine(unittest.TestCase):
         self.assertEqual(len(result["red_flags"]), 0)
         self.assertIn(result["verdict"], ["BUY", "STRONG_BUY", "HOLD"])
 
+    def test_governance_high_pledge_flag(self):
+        """High pledge % should produce governance red flags and force AVOID verdict."""
+        # Financials are otherwise clean — governance alone must trigger the flag
+        clean_stmts = {
+            "company_name": "PledgeRisk Corp Ltd",
+            "sector": "Real Estate",
+            "revenue": 500.0,
+            "revenue_prior": 460.0,
+            "reported_pat": 60.0,
+            "exceptional_items": 0.0,
+            "other_income": 1.0,
+            "minority_interest": 0.0,
+            "cfo": 58.0,
+            "capex": 12.0,
+            "trade_receivables": 40.0,
+            "receivables_prior": 38.0,
+            "total_debt": 0.0,
+            "total_cash": 50.0,
+        }
+
+        # Directly inject a HIGH_RISK governance payload by patching
+        # _audit_governance_telemetry so no network calls are needed.
+        import unittest.mock as mock
+        high_risk_gov = {
+            "promoter_holding_pct": 22.5,
+            "promoter_holding_flag": True,
+            "pledge_risk": "HIGH",
+            "audit_risk_score": 8.0,
+            "board_risk_score": 7.0,
+            "compensation_risk_score": None,
+            "governance_grade": "HIGH_RISK",
+            "governance_flags": [
+                "Low promoter/insider holding: 22.5% (<30% threshold).",
+                "High promoter pledge risk: ~35.0% of insider shares estimated as pledged.",
+                "High audit risk score: 8/10 (Refinitiv ESG).",
+            ],
+        }
+
+        with mock.patch.object(
+            self.engine,
+            "_audit_governance_telemetry",
+            return_value=high_risk_gov,
+        ):
+            result = self.engine.analyze_company(
+                symbol="PLEDGERISK",
+                price_override=200.0,
+                financial_statement_override=clean_stmts,
+            )
+
+        gov = result["governance_telemetry"]
+        # Governance grade must be HIGH_RISK
+        self.assertEqual(gov["governance_grade"], "HIGH_RISK")
+        # Pledge risk must be flagged
+        self.assertEqual(gov["pledge_risk"], "HIGH")
+        # Promoter holding flag must be set
+        self.assertTrue(gov["promoter_holding_flag"])
+        # Must have at least 2 governance flags in the list
+        self.assertGreaterEqual(len(gov["governance_flags"]), 2)
+
+        # Governance flags must surface in top-level red_flags
+        flag_text = " ".join(result["red_flags"])
+        self.assertIn("Governance", flag_text)
+
+        # HIGH_RISK governance must force AVOID verdict
+        self.assertIn("AVOID", result["verdict"])
+        self.assertIn("🔴", result["verdict_badge"])
+
 
 if __name__ == "__main__":
     unittest.main()

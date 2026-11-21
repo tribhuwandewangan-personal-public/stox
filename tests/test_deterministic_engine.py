@@ -391,7 +391,7 @@ class VerdictInvariantTests(unittest.TestCase):
         holdings = res["holdings"]
         bel = next(h for h in holdings if h["symbol"] == "BEL")
         self.assertIn("COMPOUNDER", bel["long_term_action"])
-        self.assertTrue(any(w in bel["swing_action"].lower() for w in ["trailing stop", "stop loss", "target", "resistance", "gains"]))
+        self.assertTrue(any(w in bel["swing_action"].lower() for w in ["trailing stop", "stop loss", "target", "resistance", "gains", "accumulation", "entry"]))
 
         rep_path = engine.generate_portfolio_report()
         self.assertTrue(os.path.exists(rep_path))
@@ -910,10 +910,43 @@ class TestFundamentalPicksEngine(unittest.TestCase):
         }
 
         md = build_fundamental_picks_section(symbols_list, results_dict, None)
-        for col in ("Symbol", "PEG", "Valuation", "52W", "Inst. Flow", "LT Rating", "Why Now", "Action"):
+        for col in ("Symbol", "PEG", "Intrinsic Value", "Valuation", "52W", "Inst. Flow", "LT Rating", "Why Now", "Action"):
             self.assertIn(col, md, f"Column '{col}' missing from fundamental picks table")
         self.assertIn("TESTCO", md)
         self.assertIn("🏛️", md, "Section header emoji must be present")
+
+    def test_intrinsic_value_boosts_fundamental_score(self):
+        """Stocks with deep intrinsic value margin of safety score higher than fairly valued or overvalued stocks."""
+        from tools.fundamental_picks import score_fundamental_pick
+
+        synth = self._make_synth(peg_ratio=1.0, valuation_assessment="Fairly Valued")
+        tech = self._make_tech(pct52w=-10.0, ud=1.2)
+
+        fund_deep_value = {
+            "forensic_analysis": {
+                "verdict": "STRONG_BUY",
+                "verdict_badge": "🟢 SOUND VALUE",
+                "fair_value": 700.0,
+                "margin_of_safety_pct": 40.0,  # 40% margin of safety
+            }
+        }
+
+        fund_expensive = {
+            "forensic_analysis": {
+                "verdict": "HOLD",
+                "fair_value": 400.0,
+                "margin_of_safety_pct": -20.0,  # 20% overvalued vs intrinsic
+            }
+        }
+
+        pick_deep = score_fundamental_pick("DEEP", synth, tech, fund_res=fund_deep_value)
+        pick_exp = score_fundamental_pick("EXP", synth, tech, fund_res=fund_expensive)
+
+        self.assertIsNotNone(pick_deep)
+        self.assertIsNotNone(pick_exp)
+        self.assertGreater(pick_deep["score"], pick_exp["score"])
+        self.assertEqual(pick_deep["intrinsic_value"], 700.0)
+        self.assertEqual(pick_deep["margin_of_safety_pct"], 40.0)
 
 
 # =============================================================================

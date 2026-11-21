@@ -6,6 +6,7 @@ Pure rule-based, deterministic multi-criteria scoring for
 
 Scoring rubric (0–100 pts, can go negative):
   PEG ratio quality   : up to +25 pts
+  Intrinsic value MoS : up to +15 pts  (Margin of safety vs sustainable fair value)
   Balance sheet       : up to +15 pts
   Valuation           : up to +12 pts  (gate: Overvalued = disqualified)
   52W timing window   : up to +15 pts  (sweet spot –5% to –20% from peak)
@@ -113,6 +114,28 @@ def score_fundamental_pick(sym: str, synth_res: dict, tech_res: dict | None, fun
         elif pe_raw > 50:
             score -= 8
 
+    # 1b. Intrinsic Fair Value & Margin of Safety (DCF / Sustainable Core Valuation)
+    fair_value = _safe_float(forensic.get("fair_value") or forensic.get("valuation_metrics", {}).get("intrinsic_fair_value"))
+    mos_pct = _safe_float(forensic.get("margin_of_safety_pct") or forensic.get("valuation_metrics", {}).get("margin_of_safety_pct"))
+    if mos_pct is None and fair_value is not None and last_price is not None and last_price > 0:
+        mos_pct = round(((fair_value - last_price) / last_price) * 100.0, 2)
+
+    if mos_pct is not None:
+        if mos_pct >= 25.0:
+            score += 15
+            reasons.append(f"Deep MoS (+{mos_pct:.0f}% Intrinsic Discount)")
+        elif mos_pct >= 15.0:
+            score += 12
+            reasons.append(f"Strong MoS (+{mos_pct:.0f}% Discount)")
+        elif mos_pct >= 5.0:
+            score += 7
+            reasons.append(f"Undervalued Entry (+{mos_pct:.0f}% MoS)")
+        elif mos_pct <= -20.0:
+            score -= 12
+            reasons.append(f"Stretched vs Intrinsic ({mos_pct:.0f}% Premium)")
+        elif mos_pct <= -10.0:
+            score -= 6
+
     # 2. Balance sheet quality
     if "net cash" in net_cash_flag or "positive" in net_cash_flag or "debt-free" in net_cash_flag:
         score += 15; reasons.append("Net Cash / Debt-Free")
@@ -206,6 +229,8 @@ def score_fundamental_pick(sym: str, synth_res: dict, tech_res: dict | None, fun
         "sym":          sym,
         "score":        score,
         "peg":          peg_raw,
+        "intrinsic_value": fair_value,
+        "margin_of_safety_pct": mos_pct,
         "valuation":    _capitalise(val_text) if val_text else "N/A",
         "pct52w":       round(pct52w, 1) if pct52w is not None else None,
         "ud_ratio":     ud_ratio,
@@ -301,17 +326,24 @@ def build_fundamental_picks_section(symbols_list: list, results_dict: dict, cach
     lines.append("\n## 🏛️ Top 10 Fundamental Picks — Right Time to Buy")
     lines.append("> **For long-term wealth** — Fundamentally sound stocks at the right valuation & technical entry point.")
     lines.append("> Scored across 8 dimensions: PEG, Balance Sheet, Valuation, 52W Timing, Institutional Flow, LT Moat, Liquidity, Catalysts.\n")
-    lines.append("| # | Symbol | Company | Sector | LTP | PEG | Valuation | % from 52W High | Inst. Flow | LT Rating | LT Target | Why Now | Action |")
-    lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+    lines.append("| # | Symbol | Company | Sector | LTP | PEG | Intrinsic Value | Valuation | % from 52W High | Inst. Flow | LT Rating | LT Target | Why Now | Action |")
+    lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
 
     for i, p in enumerate(top10, 1):
         peg_disp   = f"{p['peg']:.2f}x" if p['peg'] is not None else "N/A"
         pct52_disp = f"{p['pct52w']:.1f}%" if p['pct52w'] is not None else "N/A"
         ud_disp    = _ud_label(p['ud_ratio'])
         ltp_disp   = f"Rs. {p['last_price']:.0f}" if p['last_price'] else "N/A"
+        if p.get("intrinsic_value") is not None:
+            iv_val = p['intrinsic_value']
+            mos_val = p.get('margin_of_safety_pct')
+            mos_str = f" ({'+' if mos_val > 0 else ''}{mos_val:.0f}%)" if mos_val is not None else ""
+            iv_disp = f"Rs. {iv_val:.0f}{mos_str}"
+        else:
+            iv_disp = "N/A"
         lines.append(
             f"| {i} | **{p['sym']}** | {p['cname']} | {p['sec']} "
-            f"| {ltp_disp} | {peg_disp} | {p['valuation']} "
+            f"| {ltp_disp} | {peg_disp} | {iv_disp} | {p['valuation']} "
             f"| {pct52_disp} | {ud_disp} | {p['lt_verdict']} "
             f"| {p['lt_target']} | {p['timing_tag']} | {p['action']} |"
         )

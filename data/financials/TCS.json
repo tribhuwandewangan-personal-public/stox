@@ -1,0 +1,19 @@
+{
+  "source": "BSE/NSE Annual & Quarterly Filings (Ind-AS)",
+  "company_name": "Tata Consultancy Services Ltd",
+  "sector": "Information Technology",
+  "sales": 240893.00,
+  "sales_prior": 225458.00,
+  "net_profit": 46099.00,
+  "other_income": 4120.00,
+  "special_items": 0.00,
+  "cash_from_operations": 48200.00,
+  "capex": 4200.00,
+  "debtors": 42100.00,
+  "debtors_prior": 39800.00,
+  "borrowings": 0.00,
+  "cash_equivalents": 29800.00,
+  "contingent_liabilities": 180.00,
+  "promoter_holding": 71.77,
+  "pledge_pct": 0.00
+}
