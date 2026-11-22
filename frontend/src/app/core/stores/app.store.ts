@@ -2,7 +2,7 @@
 
 import { Injectable, signal, WritableSignal } from '@angular/core';
 import { ApiService } from '../services/api.service';
-import { Quote } from '../models/stock.model';
+import { Quote, MacroRiskShieldResponse } from '../models/stock.model';
 import { Status } from '../models/status.model';
 
 @Injectable({
@@ -17,17 +17,30 @@ export class AppStore {
   readonly events: WritableSignal<any> = signal(null);
   readonly marketState: WritableSignal<string> = signal('');
   readonly marketOpen: WritableSignal<boolean> = signal(false);
+  readonly riskShield: WritableSignal<MacroRiskShieldResponse | null> = signal(null);
 
   constructor(private api: ApiService) {
     // Initial load
     this.refreshStatus();
     this.refreshQuotes();
     this.refreshEvents();
+    this.refreshRiskShield();
 
     // Periodic refresh – mimic the previous RxJS timers.
-    setInterval(() => this.refreshStatus(), 30_000); // every 30 s
-    setInterval(() => this.refreshQuotes(), 15_000); // every 15 s
-    setInterval(() => this.refreshEvents(), 45_000); // every 45 s
+    setInterval(() => this.refreshStatus(), 30_000); // every 30 s
+    setInterval(() => this.refreshQuotes(), 15_000); // every 15 s
+    setInterval(() => this.refreshEvents(), 45_000); // every 45 s
+    setInterval(() => this.refreshRiskShield(), 120_000); // every 2 min
+  }
+
+  /** Refresh live Macro Risk Shield summary */
+  async refreshRiskShield(): Promise<void> {
+    try {
+      const shield = await ApiService.getMacroRiskShield();
+      this.riskShield.set(shield);
+    } catch (e) {
+      console.error('Failed to refresh macro risk shield', e);
+    }
   }
 
   /** Refresh the server status and push into the signal */

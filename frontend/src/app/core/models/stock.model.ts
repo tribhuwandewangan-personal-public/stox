@@ -23,10 +23,23 @@ export interface Stock {
   long_term_signal: LongTermSignal;
 }
 
+export interface EvidenceBreakdownItem {
+  signal: string;
+  value: number;
+  weight: number;
+  note: string;
+}
+
 export interface SynthOutput {
   as_of_date: string;
+  timestamp?: string;
   structured_signal: StructuredSignal;
   final_report?: string;
+  data_quality?: {
+    failed_agents?: string[];
+    degraded?: boolean;
+    [key: string]: any;
+  };
 }
 
 export interface StructuredSignal {
@@ -55,11 +68,51 @@ export interface StructuredSignal {
   key_rationale?: string;
   actionable_recommendation?: string;
   evidence_score?: number;
+  evidence_breakdown?: EvidenceBreakdownItem[];
+  data_coverage_pct?: number;
+  chart_patterns?: string;
+  upcoming_events_note?: string;
+  event_guardrail?: {
+    earnings_guardrail_active?: boolean;
+    ex_div_guardrail_active?: boolean;
+    days_to_earnings?: number | null;
+    dividend_per_share?: number | null;
+    warnings?: string[];
+  };
 }
 
 export interface TechOutput {
   raw_indicators: {
     last_price?: number;
+    day_change_pct?: number | null;
+    ema_20?: number | null;
+    sma_20?: number | null;
+    sma_50?: number | null;
+    sma_200?: number | null;
+    atr_14?: number | null;
+    adx_14?: number | null;
+    plus_di_14?: number | null;
+    minus_di_14?: number | null;
+    trend_strength?: string | null;
+    weekly_trend?: string | null;
+    mtf_aligned?: boolean | null;
+    mansfield_rs?: number | null;
+    rs_63d_alpha_pct?: number | null;
+    rs_rating?: string | null;
+    delivery_pct?: number | null;
+    delivery_pct_20d_avg?: number | null;
+    delivery_ratio?: number | null;
+    delivery_conviction?: string | null;
+    rvol?: number | null;
+    up_down_vol_ratio?: number | null;
+    rsi_14?: number | null;
+    swing_high_20?: number | null;
+    swing_low_20?: number | null;
+    swing_high_60?: number | null;
+    swing_low_60?: number | null;
+    high_52w?: number | null;
+    low_52w?: number | null;
+    pct_from_52w_high?: number | null;
     detected_patterns?: PatternResult[];
   };
 }
@@ -85,11 +138,14 @@ export interface PatternResult {
 export interface PriceInfo {
   price: number | null;
   change_pct: number | null;
-  prev_close: number | null;
-  kind?: 'quote' | 'close' | 'analysis' | 'unknown';
-  source?: 'quote' | 'close' | 'analysis' | 'unknown' | string;
+  prev_close?: number | null;
+  kind?: 'quote' | 'close' | 'analysis' | 'unknown' | string | null;
+  source?: 'quote' | 'close' | 'analysis' | 'unknown' | string | null;
   as_of?: string | null;
   as_of_date?: string | null;
+  age_min?: number | null;
+  is_live?: boolean;
+  quote_ts?: string | null;
   analysis_price?: number | null;
   analysis_as_of?: string | null;
   drift_pct?: number | null;
@@ -151,6 +207,8 @@ export interface LongTermSignal {
   long_term_horizon?: string;
   long_term_moat?: string | null;
   long_term_thesis?: string | null;
+  long_term_score?: number;
+  target_basis?: 'fundamental_dcf' | 'indicative_scenario' | string;
   suggested_long_term_peers?: string[];
   is_top_wealth_pick?: boolean;
 }
@@ -171,15 +229,232 @@ export interface QuotesResponse {
   timestamp: string;
 }
 
+export interface AccuracyBucketStats {
+  n: number;
+  hit_target?: number;
+  hit_stop?: number;
+  expired?: number;
+  target_rate_pct?: number;
+  win_rate_pct?: number;
+  avg_return_pct?: number;
+  expectancy_pct?: number;
+  median_return_pct?: number;
+  avg_win_pct?: number;
+  avg_loss_pct?: number;
+  profit_factor?: number;
+  std_return_pct?: number | null;
+  t_stat?: number | null;
+  p_value?: number | null;
+  statistically_significant?: boolean;
+  reliable?: boolean;
+}
+
+export interface AccuracyCohort {
+  as_of_market_date: string;
+  logged: number;
+  resolved: number;
+  open: number;
+  actionable_resolved: number;
+  overall: AccuracyBucketStats;
+  by_direction: { [dir: string]: AccuracyBucketStats };
+  by_verdict: { [verdict: string]: AccuracyBucketStats };
+  by_confidence: { [bucket: string]: AccuracyBucketStats };
+}
+
 export interface AccuracyReport {
-  total_signals: number;
-  resolved_signals: number;
-  buy_accuracy: number;
-  accumulate_accuracy: number;
-  hold_accuracy: number;
-  sell_accuracy: number;
-  risk_reward_average: number;
-  recovery_time_avg_days: number;
+  logged: number;
+  open: number;
+  resolved: number;
+  actionable_resolved: number;
+  overall: AccuracyBucketStats;
+  by_direction: { [dir: string]: AccuracyBucketStats };
+  by_verdict: { [verdict: string]: AccuracyBucketStats };
+  by_confidence: { [bucket: string]: AccuracyBucketStats };
+  by_confidence_by_direction?: { [dir: string]: { [bucket: string]: AccuracyBucketStats } };
+  by_model_version?: { [verdict: string]: AccuracyBucketStats };
+  matured_cohort?: AccuracyCohort;
+  in_flight_resolved?: {
+    n: number;
+    stats: AccuracyBucketStats;
+  };
+  as_of_market_date?: string;
+  model_version_filter?: string | null;
+  horizon_trading_days?: number;
+  min_reliable_sample?: number;
+  note?: string;
+}
+
+export interface PlaybookStep {
+  step: number;
+  icon: string;
+  action: string;
+  detail: string;
+}
+
+export interface ScheduledRiskEvent {
+  event: string;
+  frequency: string;
+  risk: string;
+  impact: string;
+}
+
+export interface HoldingShield {
+  symbol: string;
+  sector: string;
+  sensitivity: number;
+  pnl_pct: number;
+  shield_action: string;
+  urgency: 'critical' | 'high' | 'medium' | 'low' | 'none' | string;
+}
+
+export interface MacroRiskShieldResponse {
+  risk_key: 'LOW' | 'ELEVATED' | 'HIGH' | 'DANGER' | 'UNAVAILABLE' | string;
+  risk_label: string;
+  risk_colour: string;
+  macro_score: number;
+  action_header: string;
+  playbook: PlaybookStep[];
+  defensive_sectors: [string, string][];
+  defensive_examples?: { [sector: string]: string[] };
+  scheduled_events: ScheduledRiskEvent[];
+  holding_shields: HoldingShield[];
+  macro_drivers: string[];
+  macro_label: string;
+  macro_available: boolean;
+  error?: string;
+}
+
+export interface MarketScannerStock {
+  symbol: string;
+  name: string;
+  sector: string;
+  strength_score: number;
+  tier: string;
+  last_price: number;
+  high_52w: number;
+  low_52w: number;
+  pct_from_52w_high: number;
+  rsi_14: number | null;
+  up_down_vol_ratio: number;
+  rvol: number;
+  pe_ratio: number | string;
+  peg_ratio: number | string;
+  intrinsic_fair_value: number | string | null;
+  margin_of_safety_pct: number | null;
+  roe_pct: number | string;
+  forensic_verdict?: string;
+  governance_grade?: string;
+  signals: string[];
+  evaluated_at: string;
+}
+
+export interface MarketScannerResponse {
+  stocks: MarketScannerStock[];
+  timestamp?: string | null;
+  count?: number;
+  status?: string;
+  message?: string;
+  error?: string;
+}
+
+export interface PortfolioHolding {
+  symbol: string;
+  company_name: string;
+  sector: string;
+  quantity: number;
+  average_price: number;
+  last_price: number;
+  invested_value: number;
+  current_value: number;
+  pnl: number;
+  pnl_pct: number;
+  long_term_verdict: string;
+  long_term_target?: string | number;
+  long_term_upside?: string | number;
+  long_term_action: string;
+  short_term_verdict?: string;
+  short_term_target?: string;
+  short_term_stop_loss?: string;
+  swing_action: string;
+  governance_grade: string;
+  peer_verdict?: string;
+  tax_and_cost_impact?: {
+    estimated_tax?: number;
+    statutory_costs?: number;
+    tax_regime?: string;
+    holding_bucket?: string;
+    note?: string;
+  };
+}
+
+export interface PortfolioSummary {
+  total_holdings: number;
+  total_invested: number;
+  current_value: number;
+  total_pnl: number;
+  total_pnl_pct: number;
+  profitable_count: number;
+  losing_count: number;
+  win_rate_pct?: number;
+  data_source?: string;
+  connection_status?: string;
+  as_of?: string;
+}
+
+export interface PortfolioAnalytics {
+  portfolio_beta_vs_nifty?: number | null;
+  hhi_concentration?: {
+    hhi: number;
+    regime: string;
+    effective_num_stocks: number;
+  };
+  cap_tier_mix?: { [tier: string]: { value: number; weight_pct: number; count: number } };
+  correlation?: { avg_pairwise_corr?: number | null; high_corr_pairs?: any[] };
+  var_cvar?: {
+    available?: boolean;
+    var_95_pct?: number;
+    var_95_rs?: number;
+    var_99_pct?: number;
+    var_99_rs?: number;
+    cvar_95_pct?: number;
+    cvar_95_rs?: number;
+    annualized_volatility_pct?: number;
+  };
+  stress_tests?: Array<{
+    scenario: string;
+    estimated_impact_pct: number;
+    estimated_impact_rs: number;
+    note: string;
+  }>;
+  estimated_liquidation_tax_rs?: number;
+  estimated_liquidation_costs_rs?: number;
+}
+
+export interface PortfolioResponse {
+  summary: PortfolioSummary;
+  holdings: PortfolioHolding[];
+  sector_breakdown?: { [sector: string]: { value: number; weight_pct: number } };
+  diversification_flags?: string[];
+  portfolio_analytics?: PortfolioAnalytics;
+  error?: string;
+}
+
+export interface FinancialStatementRow {
+  period: string;
+  revenue?: number | null;
+  revenueGrowthPct?: number | null;
+  reportedPAT?: number | null;
+  exceptionalItems?: number | null;
+  sustainablePAT?: number | null;
+  totalDebt?: number | null;
+  totalCash?: number | null;
+  netDebt?: number | null;
+  currentRatio?: number | null;
+  debtToEquity?: number | null;
+  cashFromOperations?: number | null;
+  capitalExpenditure?: number | null;
+  freeCashFlow?: number | null;
+  cfoToPatRatio?: number | null;
 }
 
 export interface ChartData {

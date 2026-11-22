@@ -414,7 +414,32 @@ def _extract_numeric_val(val: Any) -> Optional[float]:
     return float(match.group(1)) if match else None
 
 
+_picks_cache: Dict[str, Any] = {}
+_picks_lock = threading.Lock()
+PICKS_CACHE_SECONDS = 45
+
+
 def get_top_pattern_picks(cache_mgr, tech_engine, min_upside: float = 0.0) -> List[Dict[str, Any]]:
+    """
+    Cached wrapper: the full ranked list is rebuilt only when new analyses land (agent-runs marker changes)
+    or after PICKS_CACHE_SECONDS (live quotes); min_upside is applied as a cheap post-filter.
+    """
+    try:
+        marker = cache_mgr.get_agent_runs_marker()
+    except Exception:
+        marker = None
+    key = (marker, int(time.time() // PICKS_CACHE_SECONDS))
+    with _picks_lock:
+        if _picks_cache.get("key") != key:
+            _picks_cache["data"] = _compute_top_pattern_picks(cache_mgr, tech_engine, 0.0)
+            _picks_cache["key"] = key
+        data = _picks_cache["data"]
+    if min_upside and min_upside > 0:
+        return [p for p in data if p["upside_pct"] >= min_upside]
+    return list(data)
+
+
+def _compute_top_pattern_picks(cache_mgr, tech_engine, min_upside: float = 0.0) -> List[Dict[str, Any]]:
     """
     Extracts and ranks confirmed chart pattern picks across analyzed stocks using bulk SQLite queries.
     """
@@ -528,6 +553,24 @@ def get_fundamental_picks_data(cache_mgr, universe: str = "curated") -> Dict[str
 
     if universe not in ("curated", "midcap250", "all_nse"):
         universe = "curated"
+
+    try:
+        marker = cache_mgr.get_agent_runs_marker()
+    except Exception:
+        marker = None
+    fkey = (universe, marker, int(time.time() // PICKS_CACHE_SECONDS))
+    with _picks_lock:
+        hit = _picks_cache.get("fund_" + universe)
+        if hit and hit["key"] == fkey:
+            return hit["data"]
+    result = _compute_fundamental_picks(cache_mgr, universe)
+    with _picks_lock:
+        _picks_cache["fund_" + universe] = {"key": fkey, "data": result}
+    return result
+
+
+def _compute_fundamental_picks(cache_mgr, universe: str) -> Dict[str, Any]:
+    from tools.fundamental_picks import score_fundamental_pick
 
     symbols_list = _load_symbols_list(universe=universe)
     sym_names = [str(s.get("symbol") or "").upper().strip() for s in symbols_list if s.get("symbol")]

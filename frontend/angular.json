@@ -62,7 +62,7 @@
           "builder": "@angular/build:dev-server",
           "options": {
             "buildTarget": "stox:build:development",
-            "proxyConfig": "proxy.conf.json"
+            "proxyConfig": "proxy.conf.js"
           },
           "configurations": {
             "production": {"buildTarget": "stox:build:production"},

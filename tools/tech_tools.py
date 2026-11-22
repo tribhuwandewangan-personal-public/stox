@@ -438,8 +438,10 @@ class TechnicalAnalysisEngine:
         """
         Extracts formatted historical candles, technical indicators, and patterns
         for interactive frontend charts (Canvas / SVG / Chart.js).
+        Loads sufficient warmup bars so SMA-200 is populated across 1M-1Y views.
         """
-        df = self.rag_engine.load_symbol_history(symbol, limit_days=limit_days + 40)
+        limit_days = max(15, min(int(limit_days or 90), 400))
+        df = self.rag_engine.load_symbol_history(symbol, limit_days=limit_days + 210)
         if df.empty or len(df) < 15:
             return {"symbol": symbol, "candles": [], "patterns": []}
 

@@ -11,7 +11,11 @@ import {
   QuotesResponse,
   SearchResult,
   QueueStatus,
-  PatternPicksResponse
+  PatternPicksResponse,
+  MacroRiskShieldResponse,
+  MarketScannerResponse,
+  PortfolioResponse,
+  FinancialStatementRow
 } from '../models/stock.model';
 
 const API_BASE = '/api';
@@ -35,7 +39,14 @@ async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
   try {
     const response = await fetch(`${API_BASE}${path}`, options);
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      let detail = response.statusText;
+      try {
+        const body = await response.json();
+        detail = body?.message || body?.error || detail;
+      } catch {
+        // Ignore parse failures on error responses
+      }
+      throw new Error(`HTTP ${response.status}: ${detail}`);
     }
     return await response.json();
   } catch (error) {
@@ -185,6 +196,44 @@ export class ApiService {
   static getFundamentalPicks(universe: string = 'curated'): Promise<any> {
     const params = universe && universe !== 'curated' ? `?universe=${encodeURIComponent(universe)}` : '';
     return fetchJson<any>(`/fundamental-picks${params}`);
+  }
+
+  /**
+   * GET /api/macro-risk-shield: Macro risk tier, playbook, defensive sectors, and per-holding shields.
+   */
+  static getMacroRiskShield(): Promise<MacroRiskShieldResponse> {
+    return fetchJson<MacroRiskShieldResponse>('/macro-risk-shield');
+  }
+
+  /**
+   * GET /api/market-scanner: Latest outside-watchlist momentum & strength leaders.
+   */
+  static getMarketScanner(): Promise<MarketScannerResponse> {
+    return fetchJson<MarketScannerResponse>('/market-scanner');
+  }
+
+  /**
+   * POST /api/market-scanner/scan: Triggers a fresh background market scan.
+   */
+  static triggerMarketScan(): Promise<{ status: string; message?: string }> {
+    return fetchJson<{ status: string; message?: string }>('/market-scanner/scan', withCsrfHeaders({
+      method: 'POST',
+      body: JSON.stringify({})
+    }));
+  }
+
+  /**
+   * GET /api/portfolio: Read-only portfolio diagnostics and holdings breakdown.
+   */
+  static getPortfolio(): Promise<PortfolioResponse> {
+    return fetchJson<PortfolioResponse>('/portfolio');
+  }
+
+  /**
+   * GET /api/financial/{ticker}/{type}: Audited financial statement rows.
+   */
+  static getFinancialStatement(ticker: string, type: 'income' | 'balance' | 'cashflow'): Promise<FinancialStatementRow[]> {
+    return fetchJson<FinancialStatementRow[]>(`/financial/${encodeURIComponent(ticker)}/${type}`);
   }
 }
 

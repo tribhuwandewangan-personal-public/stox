@@ -569,18 +569,30 @@ export class PatternScreenerComponent implements OnInit, OnDestroy {
   }
 
   async loadPicks(): Promise<void> {
-    this.loading.set(true);
+    // Serve cached picks instantly (filters/sorts run client-side); refresh silently in background.
+    const cached = PatternScreenerComponent.cache;
+    if (cached && this.allPicks().length === 0) {
+      this.allPicks.set(cached.picks);
+      this.lastUpdated.set(cached.at);
+    }
+    const silent = this.allPicks().length > 0;
+    if (!silent) this.loading.set(true);
     this.error.set(null);
     try {
       const resp = await ApiService.getPatternPicks(0);
-      this.allPicks.set(resp.picks ?? []);
-      this.lastUpdated.set(new Date().toLocaleTimeString('en-IN'));
+      const picks = resp.picks ?? [];
+      const at = new Date().toLocaleTimeString('en-IN');
+      PatternScreenerComponent.cache = { picks, at };
+      this.allPicks.set(picks);
+      this.lastUpdated.set(at);
     } catch (err: any) {
-      this.error.set(err?.message ?? 'Failed to load pattern data');
+      if (!silent) this.error.set(err?.message ?? 'Failed to load pattern data');
     } finally {
       this.loading.set(false);
     }
   }
+
+  private static cache: { picks: PatternPick[]; at: string } | null = null;
 
   refresh(): void { this.loadPicks(); }
 
