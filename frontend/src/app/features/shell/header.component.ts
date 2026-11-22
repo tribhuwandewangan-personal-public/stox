@@ -77,12 +77,12 @@ export type AppView = 'watchlist' | 'screener';
         <!-- Market status badge -->
         <div class="status-badge market-badge" [ngClass]="'market-' + marketState()">
           <span class="pulse-dot-market"></span>
-          <span>Market {{ marketState() }} &bull; live</span>
+          <span>Market {{ marketState() }}<ng-container *ngIf="isMarketOpen()"> &bull; live</ng-container></span>
         </div>
 
         <!-- Valkey / Queue status -->
-        <div class="status-badge queue-badge" *ngIf="status as s">
-          <span>Valkey / Redis: {{ s.queue_status.pending_count }} Pending | {{ s.queue_status.completed_count }} Done</span>
+        <div class="status-badge queue-badge" *ngIf="status?.queue_status as q">
+          <span>{{ q.engine ?? 'Queue' }}: {{ q.pending ?? q.pending_count ?? 0 }} Pending | {{ q.completed ?? q.completed_count ?? 0 }} Done</span>
         </div>
       </div>
     </header>
@@ -345,10 +345,25 @@ export class HeaderComponent implements OnInit {
     }
   }
 
+  isMarketOpen(): boolean {
+    const apiState = this.appStore.marketState().trim().toLowerCase();
+    if (apiState) {
+      return this.appStore.marketOpen();
+    }
+    return this.marketState() === 'open';
+  }
+
   marketState(): string {
-    const hour = new Date().getHours();
-    if (hour >= 9 && hour < 15) return 'open';
-    if (hour >= 8 && hour < 9)  return 'premarket';
+    const apiState = this.appStore.marketState().trim().toLowerCase();
+    if (apiState) return apiState;
+    // IST fallback (UTC+5:30)
+    const now = new Date();
+    const istDate = new Date(now.getTime() + 330 * 60_000);
+    const day = istDate.getUTCDay();
+    if (day === 0 || day === 6) return 'closed';
+    const istMinutes = istDate.getUTCHours() * 60 + istDate.getUTCMinutes();
+    if (istMinutes >= 9 * 60 + 15 && istMinutes <= 15 * 60 + 30) return 'open';
+    if (istMinutes >= 9 * 60 && istMinutes < 9 * 60 + 15) return 'premarket';
     return 'closed';
   }
 

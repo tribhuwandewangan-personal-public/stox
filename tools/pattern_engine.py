@@ -18,6 +18,8 @@ import numpy as np
 import pandas as pd
 from typing import Dict, Any, List, Optional, Tuple
 
+from tools.indicators import wilder_rsi, wilder_atr, wilder_adx
+
 
 class QuantitativePatternEngine:
     """
@@ -45,8 +47,8 @@ class QuantitativePatternEngine:
         tr3 = (low - prev_close).abs()
         tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
         df['TR'] = tr
-        df['ATR_14'] = tr.rolling(window=14).mean().fillna(tr)
-        df['ATR_20'] = tr.rolling(window=period).mean().fillna(tr)
+        df['ATR_14'] = wilder_atr(high, low, close, 14).fillna(tr)
+        df['ATR_20'] = wilder_atr(high, low, close, period).fillna(tr)
 
         # 20 SMA & Bollinger Bands
         df['SMA_20'] = close.rolling(window=period).mean().fillna(close)
@@ -71,13 +73,11 @@ class QuantitativePatternEngine:
         delta = close - ((donchian_mid + df['SMA_20']) / 2.0)
         df['TTM_MOMENTUM'] = delta.rolling(window=12).mean().fillna(0)
 
-        # RSI (14) if not present
+        # Standardized Wilder RSI (14) and ADX (14)
         if 'RSI_14' not in df:
-            d_price = close.diff()
-            gain = (d_price.where(d_price > 0, 0)).rolling(window=14).mean()
-            loss = (-d_price.where(d_price < 0, 0)).rolling(window=14).mean()
-            rs = gain / (loss + 1e-9)
-            df['RSI_14'] = 100 - (100 / (1 + rs))
+            df['RSI_14'] = wilder_rsi(close, 14)
+        if 'ADX_14' not in df:
+            df['ADX_14'] = wilder_adx(high, low, close, 14)['ADX_14']
 
         return df
 
@@ -655,10 +655,14 @@ class QuantitativePatternEngine:
         peaks = [s for s in swings if s["type"] == "high"]
         troughs = [s for s in swings if s["type"] == "low"]
 
-        # Ascending Triangle: Flat Resistance + Rising Lows
+        # Ascending & Descending Triangles (require recency, bounded duration & un-invalidated levels)
         if len(peaks) >= 2 and len(troughs) >= 2:
             p1, p2 = peaks[-2], peaks[-1]
             t1, t2 = troughs[-2], troughs[-1]
+            last_pivot_idx = max(p2["idx"], t2["idx"])
+            first_pivot_idx = min(p1["idx"], t1["idx"])
+            if (len(df) - 1 - last_pivot_idx) > 35 or not (10 <= (last_pivot_idx - first_pivot_idx) <= 120):
+                return patterns
 
             peak_diff = abs(p1["price"] - p2["price"]) / p1["price"]
             if peak_diff <= 0.018 and t2["price"] > t1["price"] * 1.015:
@@ -668,26 +672,33 @@ class QuantitativePatternEngine:
                 stop_loss = round(float(t2["price"]), 2)
                 is_breakout = curr_close >= resistance
 
-                patterns.append({
-                    "name": "Ascending Triangle",
-                    "category": "Continuation / Breakout",
-                    "type": "Bullish Breakout",
-                    "direction": "Bullish",
-                    "quality_score": 86,
-                    "significance": "High",
-                    "confidence": "High" if is_breakout else "Medium",
-                    "status": "Confirmed Breakout" if is_breakout else "Consolidating Against Resistance",
-                    "entry_trigger": round(float(resistance), 2),
-                    "target_price": target,
-                    "stop_loss": stop_loss,
-                    "risk_reward_ratio": round(abs(target - resistance) / max(1.0, abs(resistance - stop_loss)), 2),
-                    "description": (
-                        f"Flat resistance at Rs.{resistance:.2f} with rising higher lows (L1: Rs.{t1['price']:.2f} -> L2: Rs.{t2['price']:.2f}). "
-                        f"Breakout target: Rs.{target:.2f} (Stop: Rs.{stop_loss:.2f})."
-                    ),
-                    "key_levels": {"resistance": round(float(resistance), 2), "support": stop_loss, "target": target},
-                    "metrics": {"resistance": round(float(resistance), 2), "support": stop_loss, "target": target}
-                })
+                if (
+                    height > 0
+                    and curr_close > stop_loss
+                    and target > curr_close
+                    and curr_close <= target * 1.05
+                    and abs(curr_close - resistance) / max(curr_close, 1e-6) <= 0.12
+                ):
+                    patterns.append({
+                        "name": "Ascending Triangle",
+                        "category": "Continuation / Breakout",
+                        "type": "Bullish Breakout",
+                        "direction": "Bullish",
+                        "quality_score": 86,
+                        "significance": "High",
+                        "confidence": "High" if is_breakout else "Medium",
+                        "status": "Confirmed Breakout" if is_breakout else "Consolidating Against Resistance",
+                        "entry_trigger": round(float(resistance), 2),
+                        "target_price": target,
+                        "stop_loss": stop_loss,
+                        "risk_reward_ratio": round(abs(target - resistance) / max(1.0, abs(resistance - stop_loss)), 2),
+                        "description": (
+                            f"Flat resistance at Rs.{resistance:.2f} with rising higher lows (L1: Rs.{t1['price']:.2f} -> L2: Rs.{t2['price']:.2f}). "
+                            f"Breakout target: Rs.{target:.2f} (Stop: Rs.{stop_loss:.2f})."
+                        ),
+                        "key_levels": {"resistance": round(float(resistance), 2), "support": stop_loss, "target": target},
+                        "metrics": {"resistance": round(float(resistance), 2), "support": stop_loss, "target": target}
+                    })
 
             # Descending Triangle: Flat Support + Lower Highs
             trough_diff = abs(t1["price"] - t2["price"]) / t1["price"]
@@ -698,26 +709,33 @@ class QuantitativePatternEngine:
                 stop_loss = round(float(p2["price"]), 2)
                 is_breakdown = curr_close <= support
 
-                patterns.append({
-                    "name": "Descending Triangle",
-                    "category": "Breakdown",
-                    "type": "Bearish Breakdown",
-                    "direction": "Bearish",
-                    "quality_score": 84,
-                    "significance": "High",
-                    "confidence": "High" if is_breakdown else "Medium",
-                    "status": "Confirmed Breakdown" if is_breakdown else "Testing Horizontal Support",
-                    "entry_trigger": round(float(support), 2),
-                    "target_price": target,
-                    "stop_loss": stop_loss,
-                    "risk_reward_ratio": round(abs(support - target) / max(1.0, abs(stop_loss - support)), 2),
-                    "description": (
-                        f"Horizontal support at Rs.{support:.2f} with lower highs (H1: Rs.{p1['price']:.2f} -> H2: Rs.{p2['price']:.2f}). "
-                        f"Breakdown target: Rs.{target:.2f} (Stop: Rs.{stop_loss:.2f})."
-                    ),
-                    "key_levels": {"support": round(float(support), 2), "resistance": stop_loss, "target": target},
-                    "metrics": {"support": round(float(support), 2), "resistance": stop_loss, "target": target}
-                })
+                if (
+                    height > 0
+                    and curr_close < stop_loss
+                    and target < curr_close
+                    and curr_close >= target * 0.95
+                    and abs(curr_close - support) / max(curr_close, 1e-6) <= 0.12
+                ):
+                    patterns.append({
+                        "name": "Descending Triangle",
+                        "category": "Breakdown",
+                        "type": "Bearish Breakdown",
+                        "direction": "Bearish",
+                        "quality_score": 84,
+                        "significance": "High",
+                        "confidence": "High" if is_breakdown else "Medium",
+                        "status": "Confirmed Breakdown" if is_breakdown else "Testing Horizontal Support",
+                        "entry_trigger": round(float(support), 2),
+                        "target_price": target,
+                        "stop_loss": stop_loss,
+                        "risk_reward_ratio": round(abs(support - target) / max(1.0, abs(stop_loss - support)), 2),
+                        "description": (
+                            f"Horizontal support at Rs.{support:.2f} with lower highs (H1: Rs.{p1['price']:.2f} -> H2: Rs.{p2['price']:.2f}). "
+                            f"Breakdown target: Rs.{target:.2f} (Stop: Rs.{stop_loss:.2f})."
+                        ),
+                        "key_levels": {"support": round(float(support), 2), "resistance": stop_loss, "target": target},
+                        "metrics": {"support": round(float(support), 2), "resistance": stop_loss, "target": target}
+                    })
 
         return patterns
 
@@ -743,14 +761,20 @@ class QuantitativePatternEngine:
                 if diff <= 0.028 and (t2["idx"] - t1["idx"]) >= 8:
                     mid_peaks = [p for p in peaks if t1["idx"] < p["idx"] < t2["idx"]]
                     if mid_peaks:
-                        neckline = mid_peaks[0]["price"]
+                        neckline = max(p["price"] for p in mid_peaks)
                         depth = neckline - min(t1["price"], t2["price"])
                         target = round(float(neckline + depth), 2)
                         stop_loss = round(float(min(t1["price"], t2["price"]) * 0.99), 2)
                         is_breakout = curr_close >= neckline
 
-                        # Target must be above current price, and current close cannot be > 10% past target
-                        if target > curr_close and curr_close <= target * 1.10 and abs(curr_close - neckline) / curr_close <= 0.15:
+                        # Target must be above current price, stop not violated, and close within valid zone
+                        if (
+                            depth > 0
+                            and curr_close > stop_loss
+                            and target > curr_close
+                            and curr_close <= target * 1.10
+                            and abs(curr_close - neckline) / curr_close <= 0.15
+                        ):
                             patterns.append({
                                 "name": "Double Bottom (W-Pattern)",
                                 "category": "Reversal",
@@ -782,14 +806,20 @@ class QuantitativePatternEngine:
                 if diff <= 0.028 and (p2["idx"] - p1["idx"]) >= 8:
                     mid_troughs = [t for t in troughs if p1["idx"] < t["idx"] < p2["idx"]]
                     if mid_troughs:
-                        neckline = mid_troughs[0]["price"]
+                        neckline = min(t["price"] for t in mid_troughs)
                         depth = max(p1["price"], p2["price"]) - neckline
                         target = round(float(neckline - depth), 2)
                         stop_loss = round(float(max(p1["price"], p2["price"]) * 1.01), 2)
                         is_breakdown = curr_close <= neckline
 
-                        # Downside target must be below current price
-                        if target < curr_close and curr_close >= target * 0.90 and abs(curr_close - neckline) / curr_close <= 0.15:
+                        # Downside target must be below current price and stop not violated
+                        if (
+                            depth > 0
+                            and curr_close < stop_loss
+                            and target < curr_close
+                            and curr_close >= target * 0.90
+                            and abs(curr_close - neckline) / curr_close <= 0.15
+                        ):
                             patterns.append({
                                 "name": "Double Top (M-Pattern)",
                         "category": "Reversal",
@@ -825,6 +855,10 @@ class QuantitativePatternEngine:
 
         last_5 = swings[-5:]
         curr_close = float(df['CLOSE_PRICE'].iloc[-1])
+        d_idx = last_5[4]["idx"]
+        d_price = float(last_5[4]["price"])
+        if (len(df) - 1 - d_idx) > 20 or abs(curr_close - d_price) / max(d_price, 1e-6) > 0.10:
+            return patterns
 
         # 1. Bullish Gartley / Bat: X(low) -> A(high) -> B(low) -> C(high) -> D(low)
         if last_5[0]["type"] == "low" and last_5[1]["type"] == "high" and last_5[2]["type"] == "low" and last_5[3]["type"] == "high" and last_5[4]["type"] == "low":
@@ -833,10 +867,12 @@ class QuantitativePatternEngine:
             if XA > 0:
                 ab_retrace = (A - B) / XA
                 cd_retrace = (A - D) / XA
+                target = round(float(D + (C - D) * 0.618), 2)
+                stop_loss = round(float(X * 0.99), 2)
+                since_d_low = float(df['LOW_PRICE'].iloc[d_idx:].min())
+                valid_bull_harmonic = curr_close > stop_loss and curr_close < target and since_d_low >= stop_loss * 0.995
 
-                if 0.55 <= ab_retrace <= 0.68 and 0.73 <= cd_retrace <= 0.84:
-                    target = round(float(D + (C - D) * 0.618), 2)
-                    stop_loss = round(float(X * 0.99), 2)
+                if valid_bull_harmonic and 0.55 <= ab_retrace <= 0.68 and 0.73 <= cd_retrace <= 0.84:
                     patterns.append({
                         "name": "Bullish Gartley (Harmonic 0.786)",
                         "category": "Harmonic Reversal",
@@ -858,9 +894,7 @@ class QuantitativePatternEngine:
                         "metrics": {"point_X": round(X, 2), "point_D": round(D, 2), "target": target}
                     })
 
-                elif 0.35 <= ab_retrace <= 0.54 and 0.84 <= cd_retrace <= 0.93:
-                    target = round(float(D + (C - D) * 0.618), 2)
-                    stop_loss = round(float(X * 0.99), 2)
+                elif valid_bull_harmonic and 0.35 <= ab_retrace <= 0.54 and 0.84 <= cd_retrace <= 0.93:
                     patterns.append({
                         "name": "Bullish Bat (Harmonic 0.886)",
                         "category": "Harmonic Reversal",
@@ -889,10 +923,12 @@ class QuantitativePatternEngine:
             if XA > 0:
                 ab_retrace = (B - A) / XA
                 cd_retrace = (D - A) / XA
+                target = round(float(D - (D - C) * 0.618), 2)
+                stop_loss = round(float(X * 1.01), 2)
+                since_d_high = float(df['HIGH_PRICE'].iloc[d_idx:].max())
+                valid_bear_harmonic = curr_close < stop_loss and curr_close > target and since_d_high <= stop_loss * 1.005
 
-                if 0.55 <= ab_retrace <= 0.68 and 0.73 <= cd_retrace <= 0.84:
-                    target = round(float(D - (D - C) * 0.618), 2)
-                    stop_loss = round(float(X * 1.01), 2)
+                if valid_bear_harmonic and 0.55 <= ab_retrace <= 0.68 and 0.73 <= cd_retrace <= 0.84:
                     patterns.append({
                         "name": "Bearish Gartley (Harmonic 0.786)",
                         "category": "Harmonic Reversal",
@@ -914,9 +950,7 @@ class QuantitativePatternEngine:
                         "metrics": {"point_X": round(X, 2), "point_D": round(D, 2), "target": target}
                     })
 
-                elif 0.35 <= ab_retrace <= 0.54 and 0.84 <= cd_retrace <= 0.93:
-                    target = round(float(D - (D - C) * 0.618), 2)
-                    stop_loss = round(float(X * 1.01), 2)
+                elif valid_bear_harmonic and 0.35 <= ab_retrace <= 0.54 and 0.84 <= cd_retrace <= 0.93:
                     patterns.append({
                         "name": "Bearish Bat (Harmonic 0.886)",
                         "category": "Harmonic Reversal",
@@ -1069,9 +1103,15 @@ class QuantitativePatternEngine:
         tr_support = float(np.percentile(tr_lows, 10))
         tr_resistance = float(np.percentile(tr_highs, 90))
 
-        # Range must be meaningful (> 5%)
-        if (tr_resistance - tr_support) / tr_support < 0.05:
+        # Require genuine sideways trading range (5%-30% band, low net drift, non-trending ADX <= 28)
+        range_pct = (tr_resistance - tr_support) / max(tr_support, 1e-6)
+        base_drift = abs(float(closes[-4]) - float(closes[-35])) / max(tr_support, 1e-6)
+        if not (0.05 <= range_pct <= 0.30) or base_drift > 0.15:
             return patterns
+        if 'ADX_14' in df:
+            base_adx = df['ADX_14'].iloc[-35:-3].dropna().tail(15)
+            if not base_adx.empty and float(base_adx.mean()) > 28.0:
+                return patterns
 
         # 1. Wyckoff Spring: Within last 3 bars, low dipped below TR support by 0.5% - 4%, but price snapped back inside
         recent_min = float(np.min(lows[-3:]))
@@ -1085,36 +1125,37 @@ class QuantitativePatternEngine:
                 stop_loss = round(float(recent_min * 0.99), 2)
                 rr = round(abs(target - curr_close) / max(1.0, abs(curr_close - stop_loss)), 2)
 
-                patterns.append({
-                    "name": "Wyckoff Accumulation Spring (Phase C)",
-                    "category": "Institutional Order Flow",
-                    "type": "High-Probability Bear Trap",
-                    "direction": "Bullish",
-                    "quality_score": 93 if vol_divergence else 86,
-                    "significance": "High",
-                    "confidence": "High",
-                    "status": "Confirmed Spring & Recovery",
-                    "entry_trigger": round(curr_close, 2),
-                    "target_price": target,
-                    "stop_loss": stop_loss,
-                    "risk_reward_ratio": rr,
-                    "description": (
-                        f"Wyckoff Phase C 'Spring' detected. False breakdown below trading range support (Rs.{tr_support:.2f}) "
-                        f"to Rs.{recent_min:.2f} rapidly reclaimed. Supply absorption confirmed. "
-                        f"Targeting upper TR boundary at Rs.{target:.2f} (Stop: Rs.{stop_loss:.2f}, R:R: {rr})."
-                    ),
-                    "key_levels": {
-                        "range_support": round(tr_support, 2),
-                        "spring_low": round(recent_min, 2),
-                        "range_resistance": target
-                    },
-                    "metrics": {
-                        "range_support": round(tr_support, 2),
-                        "spring_low": round(recent_min, 2),
-                        "target": target,
-                        "stop_loss": stop_loss
-                    }
-                })
+                if target > curr_close:
+                    patterns.append({
+                        "name": "Wyckoff Accumulation Spring (Phase C)",
+                        "category": "Institutional Order Flow",
+                        "type": "High-Probability Bear Trap",
+                        "direction": "Bullish",
+                        "quality_score": 93 if vol_divergence else 86,
+                        "significance": "High",
+                        "confidence": "High",
+                        "status": "Confirmed Spring & Recovery",
+                        "entry_trigger": round(curr_close, 2),
+                        "target_price": target,
+                        "stop_loss": stop_loss,
+                        "risk_reward_ratio": rr,
+                        "description": (
+                            f"Wyckoff Phase C 'Spring' detected. False breakdown below trading range support (Rs.{tr_support:.2f}) "
+                            f"to Rs.{recent_min:.2f} rapidly reclaimed. Supply absorption confirmed. "
+                            f"Targeting upper TR boundary at Rs.{target:.2f} (Stop: Rs.{stop_loss:.2f}, R:R: {rr})."
+                        ),
+                        "key_levels": {
+                            "range_support": round(tr_support, 2),
+                            "spring_low": round(recent_min, 2),
+                            "range_resistance": target
+                        },
+                        "metrics": {
+                            "range_support": round(tr_support, 2),
+                            "spring_low": round(recent_min, 2),
+                            "target": target,
+                            "stop_loss": stop_loss
+                        }
+                    })
 
         # 2. Wyckoff Upthrust (UTAD - Phase C Distribution): False breakout above TR resistance, price snaps back inside
         recent_max = float(np.max(highs[-3:]))
@@ -1124,36 +1165,37 @@ class QuantitativePatternEngine:
                 stop_loss = round(float(recent_max * 1.01), 2)
                 rr = round(abs(curr_close - target) / max(1.0, abs(stop_loss - curr_close)), 2)
 
-                patterns.append({
-                    "name": "Wyckoff Upthrust After Distribution (UTAD)",
-                    "category": "Institutional Order Flow",
-                    "type": "High-Probability Bull Trap",
-                    "direction": "Bearish",
-                    "quality_score": 91,
-                    "significance": "High",
-                    "confidence": "High",
-                    "status": "Confirmed Upthrust Failure",
-                    "entry_trigger": round(curr_close, 2),
-                    "target_price": target,
-                    "stop_loss": stop_loss,
-                    "risk_reward_ratio": rr,
-                    "description": (
-                        f"Wyckoff UTAD detected. Failed breakout above range resistance (Rs.{tr_resistance:.2f}) "
-                        f"peaked at Rs.{recent_max:.2f} and fell back inside range. Bull trap complete. "
-                        f"Targeting lower TR support at Rs.{target:.2f} (Stop: Rs.{stop_loss:.2f}, R:R: {rr})."
-                    ),
-                    "key_levels": {
-                        "range_resistance": round(tr_resistance, 2),
-                        "upthrust_high": round(recent_max, 2),
-                        "range_support": target
-                    },
-                    "metrics": {
-                        "range_resistance": round(tr_resistance, 2),
-                        "upthrust_high": round(recent_max, 2),
-                        "target": target,
-                        "stop_loss": stop_loss
-                    }
-                })
+                if target < curr_close:
+                    patterns.append({
+                        "name": "Wyckoff Upthrust After Distribution (UTAD)",
+                        "category": "Institutional Order Flow",
+                        "type": "High-Probability Bull Trap",
+                        "direction": "Bearish",
+                        "quality_score": 91,
+                        "significance": "High",
+                        "confidence": "High",
+                        "status": "Confirmed Upthrust Failure",
+                        "entry_trigger": round(curr_close, 2),
+                        "target_price": target,
+                        "stop_loss": stop_loss,
+                        "risk_reward_ratio": rr,
+                        "description": (
+                            f"Wyckoff UTAD detected. Failed breakout above range resistance (Rs.{tr_resistance:.2f}) "
+                            f"peaked at Rs.{recent_max:.2f} and fell back inside range. Bull trap complete. "
+                            f"Targeting lower TR support at Rs.{target:.2f} (Stop: Rs.{stop_loss:.2f}, R:R: {rr})."
+                        ),
+                        "key_levels": {
+                            "range_resistance": round(tr_resistance, 2),
+                            "upthrust_high": round(recent_max, 2),
+                            "range_support": target
+                        },
+                        "metrics": {
+                            "range_resistance": round(tr_resistance, 2),
+                            "upthrust_high": round(recent_max, 2),
+                            "target": target,
+                            "stop_loss": stop_loss
+                        }
+                    })
 
         return patterns
 
@@ -1173,7 +1215,12 @@ class QuantitativePatternEngine:
         # 1. Regular Bullish Divergence: Lower Low in Price, but Higher Low in RSI
         if len(troughs) >= 2:
             t1, t2 = troughs[-2], troughs[-1]
-            if t2["price"] < t1["price"] * 0.99:
+            if (
+                (len(df) - 1 - t2["idx"]) <= 15
+                and 5 <= (t2["idx"] - t1["idx"]) <= 60
+                and (t2["price"] * 0.99 <= curr_close <= t2["price"] * 1.12)
+                and t2["price"] < t1["price"] * 0.99
+            ):
                 rsi1 = t1.get("rsi", 50.0)
                 rsi2 = t2.get("rsi", 50.0)
                 if rsi2 > rsi1 + 2.5 and rsi2 <= 48.0:
@@ -1207,7 +1254,12 @@ class QuantitativePatternEngine:
         # 2. Regular Bearish Divergence: Higher High in Price, but Lower High in RSI
         if len(peaks) >= 2:
             p1, p2 = peaks[-2], peaks[-1]
-            if p2["price"] > p1["price"] * 1.01:
+            if (
+                (len(df) - 1 - p2["idx"]) <= 15
+                and 5 <= (p2["idx"] - p1["idx"]) <= 60
+                and (p2["price"] * 0.88 <= curr_close <= p2["price"] * 1.01)
+                and p2["price"] > p1["price"] * 1.01
+            ):
                 rsi1 = p1.get("rsi", 50.0)
                 rsi2 = p2.get("rsi", 50.0)
                 if rsi2 < rsi1 - 2.5 and rsi2 >= 55.0:

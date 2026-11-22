@@ -20,7 +20,10 @@ All logic is deterministic — no LLM needed.
 """
 
 from __future__ import annotations
+import re
 from typing import Any
+
+from tools.macro_tools import BULLISH_THRESHOLD, BEARISH_THRESHOLD, DANGER_THRESHOLD
 
 
 # ---------------------------------------------------------------------------
@@ -28,10 +31,11 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 RISK_LEVELS = {
-    "LOW":      {"label": "🟢 LOW",      "colour": "#10b981", "action": "Stay Invested",          "threshold_lo":  0.15},
-    "ELEVATED": {"label": "🟡 ELEVATED", "colour": "#f59e0b", "action": "Monitor & Partial Hedge","threshold_lo": -0.15},
-    "HIGH":     {"label": "🟠 HIGH",     "colour": "#f97316", "action": "Defensive Rotation",     "threshold_lo": -0.50},
-    "DANGER":   {"label": "🔴 DANGER",   "colour": "#ef4444", "action": "Raise Cash / Exit Risk", "threshold_lo": -1.00},
+    "LOW":         {"label": "🟢 LOW",         "colour": "#10b981", "action": "Stay Invested",                         "threshold_lo": BULLISH_THRESHOLD},
+    "ELEVATED":    {"label": "🟡 ELEVATED",    "colour": "#f59e0b", "action": "Monitor & Partial Hedge",               "threshold_lo": BEARISH_THRESHOLD},
+    "HIGH":        {"label": "🟠 HIGH",        "colour": "#f97316", "action": "Defensive Rotation",                    "threshold_lo": DANGER_THRESHOLD},
+    "DANGER":      {"label": "🔴 DANGER",      "colour": "#ef4444", "action": "Raise Cash / Exit Risk",                "threshold_lo": -1.00},
+    "UNAVAILABLE": {"label": "⚪ UNAVAILABLE", "colour": "#94a3b8", "action": "Macro Feed Unavailable — Hold & Monitor", "threshold_lo":  0.00},
 }
 
 # Sector sensitivity to common macro shocks
@@ -74,7 +78,7 @@ DEFENSIVE_EXAMPLES = {
     "IT Exports":  ["INFY", "TCS", "WIPRO", "HCLTECH"],
     "Utilities":   ["NTPC", "POWERGRID", "CESC"],
     "Gold":        ["GOLDBEES (ETF)", "Sovereign Gold Bond"],
-    "Defence":     ["BEL", "HAL", "BFUTILITIE", "COCHINSHIP"],
+    "Defence":     ["BEL", "HAL", "MAZDOCK", "COCHINSHIP"],
 }
 
 # Scheduled macro event types (approximate calendar — user should check RBI/MPC calendar)
@@ -99,12 +103,13 @@ def compute_risk_level(macro_score: float) -> dict:
     """
     Given a macro_score in [-1, +1] (from compute_macro_sentiment),
     return a full risk-level dict with label, colour, action, advice.
+    Uses unified thresholds from tools.macro_tools.
     """
-    if macro_score >= 0.15:
+    if macro_score >= BULLISH_THRESHOLD:
         key = "LOW"
-    elif macro_score >= -0.15:
+    elif macro_score >= BEARISH_THRESHOLD:
         key = "ELEVATED"
-    elif macro_score >= -0.50:
+    elif macro_score >= DANGER_THRESHOLD:
         key = "HIGH"
     else:
         key = "DANGER"
@@ -162,7 +167,7 @@ def _build_playbook(key: str, score: float) -> list[dict]:
             {"step": 5, "icon": "💰", "action": "Raise Cash to 20–30%",
              "detail": "Capital preservation is the priority. Cash earns nothing but loses nothing. Opportunity will return."},
         ]
-    else:  # DANGER
+    elif key == "DANGER":
         return [
             {"step": 1, "icon": "🚨", "action": "EXIT ALL STOP-LOSS BREACHED POSITIONS NOW",
              "detail": "Every position below its stop-loss must be closed immediately. Market gaps will get worse."},
@@ -176,6 +181,13 @@ def _build_playbook(key: str, score: float) -> list[dict]:
              "detail": "Re-entry signal: US 10Y yield stabilises, DXY stops rising, FII flow turns net positive for 3 days."},
             {"step": 6, "icon": "🧘", "action": "Do Not Panic-Sell at the Bottom",
              "detail": "The worst sale is at the absolute bottom. Use staged re-entry once signals stabilise."},
+        ]
+    else:  # UNAVAILABLE
+        return [
+            {"step": 1, "icon": "⚪", "action": "Macro Feed Temporarily Unavailable",
+             "detail": "Global macro telemetry is offline or incomplete; no macro-driven trims or cash-raising actions are triggered."},
+            {"step": 2, "icon": "📋", "action": "Rely on Stock-Level Stops",
+             "detail": "Continue enforcing individual technical stop-losses and fundamental risk rules until macro feeds recover."},
         ]
 
 
@@ -197,7 +209,11 @@ def evaluate_holding_shield(holding: dict, risk_key: str) -> dict:
 
     sensitivity = _sector_sensitivity(sector)
 
-    if risk_key == "LOW":
+    if risk_key == "UNAVAILABLE":
+        shield_action = "⚪ HOLD — Macro feed unavailable; rely on stock-level stops."
+        urgency = "none"
+
+    elif risk_key == "LOW":
         shield_action = "🟢 HOLD — Macro supportive. Maintain position."
         urgency = "none"
 
@@ -206,7 +222,7 @@ def evaluate_holding_shield(holding: dict, risk_key: str) -> dict:
             shield_action = f"🟡 TRIM 25% — {sector} is high-sensitivity. Book partial profit / reduce exposure."
             urgency = "medium"
         elif pnl < -8:
-            shield_action = f"🟡 REVIEW SL — Stock is already -8% in loss during elevated risk. Consider cutting."
+            shield_action = f"🟡 REVIEW SL — Stock is already {pnl:.1f}% in loss during elevated risk. Consider cutting."
             urgency = "medium"
         else:
             shield_action = "🟡 TIGHTEN SL — Move stop-loss to 5% below recent high. Keep monitoring."
@@ -227,15 +243,15 @@ def evaluate_holding_shield(holding: dict, risk_key: str) -> dict:
             urgency = "medium"
 
     else:  # DANGER
-        if pnl < 0:
+        if sensitivity <= 0.25:
+            shield_action = "🔴 HOLD (Defensive) — Safe haven. May dip but recovers fastest."
+            urgency = "low"
+        elif pnl < 0:
             shield_action = f"🔴 EXIT — Losing position in a DANGER macro environment. Cut loss now."
             urgency = "critical"
         elif sensitivity >= 0.60:
             shield_action = f"🔴 EXIT 50-60% — {sector} will be heavily sold in macro shock. Preserve gains."
             urgency = "critical"
-        elif sensitivity <= 0.25:
-            shield_action = "🔴 HOLD (Defensive) — Safe haven. May dip but recovers fastest."
-            urgency = "low"
         else:
             shield_action = "🔴 TRIM 30-40% — Raise cash. Re-enter when macro stabilises."
             urgency = "high"
@@ -250,12 +266,36 @@ def evaluate_holding_shield(holding: dict, risk_key: str) -> dict:
     }
 
 
+_SECTOR_SENSITIVITY_RULES: list[tuple[re.Pattern, float]] = [
+    # Defensives FIRST so compound labels like "Fast Moving Consumer Goods", "Healthcare & Pharmaceuticals",
+    # "Consumer Defensive", and "FMCG & Agri" are never hijacked by "&" or "goods" or "consumer".
+    (re.compile(r"\b(?:fmcg|fast moving consumer goods|consumer staples|consumer defensive|packaged foods?|beverages?|agri)\b", re.I), 0.20),
+    (re.compile(r"\b(?:pharma|pharmaceuticals?|healthcare|hospitals?|diagnostics?)\b", re.I), 0.20),
+    (re.compile(r"\b(?:utilities|power transmission|power generation)\b", re.I), 0.25),
+    # High-beta / rate-sensitive financials & cyclicals
+    (re.compile(r"\b(?:banking|bank|banks|nbfc|financial services|finance|housing finance|microfinance|capital markets|fintech|insurance)\b", re.I), 0.90),
+    (re.compile(r"\b(?:metals?|mining|steel|aluminium|aluminum|copper|basic materials)\b", re.I), 0.85),
+    (re.compile(r"\b(?:real estate|realty)\b", re.I), 0.85),
+    (re.compile(r"\b(?:capital goods|electricals?|electrical equipment|machinery|industrials?|industrial engineering)\b", re.I), 0.80),
+    (re.compile(r"\b(?:automobiles?|automotive|auto ancillar(?:y|ies)|auto components?|tyres?)\b", re.I), 0.75),
+    (re.compile(r"\b(?:consumer discretionary|consumer cyclical|consumer durables|consumer services|retail|luxury|paints?)\b", re.I), 0.75),
+    (re.compile(r"\b(?:oil|gas|petroleum|energy|refining)\b", re.I), 0.70),
+    (re.compile(r"\b(?:infrastructure|infra|construction|ports?|airports?|logistics|cement|building materials)\b", re.I), 0.70),
+    (re.compile(r"\b(?:chemicals?|specialty chemicals?|agro\s*chemicals?|fertilizers?)\b", re.I), 0.65),
+    (re.compile(r"\b(?:defence|defense|aerospace|shipbuilding|maritime)\b", re.I), 0.60),
+    (re.compile(r"\b(?:semiconductors?|electronics?)\b", re.I), 0.60),
+    (re.compile(r"\b(?:information technology|it services|it|software|technology|cpaas)\b", re.I), 0.50),
+    (re.compile(r"\b(?:telecom|telecommunications?|media|entertainment)\b", re.I), 0.40),
+]
+
+
 def _sector_sensitivity(sector: str) -> float:
-    """Return sector sensitivity score (0–1) — matches by keyword."""
-    sector_lower = sector.lower()
-    for k, v in SECTOR_SENSITIVITY.items():
-        if any(word in sector_lower for word in k.lower().split()):
-            return v
+    """Return sector sensitivity score (0–1) using word-boundary rules (never matches '&')."""
+    if not sector:
+        return 0.55
+    for pat, weight in _SECTOR_SENSITIVITY_RULES:
+        if pat.search(sector):
+            return weight
     return 0.55   # default: moderate
 
 
@@ -269,8 +309,23 @@ def build_macro_risk_shield(macro_result: dict, holdings: list[dict] | None = No
     and optional holdings list from KitePortfolioEngine, returns the
     full shield analysis.
     """
-    score = macro_result.get("score", 0.0)
-    risk  = compute_risk_level(score)
+    available = macro_result.get("available")
+    score = float(macro_result.get("score", 0.0) or 0.0)
+    if available is False:
+        meta = RISK_LEVELS["UNAVAILABLE"]
+        risk = {
+            "risk_key":          "UNAVAILABLE",
+            "risk_label":        meta["label"],
+            "risk_colour":       meta["colour"],
+            "macro_score":       round(score, 3),
+            "action_header":     meta["action"],
+            "playbook":          _build_playbook("UNAVAILABLE", score),
+            "defensive_sectors": list(DEFENSIVE_SECTORS.items()),
+            "defensive_examples": DEFENSIVE_EXAMPLES,
+            "scheduled_events":  SCHEDULED_RISK_EVENTS,
+        }
+    else:
+        risk = compute_risk_level(score)
 
     # Per-holding shield actions
     holding_shields = []

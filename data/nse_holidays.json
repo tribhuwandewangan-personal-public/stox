@@ -1,4 +1,23 @@
 {
-  "_comment": "NSE trading holidays (weekdays on which the exchange is closed). Add the yearly list from the NSE website as 'YYYY-MM-DD' strings. Weekends are handled automatically. Left empty on purpose: no official source was verified, so no dates are guessed.",
-  "holidays": []
+  "_comment": "Official NSE India 2026 Equity segment weekday trading holidays and special weekend sessions (YYYY-MM-DD).",
+  "holidays": [
+    "2026-01-26",
+    "2026-03-03",
+    "2026-03-26",
+    "2026-03-31",
+    "2026-04-03",
+    "2026-04-14",
+    "2026-05-01",
+    "2026-05-28",
+    "2026-06-26",
+    "2026-09-14",
+    "2026-10-02",
+    "2026-10-20",
+    "2026-11-10",
+    "2026-11-24",
+    "2026-12-25"
+  ],
+  "special_sessions": [
+    "2026-02-01"
+  ]
 }

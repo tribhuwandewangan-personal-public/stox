@@ -15,35 +15,13 @@ from typing import Dict, Any, List, Optional
 from tools.historical_data_tools import HistoricalDataEngine
 from storage.cache_manager import CacheManager
 from tools.pattern_engine import QuantitativePatternEngine
-
-
-def wilder_rsi(close: pd.Series, period: int = 14) -> pd.Series:
-    """
-    Relative Strength Index with Wilder's smoothing: the first average is the simple mean of the first `period`
-    changes, then avg = (previous_avg * (period - 1) + current) / period. NaN until `period` changes exist.
-    A series with no losses is 100, and one with no movement at all is 50.
-    """
-    values = close.astype(float).to_numpy()
-    out = np.full(len(values), np.nan)
-    if len(values) <= period:
-        return pd.Series(out, index=close.index)
-    delta = np.diff(values)
-    gain = np.where(delta > 0, delta, 0.0)
-    loss = np.where(delta < 0, -delta, 0.0)
-    avg_gain = gain[:period].mean()
-    avg_loss = loss[:period].mean()
-
-    def _rsi(g, l):
-        if l == 0:
-            return 50.0 if g == 0 else 100.0
-        return 100.0 - 100.0 / (1.0 + g / l)
-
-    out[period] = _rsi(avg_gain, avg_loss)
-    for i in range(period, len(delta)):
-        avg_gain = (avg_gain * (period - 1) + gain[i]) / period
-        avg_loss = (avg_loss * (period - 1) + loss[i]) / period
-        out[i + 1] = _rsi(avg_gain, avg_loss)
-    return pd.Series(out, index=close.index)
+from tools.indicators import (
+    wilder_rsi,
+    wilder_atr,
+    wilder_adx,
+    mansfield_relative_strength,
+    compute_weekly_trend,
+)
 
 
 def _safe_float(value, decimals: int = 2):
@@ -101,13 +79,18 @@ class TechnicalAnalysisEngine:
         df['LOW_52W'] = low_s.rolling(window=w52_len).min()
         df['PCT_FROM_52W_HIGH'] = (close - df['HIGH_52W']) / np.where(df['HIGH_52W'] > 0, df['HIGH_52W'], 1.0) * 100
 
-        # Average True Range (ATR 14)
+        # Average True Range (ATR 14) & ADX (14) — standardized Wilder smoothing
         if 'HIGH_PRICE' in df and 'LOW_PRICE' in df:
-            prev_close = close.shift(1)
-            tr = pd.concat([df['HIGH_PRICE'] - df['LOW_PRICE'], (df['HIGH_PRICE'] - prev_close).abs(), (df['LOW_PRICE'] - prev_close).abs()], axis=1).max(axis=1)
-            df['ATR_14'] = tr.rolling(window=14).mean()
+            df['ATR_14'] = wilder_atr(df['HIGH_PRICE'], df['LOW_PRICE'], close, 14)
+            adx_df = wilder_adx(df['HIGH_PRICE'], df['LOW_PRICE'], close, 14)
+            df['ADX_14'] = adx_df['ADX_14']
+            df['PLUS_DI_14'] = adx_df['PLUS_DI_14']
+            df['MINUS_DI_14'] = adx_df['MINUS_DI_14']
         else:
             df['ATR_14'] = close * 0.025
+            df['ADX_14'] = np.nan
+            df['PLUS_DI_14'] = np.nan
+            df['MINUS_DI_14'] = np.nan
 
         # RSI (14), Wilder smoothing (the definition charting platforms use)
         df['RSI_14'] = wilder_rsi(close, 14)
@@ -262,6 +245,12 @@ class TechnicalAnalysisEngine:
         s2 = pivot - (prev['HIGH_PRICE'] - prev['LOW_PRICE'])
 
         latest_close = _safe_float(latest['CLOSE_PRICE'])
+        prev_close = _safe_float(prev['CLOSE_PRICE'])
+        day_change_pct = (
+            round(((latest_close - prev_close) / prev_close) * 100.0, 2)
+            if (latest_close is not None and prev_close and prev_close > 0 and len(df) > 1)
+            else None
+        )
         rsi_val = _safe_float(latest['RSI_14']) or 50.0
         macd_val = _safe_float(latest['MACD']) or 0.0
         macd_sig = _safe_float(latest['MACD_SIGNAL']) or 0.0
@@ -290,12 +279,79 @@ class TechnicalAnalysisEngine:
         l_52w = _safe_float(latest.get('LOW_52W', swing_l60)) or swing_l60
         pct_52w = _safe_float(latest.get('PCT_FROM_52W_HIGH', 0.0)) or 0.0
 
+        # ADX (14) trend strength
+        adx_14 = _safe_float(latest.get('ADX_14'))
+        plus_di_14 = _safe_float(latest.get('PLUS_DI_14'))
+        minus_di_14 = _safe_float(latest.get('MINUS_DI_14'))
+        if adx_14 is None:
+            trend_strength = None
+        elif adx_14 >= 25.0:
+            trend_strength = "Strong Trend"
+        elif adx_14 >= 20.0:
+            trend_strength = "Developing Trend"
+        else:
+            trend_strength = "Sideways / Choppy"
+
+        # Weekly multi-timeframe trend alignment
+        weekly_info = compute_weekly_trend(df)
+        weekly_trend = weekly_info.get("weekly_trend")
+        weekly_ema_10 = weekly_info.get("weekly_ema_10")
+        weekly_ema_30 = weekly_info.get("weekly_ema_30")
+        mtf_aligned: Optional[bool] = None
+        if weekly_trend in ("Bullish", "Bearish") and latest_close and sma_50_val:
+            mtf_aligned = bool(
+                (latest_close > sma_50_val and weekly_trend == "Bullish")
+                or (latest_close < sma_50_val and weekly_trend == "Bearish")
+            )
+
+        # Mansfield Relative Strength vs Nifty 50 (^NSEI) from cache (never forces blocking network calls)
+        bench_df = pd.DataFrame()
+        if hasattr(self.rag_engine, "load_benchmark_history"):
+            bench_df = self.rag_engine.load_benchmark_history("^NSEI", limit_days=500, allow_fetch=False)
+        rs_info = mansfield_relative_strength(df, bench_df)
+        mansfield_rs = rs_info.get("mansfield_rs")
+        rs_63d_alpha_pct = rs_info.get("rs_63d_alpha_pct")
+        rs_rating = rs_info.get("rs_rating")
+
+        # NSE Delivery % telemetry (populated when delivery columns exist and are non-null)
+        delivery_pct: Optional[float] = None
+        delivery_pct_20d_avg: Optional[float] = None
+        delivery_ratio: Optional[float] = None
+        delivery_conviction: Optional[str] = None
+        if "DELIVERY_PCT" in df.columns:
+            deliv_s = pd.to_numeric(df["DELIVERY_PCT"], errors="coerce").dropna()
+            if not deliv_s.empty:
+                delivery_pct = _safe_float(deliv_s.iloc[-1])
+                delivery_pct_20d_avg = _safe_float(deliv_s.tail(20).mean())
+                if delivery_pct is not None and delivery_pct_20d_avg and delivery_pct_20d_avg > 0:
+                    delivery_ratio = _safe_float(delivery_pct / delivery_pct_20d_avg, 2)
+                if delivery_pct is not None:
+                    if delivery_pct >= 55.0 or (delivery_ratio is not None and delivery_ratio >= 1.25):
+                        delivery_conviction = "High Delivery Conviction"
+                    elif delivery_pct < 25.0:
+                        delivery_conviction = "Low Delivery Churn"
+                    else:
+                        delivery_conviction = "Normal Delivery"
+
         signals = []
         if latest_close > sma_50_val:
             slope_txt = " (Rising)" if sma_50_slope > 0.2 else (" (Declining)" if sma_50_slope < -0.2 else "")
             signals.append(f"Above 50-day SMA{slope_txt} (Short-term Bullish)")
         else:
             signals.append("Below 50-day SMA (Short-term Bearish)")
+
+        if adx_14 is not None:
+            signals.append(f"ADX(14) {adx_14:.1f} ({trend_strength})")
+
+        if weekly_trend in ("Bullish", "Bearish"):
+            mtf_tag = "MTF Aligned" if mtf_aligned else "MTF Divergent"
+            signals.append(f"Weekly Trend {weekly_trend} ({mtf_tag})")
+
+        if mansfield_rs is not None:
+            signals.append(f"Mansfield RS vs Nifty {mansfield_rs:+.2f} ({rs_rating})")
+
+        if delivery_pct is not None:
+            signals.append(f"NSE Delivery {delivery_pct:.1f}% ({delivery_conviction})")
 
         if rvol_val >= 1.25:
             signals.append(f"Volume Surge (RVOL {rvol_val:.1f}x)")
@@ -331,12 +387,28 @@ class TechnicalAnalysisEngine:
         return {
             "symbol": symbol,
             "last_price": latest_close,
+            "day_change_pct": _safe_float(day_change_pct),
             "ema_20": _safe_float(ema_20_val),
             "sma_20": _safe_float(sma_20_val),
             "sma_50": _safe_float(sma_50_val),
             "sma_200": _safe_float(sma_200_val),
             "sma_50_slope": _safe_float(sma_50_slope),
             "atr_14": _safe_float(atr_14_val),
+            "adx_14": adx_14,
+            "plus_di_14": plus_di_14,
+            "minus_di_14": minus_di_14,
+            "trend_strength": trend_strength,
+            "weekly_trend": weekly_trend,
+            "weekly_ema_10": weekly_ema_10,
+            "weekly_ema_30": weekly_ema_30,
+            "mtf_aligned": mtf_aligned,
+            "mansfield_rs": mansfield_rs,
+            "rs_63d_alpha_pct": rs_63d_alpha_pct,
+            "rs_rating": rs_rating,
+            "delivery_pct": delivery_pct,
+            "delivery_pct_20d_avg": delivery_pct_20d_avg,
+            "delivery_ratio": delivery_ratio,
+            "delivery_conviction": delivery_conviction,
             "rvol": _safe_float(rvol_val),
             "up_down_vol_ratio": _safe_float(ud_vol_ratio),
             "rsi_14": _safe_float(rsi_val),

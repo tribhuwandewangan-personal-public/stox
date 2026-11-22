@@ -34,14 +34,19 @@ KNOWN_YF_OVERRIDES: Dict[str, List[str]] = {
     # Special characters in NSE symbol → Yahoo uses different form
     "M&M":          ["M%26M.NS", "MM.NS", "M&M.NS", "MAHINDRA.NS"],
     "BAJAJ-AUTO":   ["BAJAJ-AUTO.NS", "BAJAJAUTO.NS"],
-    "L&TFH":        ["L%26TFH.NS", "LTFH.NS"],
+    "L&TFH":        ["LTF.NS", "L%26TFH.NS", "LTFH.NS"],
     "HCLTECH":      ["HCLTECH.NS"],
+    "LTIM":         ["LTM.NS", "LTIM.NS"],
+    "GMRINFRA":     ["GMRAIRPORT.NS", "GMRINFRA.NS"],
+    "MACROTECH":    ["LODHA.NS", "MACROTECH.NS"],
+    "KALPATPOWR":   ["KPIL.NS", "KALPATPOWR.NS"],
+    "ICICIPRULI":   ["ICICILIFE.NS", "ICICIPRULI.NS"],
     "MOTHERSON":    ["MOTHERSON.NS", "SAMIL.NS"],
-    "TATAMOTORS":   ["TATAMOTORS.NS", "TATAMOTORS.BO"],
+    "TATAMOTORS":   ["TMPV.NS", "TMCV.NS", "TATAMOTORS.NS", "TATAMOTORS.BO"],
     "HEROMOTOCO":   ["HEROMOTOCO.NS"],
     "LT":           ["LT.NS", "LTIN.NS"],
     "ZEEL":         ["ZEEL.NS", "ZEETV.NS"],
-    "PEL":          ["PEL.NS"],
+    "PEL":          ["PIRAMALFIN.NS", "PEL.NS"],
     "RBLBANK":      ["RBLBANK.NS"],
     "SAIL":         ["SAIL.NS"],
     "OIL":          ["OIL.NS", "OINL.NS"],
@@ -103,7 +108,7 @@ NON_EQUITY_PREFIXES = [
 # Stocks known to be suspended / merged / delisted in recent years
 # (keeping list small — the BSE fallback handles most)
 KNOWN_UNAVAILABLE: set = {
-    "RCOM", "YESBANK", "DHFL", "IL&FS", "JETAIRWAYS",
+    "RCOM", "DHFL", "IL&FS", "JETAIRWAYS",
     "VIDEOCONIND", "GTLINFRA", "LEEL", "ALOKTEXT",
     "JPASSOCIAT", "UNITECH", "AMTEKAUT",
 }

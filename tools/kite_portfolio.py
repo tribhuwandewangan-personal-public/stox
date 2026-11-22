@@ -11,6 +11,7 @@ Provides secure, strictly READ-ONLY portfolio telemetry from Zerodha Kite Connec
 """
 
 import os
+import re
 import sys
 import json
 import argparse
@@ -22,10 +23,26 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from config import SYMBOLS_FILE_PATH
+from config import SYMBOLS_FILE_PATH, MIDCAP_250_SYMBOLS_FILE_PATH, ALL_NSE_SYMBOLS_FILE_PATH
 from storage.cache_manager import CacheManager
 from tools.long_term_strategy import long_term_engine
+from tools.portfolio_analytics import (
+    classify_sebi_cap_tier,
+    compute_atr_position_sizing,
+    compute_correlation_matrix,
+    compute_hhi_concentration,
+    compute_portfolio_var_cvar,
+    compute_stock_beta,
+    estimate_indian_tax_and_cost_impact,
+    extract_daily_returns,
+    run_macro_stress_tests,
+)
 from tools.quote_tools import KITE_TOKEN_PATH
+
+_BFSI_RE = re.compile(
+    r"\b(bank|banking|nbfc|financial services|insurance|housing finance|microfinance|capital markets|fintech)\b",
+    re.I,
+)
 
 LOCAL_HOLDINGS_PATH = os.path.join(PROJECT_ROOT, "storage", "my_holdings.json")
 
@@ -60,6 +77,7 @@ class KitePortfolioEngine:
         self.api_secret = os.getenv("KITE_API_SECRET", "").strip()
         self.token_path = KITE_TOKEN_PATH
         self.local_holdings_path = LOCAL_HOLDINGS_PATH
+        self._last_fetch_source: Optional[str] = None
         self._load_saved_credentials()
 
     def _load_saved_credentials(self):
@@ -107,6 +125,24 @@ class KitePortfolioEngine:
                 "has_local_snapshot": has_local_snapshot,
                 "data_source": "Local Snapshot" if has_local_snapshot else "None"
             }
+
+        # Zerodha Kite tokens expire daily (~06:00 IST); verify created_at matches today if sourced from token file
+        if not os.getenv("KITE_ACCESS_TOKEN", "").strip() and os.path.exists(self.token_path):
+            try:
+                with open(self.token_path, "r", encoding="utf-8") as f:
+                    created_raw = json.load(f).get("created_at", "")
+                if created_raw:
+                    created_dt = datetime.fromisoformat(str(created_raw)).date()
+                    if created_dt != datetime.now().date():
+                        return {
+                            "connected": False,
+                            "status": "Token Expired (Daily Reset)",
+                            "message": f"Saved Kite token is from {created_dt}. Run 'python tools/kite_portfolio.py --login' to refresh.",
+                            "has_local_snapshot": has_local_snapshot,
+                            "data_source": "Local Snapshot" if has_local_snapshot else "None"
+                        }
+            except Exception:
+                pass
 
         return {
             "connected": True,
@@ -189,7 +225,15 @@ class KitePortfolioEngine:
                     sym = str(h.get("tradingsymbol", "")).upper().strip()
                     if not sym:
                         continue
-                    qty = int(h.get("quantity", 0)) + int(h.get("t1_quantity", 0))
+                    collateral_qty = int(h.get("collateral_quantity", 0) or 0)
+                    used_qty = int(h.get("used_quantity", 0) or 0)
+                    qty = max(
+                        0,
+                        int(h.get("quantity", 0) or 0)
+                        + int(h.get("t1_quantity", 0) or 0)
+                        + collateral_qty
+                        - used_qty,
+                    )
                     if qty <= 0:
                         continue
 
@@ -218,12 +262,14 @@ class KitePortfolioEngine:
 
                 # Cache to local snapshot file for offline access
                 if normalized:
+                    self._last_fetch_source = "Live Kite API"
                     self._save_local_snapshot(normalized)
                     return normalized
             except Exception as e:
                 print(f"⚠️ [Kite Notice] Live holdings fetch failed ({type(e).__name__}: {e}). Checking local snapshot...")
 
         # Fallback to local snapshot
+        self._last_fetch_source = "Local Snapshot" if os.path.exists(self.local_holdings_path) else "None"
         return self._load_local_snapshot()
 
     def _save_local_snapshot(self, holdings: List[Dict[str, Any]]):
@@ -329,25 +375,48 @@ class KitePortfolioEngine:
                 },
                 "holdings": [],
                 "sector_breakdown": {},
-                "diversification_flags": ["No portfolio holdings detected."]
+                "diversification_flags": ["No portfolio holdings detected."],
+                "portfolio_analytics": {},
             }
 
-        # Sector mapping from symbols.json
+        # Layered sector & name mapping across all NSE -> Midcap 250 -> Curated symbols
         sector_map = {}
         name_map = {}
-        if os.path.exists(SYMBOLS_FILE_PATH):
-            try:
-                with open(SYMBOLS_FILE_PATH, "r", encoding="utf-8") as f:
-                    sdata = json.load(f)
-                    for item in sdata.get("symbols", []):
-                        sym_u = item.get("symbol", "").upper()
-                        sector_map[sym_u] = item.get("sector", "Other")
-                        name_map[sym_u] = item.get("name", sym_u)
-            except Exception:
-                pass
+        midcap_symbols = set()
+        for sym_file in (ALL_NSE_SYMBOLS_FILE_PATH, MIDCAP_250_SYMBOLS_FILE_PATH, SYMBOLS_FILE_PATH):
+            if os.path.exists(sym_file):
+                try:
+                    with open(sym_file, "r", encoding="utf-8") as f:
+                        sdata = json.load(f)
+                        items = sdata.get("symbols", []) if isinstance(sdata, dict) else sdata
+                        is_midcap_file = (sym_file == MIDCAP_250_SYMBOLS_FILE_PATH)
+                        for item in items:
+                            if not isinstance(item, dict):
+                                continue
+                            sym_u = str(item.get("symbol", "")).upper().strip()
+                            if not sym_u:
+                                continue
+                            if is_midcap_file:
+                                midcap_symbols.add(sym_u)
+                            sec_val = str(item.get("sector", "")).strip()
+                            if sec_val and (sec_val != "Indian Equities" or sym_u not in sector_map):
+                                sector_map[sym_u] = sec_val
+                            nm_val = str(item.get("name", "")).strip()
+                            if nm_val:
+                                name_map[sym_u] = nm_val
+                except Exception:
+                    pass
 
         bulk_outputs = self.cache_manager.get_latest_agent_outputs_bulk()
         live_quotes = self.cache_manager.get_all_quotes()
+        bench_candles = self.cache_manager.get_cached_candles("^NSEI", limit_days=260)
+        bench_returns = extract_daily_returns(bench_candles)
+        returns_by_symbol: Dict[str, Dict[str, float]] = {}
+        try:
+            from tools.forensic_financial_engine import ForensicFinancialEngine
+            f_engine = ForensicFinancialEngine(cache_manager=self.cache_manager)
+        except Exception:
+            f_engine = None
 
         evaluated_holdings = []
         total_invested = 0.0
@@ -371,10 +440,6 @@ class KitePortfolioEngine:
             total_invested += inv_val
             current_value += cur_val
 
-            sector = sector_map.get(sym, "Diversified")
-            c_name = name_map.get(sym, sym)
-            sector_weights[sector] = sector_weights.get(sector, 0.0) + cur_val
-
             # Retrieve agent outputs
             agents = bulk_outputs.get(sym, {})
             synth_res = agents.get("Master Prediction Synthesizer Agent", {}).get("output", {})
@@ -382,13 +447,18 @@ class KitePortfolioEngine:
             fund_res = agents.get("Fundamental Analyst Agent", {}).get("output", {})
 
             sig = synth_res.get("structured_signal", {})
-            short_verdict = sig.get("action_verdict", "HOLD")
+            short_verdict = str(sig.get("action_verdict", "HOLD")).upper()
             short_conf = sig.get("confidence_rating", "MEDIUM")
             st_target = sig.get("when_to_sell_target", "N/A")
             st_sl = sig.get("stop_loss", "N/A")
 
             # Fundamental valuation & solvency
             raw_fund = fund_res.get("raw_fundamentals", {})
+            sector = sector_map.get(sym) or raw_fund.get("sector") or "Diversified"
+            c_name = name_map.get(sym, sym)
+            sector_weights[sector] = sector_weights.get(sector, 0.0) + cur_val
+            is_bfsi = bool(_BFSI_RE.search(str(sector)))
+
             pe = raw_fund.get("pe_ratio", "N/A")
             peg = raw_fund.get("peg_ratio", "N/A")
             net_cash = raw_fund.get("net_cash_status", "N/A")
@@ -401,66 +471,104 @@ class KitePortfolioEngine:
             swing_h20 = _safe_float(raw_tech.get("swing_high_20"))
             swing_l20 = _safe_float(raw_tech.get("swing_low_20"))
 
-            # Evaluate Long-Term Horizon (1-3 Years)
+            # Forensic Governance & Peer Benchmarks (feed into long-term quantitative compounder scoring)
+            forensic_grade = "UNAUDITED"
+            forensic_flags = []
+            peer_verdict = ""
+            f_data = None
+            if f_engine is not None:
+                try:
+                    f_data = f_engine.analyze_company(sym, price_override=ltp, sector_override=sector)
+                    gov = f_data.get("governance_telemetry", {})
+                    forensic_grade = gov.get("governance_grade", "UNAUDITED")
+                    forensic_flags = gov.get("governance_flags", [])
+                    peer_verdict = f_data.get("peer_benchmarks", {}).get("peer_verdict", "")
+                except Exception:
+                    f_data = None
+
+            # Evaluate Long-Term Horizon (1-3 Years, quantitative multi-pillar model)
             lt_eval = long_term_engine.evaluate_long_term_stock(
                 symbol=sym,
                 name=c_name,
                 sector=sector,
                 last_price=ltp,
-                short_verdict=short_verdict
+                short_verdict=short_verdict,
+                fund_data=raw_fund,
+                forensic_data=f_data,
             )
 
             # Generate Specific Direct Actions for User
             # 1. Long-Term Compounder Action:
             lt_action = "CORE HOLD (Maintain long-term allocation)"
+            peg_f = _safe_float(peg, -1.0)
             if lt_eval.get("is_top_wealth_pick") or "STRONG BUY" in lt_eval.get("long_term_verdict", ""):
-                if peg != "N/A" and _safe_float(peg) <= 1.5:
+                if 0 < peg_f <= 1.5:
                     lt_action = "💎 TOP COMPOUNDER — ACCUMULATE ON DIPS (Favorable PEG & High CAGR)"
                 else:
                     lt_action = "💎 TOP COMPOUNDER — HOLD CORE (Compounding trajectory on track)"
-            elif peg != "N/A" and _safe_float(peg) > 2.5:
+            elif peg_f > 2.5:
                 lt_action = "⚠️ EXPENSIVE GROWTH (PEG > 2.5) — Avoid fresh buying; consider trimming on rallies"
-            elif "LEVERAGE" in str(net_cash).upper() or _safe_float(raw_fund.get("debt_to_equity")) > 150:
+            elif (not is_bfsi) and ("LEVERAGE" in str(net_cash).upper() or _safe_float(raw_fund.get("debt_to_equity")) > 150):
                 lt_action = "⚡ HIGH LEVERAGE — Review debt profile; cap exposure"
 
-            # 2. Short-Term Swing Action:
+            # 2. Short-Term Swing Action (strictly direction-aware; never celebrate SELL downside targets as profit targets):
             st_target_f = _safe_float(st_target)
             st_sl_f = _safe_float(st_sl)
             swing_action = f"HOLD with trailing stop at {st_sl}"
 
-            if st_target_f and ltp >= st_target_f * 0.985:
+            if short_verdict == "SELL":
+                tgt_txt = f" (downside target Rs. {st_target_f:.2f})" if st_target_f > 0 else ""
+                swing_action = f"🔴 SELL SIGNAL ACTIVE{tgt_txt} — Protect capital; review exit or hedge"
+            elif short_verdict == "HOLD" and st_target_f > 0 and st_target_f < ltp:
+                swing_action = f"🟡 DEFENSIVE HOLD (downside support Rs. {st_target_f:.2f}) — Avoid fresh adds; monitor closely"
+            elif st_target_f > ltp and ltp >= st_target_f * 0.985:
                 swing_action = f"🎯 TARGET ACHIEVED (Rs. {st_target_f:.2f}) — Book partial profits (30-50%) or tighten stop loss"
-            elif st_sl_f and ltp <= st_sl_f:
+            elif 0 < st_sl_f < ltp and ltp <= st_sl_f:
                 swing_action = f"🛑 STOP LOSS BREACHED (Rs. {st_sl_f:.2f}) — Protect capital; trim or exit swing exposure"
             elif swing_h20 and ltp >= swing_h20 * 0.988:
                 swing_action = f"🚧 NEAR OVERHEAD RESISTANCE (Rs. {swing_h20:.2f}) — Lock partial gains or wait for breakout confirmation"
             elif any("Bearish RSI" in str(p.get("name", "")) for p in tech_res.get("detected_patterns", [])):
-                swing_action = f"⚠️ BEARISH RSI DIVERGENCE — Momentum fading; tighten stop loss to Rs. {st_sl_f:.2f}"
+                sl_txt = f"Rs. {st_sl_f:.2f}" if st_sl_f > 0 else "defined support"
+                swing_action = f"⚠️ BEARISH RSI DIVERGENCE — Momentum fading; tighten stop loss to {sl_txt}"
             elif ud_ratio >= 1.25 and short_verdict in ("BUY", "ACCUMULATE"):
                 swing_action = f"🟢 INSTITUTIONAL ACCUMULATION ({ud_ratio:.2f}x) — Add on dips near entry floor"
 
-            # 3. Forensic Governance & Peer Benchmarks
-            forensic_grade = "SOUND"
-            forensic_flags = []
-            peer_verdict = ""
-            try:
-                from tools.forensic_financial_engine import ForensicFinancialEngine
-                f_engine = ForensicFinancialEngine(cache_manager=self.cache_manager)
-                f_data = f_engine.analyze_company(sym, price_override=ltp)
-                gov = f_data.get("governance_telemetry", {})
-                forensic_grade = gov.get("governance_grade", "SOUND")
-                forensic_flags = gov.get("governance_flags", [])
-                peer_verdict = f_data.get("peer_benchmarks", {}).get("peer_verdict", "")
+            if forensic_grade == "HIGH_RISK":
+                lt_action = "🚨 HIGH GOVERNANCE / PLEDGE RISK — Trim position; forensic red flags detected"
 
-                if forensic_grade == "HIGH_RISK":
-                    lt_action = "🚨 HIGH GOVERNANCE / PLEDGE RISK — Trim position; forensic red flags detected"
-            except Exception:
-                pass
+            # Historical returns, Beta vs Nifty 50, 20D ADV, SEBI Cap Tier & Indian Tax/Cost Impact
+            sym_candles = self.cache_manager.get_cached_candles(sym, limit_days=260)
+            sym_rets = extract_daily_returns(sym_candles)
+            if sym_rets:
+                returns_by_symbol[sym] = sym_rets
+            vols_20 = [
+                float(c.get("VOLUME") or 0)
+                for c in sym_candles[-20:]
+                if float(c.get("VOLUME") or 0) > 0
+            ]
+            adv_20d = round(sum(vols_20) / len(vols_20), 1) if vols_20 else None
+            beta_vs_nifty = compute_stock_beta(sym_rets, bench_returns)
+
+            mkt_cap_cr = _safe_float(raw_fund.get("market_cap_cr"), -1.0)
+            if mkt_cap_cr <= 0:
+                raw_mc = _safe_float(raw_fund.get("market_cap"), -1.0)
+                mkt_cap_cr = (raw_mc / 1e7) if raw_mc > 1e8 else (raw_mc if raw_mc > 0 else None)
+            else:
+                mkt_cap_cr = mkt_cap_cr
+            cap_tier = classify_sebi_cap_tier(sym, market_cap_cr=mkt_cap_cr, midcap_symbols=midcap_symbols)
+
+            tax_impact = estimate_indian_tax_and_cost_impact(
+                quantity=qty,
+                avg_price=avg_p,
+                sell_price=ltp,
+                holding_days=h.get("holding_days"),
+            )
 
             evaluated_holdings.append({
                 "symbol": sym,
                 "company_name": c_name,
                 "sector": sector,
+                "cap_tier": cap_tier,
                 "quantity": qty,
                 "average_price": avg_p,
                 "last_price": ltp,
@@ -468,6 +576,9 @@ class KitePortfolioEngine:
                 "current_value": cur_val,
                 "pnl": pnl,
                 "pnl_pct": pnl_pct,
+                "beta_vs_nifty": beta_vs_nifty,
+                "adv_20d": adv_20d,
+                "tax_and_cost_impact": tax_impact,
                 # Long-Term Strategy Dimensions
                 "long_term_verdict": lt_eval.get("long_term_verdict", "HOLD"),
                 "long_term_target": lt_eval.get("long_term_target", "N/A"),
@@ -499,6 +610,55 @@ class KitePortfolioEngine:
             pct = round((val / current_value * 100), 1) if current_value > 0 else 0.0
             sector_breakdown[sec] = {"value": round(val, 2), "weight_pct": pct}
 
+        # Portfolio-level Quantitative Risk Analytics, Position Sizing & Tax Summary
+        weights = {
+            h["symbol"]: (h["current_value"] / current_value)
+            for h in evaluated_holdings
+            if current_value > 0
+        }
+        for h in evaluated_holdings:
+            st_sl_num = _safe_float(h.get("short_term_stop_loss"))
+            stop_for_sz = st_sl_num if (0 < st_sl_num < h["last_price"]) else round(h["last_price"] * 0.94, 2)
+            h["position_sizing"] = compute_atr_position_sizing(
+                portfolio_capital=current_value,
+                entry_price=h["last_price"],
+                stop_loss=stop_for_sz,
+                risk_per_trade_pct=1.0,
+                avg_daily_volume=h.get("adv_20d"),
+            )
+
+        weighted_betas = [
+            (h["beta_vs_nifty"], h["current_value"])
+            for h in evaluated_holdings
+            if h.get("beta_vs_nifty") is not None and h["current_value"] > 0
+        ]
+        portfolio_beta = (
+            round(sum(b * v for b, v in weighted_betas) / sum(v for _, v in weighted_betas), 2)
+            if weighted_betas
+            else None
+        )
+        corr_data = compute_correlation_matrix(returns_by_symbol)
+        var_cvar = compute_portfolio_var_cvar(returns_by_symbol, weights, current_value)
+        hhi_data = compute_hhi_concentration(weights)
+
+        cap_totals: Dict[str, float] = {"Large Cap": 0.0, "Mid Cap": 0.0, "Small Cap": 0.0}
+        for h in evaluated_holdings:
+            tier = h.get("cap_tier") or "Small Cap"
+            cap_totals[tier] = cap_totals.get(tier, 0.0) + float(h.get("current_value") or 0.0)
+        cap_mix = {
+            tier: {
+                "value": round(val, 2),
+                "weight_pct": round(val / current_value * 100.0, 1) if current_value > 0 else 0.0,
+            }
+            for tier, val in cap_totals.items()
+        }
+        stress_tests = run_macro_stress_tests(
+            evaluated_holdings,
+            portfolio_beta,
+            {sec: d["weight_pct"] for sec, d in sector_breakdown.items()},
+            current_value,
+        )
+
         # Diversification & Concentration Checks
         flags = []
         for h in evaluated_holdings:
@@ -508,9 +668,28 @@ class KitePortfolioEngine:
         for sec, data in sector_breakdown.items():
             if data["weight_pct"] > 35.0:
                 flags.append(f"⚠️ High Sector Concentration: **{sec}** represents {data['weight_pct']:.1f}% of portfolio.")
+        for hp in corr_data.get("high_correlation_pairs", [])[:3]:
+            flags.append(
+                f"🔗 Hidden Correlation Risk: **{hp['pair']}** exhibit {hp['correlation']:.2f} daily return correlation (>= 0.75)."
+            )
+        if hhi_data.get("hhi", 0.0) > 2500.0 and len(evaluated_holdings) >= 2:
+            flags.append(
+                f"⚠️ High HHI Concentration: Herfindahl index {hhi_data['hhi']:.0f} (effective {hhi_data['effective_num_stocks']:.1f} equal-weight stocks)."
+            )
 
         if not flags:
-            flags.append("✅ Well diversified: No single stock >25% and no sector >35%.")
+            flags.append("✅ Well diversified: No single stock >25%, no sector >35%, and low HHI concentration.")
+
+        portfolio_analytics = {
+            "portfolio_beta_vs_nifty": portfolio_beta,
+            "hhi_concentration": hhi_data,
+            "cap_tier_mix": cap_mix,
+            "correlation": corr_data,
+            "var_cvar": var_cvar,
+            "stress_tests": stress_tests,
+            "estimated_liquidation_tax_rs": round(sum(h["tax_and_cost_impact"]["estimated_tax"] for h in evaluated_holdings), 2),
+            "estimated_liquidation_costs_rs": round(sum(h["tax_and_cost_impact"]["statutory_costs"] for h in evaluated_holdings), 2),
+        }
 
         total_pnl = round(current_value - total_invested, 2)
         total_pnl_pct = round((total_pnl / total_invested * 100), 2) if total_invested > 0 else 0.0
@@ -530,21 +709,26 @@ class KitePortfolioEngine:
                 "profitable_count": profitable_count,
                 "losing_count": losing_count,
                 "win_rate_pct": round((profitable_count / len(evaluated_holdings) * 100), 1) if evaluated_holdings else 0.0,
-                "data_source": conn_status["data_source"],
+                "data_source": self._last_fetch_source or conn_status["data_source"],
                 "connection_status": conn_status["status"],
                 "as_of": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             },
             "holdings": evaluated_holdings,
             "sector_breakdown": sector_breakdown,
-            "diversification_flags": flags
+            "diversification_flags": flags,
+            "portfolio_analytics": portfolio_analytics,
         }
 
-    def generate_portfolio_report(self) -> str:
+    def generate_portfolio_report(
+        self,
+        output_path: Optional[str] = None,
+        holdings: Optional[List[Dict[str, Any]]] = None,
+    ) -> str:
         """
         Generates a comprehensive Markdown report of portfolio holdings,
         diagnostics, long-term compounder status, and swing trading actions.
         """
-        eval_data = self.evaluate_portfolio()
+        eval_data = self.evaluate_portfolio(holdings=holdings)
         summary = eval_data["summary"]
         holdings = eval_data["holdings"]
         sec_bd = eval_data["sector_breakdown"]
@@ -571,6 +755,37 @@ class KitePortfolioEngine:
         md.append("\n**Diversification Diagnostics**:")
         for fl in flags:
             md.append(f"- {fl}")
+
+        pa = eval_data.get("portfolio_analytics") or {}
+        if pa:
+            md.append("\n## 📈 Portfolio Quantitative Risk, Stress Tests & Tax Impact")
+            hhi = pa.get("hhi_concentration", {})
+            beta_str = f"{pa['portfolio_beta_vs_nifty']:.2f}x" if pa.get("portfolio_beta_vs_nifty") is not None else "N/A"
+            md.append(
+                f"- **Portfolio Beta vs Nifty 50**: `{beta_str}` | **HHI Concentration**: `{hhi.get('hhi', 0):.0f}` ({hhi.get('regime', 'N/A')}; effective `{hhi.get('effective_num_stocks', 0):.1f}` equal stocks)"
+            )
+            var_d = pa.get("var_cvar", {})
+            if var_d.get("available"):
+                md.append(
+                    f"- **1-Day Historical VaR (95% / 99%)**: `{var_d['var_95_pct']:.2f}%` (Rs. {var_d['var_95_rs']:,.0f}) / `{var_d['var_99_pct']:.2f}%` (Rs. {var_d['var_99_rs']:,.0f}) | "
+                    f"**CVaR (95%)**: `{var_d['cvar_95_pct']:.2f}%` (Rs. {var_d['cvar_95_rs']:,.0f}) | **Ann. Vol**: `{var_d['annualized_volatility_pct']:.1f}%`"
+                )
+            cap_mix = pa.get("cap_tier_mix", {})
+            cap_str = " | ".join(f"{t}: {d['weight_pct']}%" for t, d in cap_mix.items() if d.get("weight_pct", 0) > 0)
+            if cap_str:
+                md.append(f"- **SEBI/AMFI Market-Cap Mix**: {cap_str}")
+            md.append(
+                f"- **Estimated Exit Tax & Statutory Cost Exposure**: Est. Tax Rs. {pa.get('estimated_liquidation_tax_rs', 0):,.0f} + "
+                f"NSE CNC Fees Rs. {pa.get('estimated_liquidation_costs_rs', 0):,.0f} *(Finance Act 2024: STCG 20% <12m / LTCG 12.5% >Rs.1.25L >=12m)*"
+            )
+            if pa.get("stress_tests"):
+                md.append("\n| Macro Stress Scenario | Est. Impact (%) | Est. Impact (Rs.) | Channel |")
+                md.append("| :--- | :---: | :---: | :--- |")
+                for st in pa["stress_tests"]:
+                    md.append(
+                        f"| {st['scenario']} | `{st['estimated_impact_pct']:+.2f}%` | Rs. {st['estimated_impact_rs']:+,.0f} | {st['note']} |"
+                    )
+
         md.append("\n---\n")
 
         # Actionable Holdings Master Table
@@ -614,7 +829,15 @@ class KitePortfolioEngine:
 
         report_content = "\n".join(md)
 
-        # Save to reports directory
+        # Save to explicit output path (used by tests) or default reports directory
+        if output_path:
+            out_dir = os.path.dirname(os.path.abspath(output_path))
+            if out_dir:
+                os.makedirs(out_dir, exist_ok=True)
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write(report_content)
+            return output_path
+
         reports_dir = os.path.join(PROJECT_ROOT, "reports")
         os.makedirs(reports_dir, exist_ok=True)
         today_str = datetime.now().strftime("%Y%m%d")

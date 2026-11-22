@@ -23,7 +23,8 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 import concurrent.futures
-from datetime import datetime
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import List, Dict, Any, Optional, Tuple
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -54,10 +55,9 @@ SPAM_RECOMMENDATION_PATTERNS = [
     re.compile(r"\bshare\s+price\s+(?:live|today|chart|target|forecast|prediction)\b", re.I),
     re.compile(r"\bstock\s+price\s+(?:live|today|chart|target|forecast|prediction)\b", re.I),
     re.compile(r"\bprice\s+target\s+(?:of|raised|cut|sees|hike)\b", re.I),
-    re.compile(r"\btarget\s+of\s+rs\.?\b", re.I),
-    re.compile(r"\bbrokerage\s+(?:radar|view|calls?|raises|cuts|recommends)\b", re.I),
-    re.compile(r"\bwhat\s+analysts\s+are\s+forecasting\b", re.I),
-    re.compile(r"\bshould\s+you\s+(?:buy|sell|hold)\b", re.I),
+    re.compile(r"\btarget\s+price\b", re.I),
+    re.compile(r"\bmultibagger\b", re.I),
+    re.compile(r"\bshould\s+you\s+(?:buy|sell|hold|invest)\b", re.I),
     re.compile(r"\btradingview\b", re.I),
     re.compile(r"\bforecast\s+for\s+202\d\b", re.I),
     re.compile(r"\btechnical\s+view\b", re.I),
@@ -132,31 +132,316 @@ def classify_business_activity(title: str, snippet: str = "") -> Tuple[str, str]
     return "Corporate Activity", "🏢 [Corporate]"
 
 
+# ----------------------------------------------------------------------
+# Institutional News Scoring: Source Credibility, Clustering, Time Decay & Severity
+# ----------------------------------------------------------------------
+SOURCE_CREDIBILITY_WEIGHTS: Dict[str, float] = {
+    "nse": 1.25,
+    "bse": 1.25,
+    "sebi": 1.25,
+    "rbi": 1.25,
+    "reuters": 1.25,
+    "bloomberg": 1.25,
+    "pti": 1.20,
+    "press trust of india": 1.20,
+    "economic times": 1.00,
+    "the economic times": 1.00,
+    "livemint": 1.00,
+    "mint": 1.00,
+    "business standard": 1.00,
+    "financial express": 1.00,
+    "moneycontrol": 1.00,
+    "cnbc-tv18": 1.00,
+    "cnbc tv18": 1.00,
+    "ndtv profit": 1.00,
+    "bq prime": 1.00,
+    "the hindu businessline": 1.00,
+    "businessline": 1.00,
+}
+
+_STOPWORDS = frozenset({
+    "a", "an", "the", "and", "or", "for", "of", "in", "on", "to", "with", "by", "from",
+    "at", "as", "is", "are", "was", "were", "its", "it", "ltd", "limited", "india", "corp",
+    "co", "shares", "stock", "q1", "q2", "q3", "q4", "fy26", "fy27", "rs", "cr", "crore",
+})
+
+_CRITICAL_SEVERITY_PATTERNS = [
+    re.compile(r"\b(?:sebi\s+probe|sebi\s+order|fraud|scam|debt\s+default|ed\s+raid|cbi\s+probe|nclt|insolvency)\b", re.I),
+    re.compile(r"\b(?:plant\s+shutdown|credit\s+downgrade|fda\s+warning|import\s+alert|regulatory\s+ban|auditor\s+resign)\b", re.I),
+]
+_HIGH_SEVERITY_PATTERNS = [
+    re.compile(r"\b(?:mega\s+order|order\s+win|bags?\s+contract|secures?\s+order|order\s+cancellation|cancels?\s+order)\b", re.I),
+    re.compile(r"\b(?:acquires|acquisition|merger|buyback|bonus\s+issue|fda\s+approval|patent\s+granted)\b", re.I),
+    re.compile(r"\b(?:record\s+profit|profit\s+surge|profit\s+slump|tax\s+notice|penalty)\b", re.I),
+]
+_LOW_SEVERITY_PATTERNS = [
+    re.compile(r"\b(?:conference|investor\s+meet|analyst\s+call|webinar|agm\s+notice|press\s+clarification)\b", re.I),
+]
+
+
+def get_source_credibility_weight(source: Optional[str]) -> float:
+    """Returns credibility multiplier for publisher (Tier-1 exchanges/wires 1.25x, Tier-2 financial media 1.0x, unknown 0.7x)."""
+    if not source:
+        return 0.70
+    s_norm = " ".join(str(source).lower().split())
+    if s_norm in SOURCE_CREDIBILITY_WEIGHTS:
+        return SOURCE_CREDIBILITY_WEIGHTS[s_norm]
+    for key, wt in SOURCE_CREDIBILITY_WEIGHTS.items():
+        if key in s_norm:
+            return wt
+    return 0.70
+
+
+def compute_time_decay_weight(
+    pub_date: Any, half_life_days: float = 3.0, now: Optional[datetime] = None
+) -> float:
+    """
+    Exponential time decay 0.5 ** (age_days / half_life_days) bounded in [0.05, 1.0].
+    Returns 1.0 cleanly when pub_date is absent or unparseable so fixture items remain intact.
+    """
+    if not pub_date or not str(pub_date).strip():
+        return 1.0
+    raw = str(pub_date).strip()
+    dt: Optional[datetime] = None
+    try:
+        dt = parsedate_to_datetime(raw)
+    except Exception:
+        dt = None
+    if dt is None:
+        for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+            try:
+                dt = datetime.strptime(raw[:25], fmt)
+                break
+            except ValueError:
+                continue
+    if dt is None:
+        return 1.0
+
+    ref = now or datetime.now(timezone.utc)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    if ref.tzinfo is None:
+        ref = ref.replace(tzinfo=timezone.utc)
+    else:
+        ref = ref.astimezone(timezone.utc)
+
+    age_days = max(0.0, (ref - dt).total_seconds() / 86400.0)
+    return max(0.05, round(0.5 ** (age_days / max(0.25, float(half_life_days))), 4))
+
+
+def compute_event_severity(title: str, snippet: str = "") -> Tuple[float, str]:
+    """Scales structural events (SEBI probe, debt default, mega M&A) higher than routine updates."""
+    text = f"{title} {snippet}"
+    if any(p.search(text) for p in _CRITICAL_SEVERITY_PATTERNS):
+        return 1.50, "CRITICAL"
+    if any(p.search(text) for p in _HIGH_SEVERITY_PATTERNS):
+        return 1.25, "HIGH"
+    if any(p.search(text) for p in _LOW_SEVERITY_PATTERNS):
+        return 0.80, "LOW"
+    return 1.00, "STANDARD"
+
+
+def _title_tokens(title: str) -> set:
+    words = re.findall(r"[a-z0-9]+", str(title or "").lower())
+    return {w for w in words if len(w) > 1 and w not in _STOPWORDS}
+
+
+def cluster_duplicate_headlines(
+    items: List[Dict[str, Any]], similarity_threshold: float = 0.60
+) -> List[Dict[str, Any]]:
+    """
+    Deduplicates syndicated wire copies using content-token Jaccard similarity.
+    Short titles (< 3 content tokens) only deduplicate on exact normalized match so synthetic
+    short fixture labels ('a', 'b', 'c') remain distinct.
+    """
+    if not items:
+        return []
+
+    clusters: List[Dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("title") or "").strip()
+        norm_exact = re.sub(r"\s+", " ", title.lower())
+        toks = _title_tokens(title)
+        cred = get_source_credibility_weight(item.get("source"))
+
+        matched_cluster = None
+        for cl in clusters:
+            if len(toks) < 3 or len(cl["tokens"]) < 3:
+                if norm_exact == cl["exact"]:
+                    matched_cluster = cl
+                    break
+            else:
+                union = toks | cl["tokens"]
+                jaccard = (len(toks & cl["tokens"]) / len(union)) if union else 0.0
+                if jaccard >= similarity_threshold:
+                    matched_cluster = cl
+                    break
+
+        if matched_cluster is None:
+            rep = dict(item)
+            rep["cluster_size"] = 1
+            rep["syndicated_sources"] = [item.get("source") or "Web News"]
+            clusters.append({"exact": norm_exact, "tokens": toks, "rep": rep, "cred": cred})
+        else:
+            matched_cluster["rep"]["cluster_size"] += 1
+            src = item.get("source") or "Web News"
+            if src not in matched_cluster["rep"]["syndicated_sources"]:
+                matched_cluster["rep"]["syndicated_sources"].append(src)
+            if cred > matched_cluster["cred"]:
+                # Upgrade representative to higher-credibility source while keeping cluster metadata
+                old_sz = matched_cluster["rep"]["cluster_size"]
+                old_srcs = matched_cluster["rep"]["syndicated_sources"]
+                new_rep = dict(item)
+                new_rep["cluster_size"] = old_sz
+                new_rep["syndicated_sources"] = old_srcs
+                matched_cluster["rep"] = new_rep
+                matched_cluster["cred"] = cred
+                matched_cluster["tokens"] = toks
+                matched_cluster["exact"] = norm_exact
+
+    return [cl["rep"] for cl in clusters]
+
+
+def score_news_items_institutional(
+    items: List[Dict[str, Any]], now: Optional[datetime] = None
+) -> Dict[str, Any]:
+    """
+    Computes deduplicated, source-credibility-, time-decay-, and severity-weighted sentiment.
+    """
+    raw_count = len(items or [])
+    clustered = cluster_duplicate_headlines(items or [])
+    if not clustered:
+        return {
+            "raw_count": 0,
+            "clustered_count": 0,
+            "bullish": 0,
+            "bearish": 0,
+            "neutral": 0,
+            "weighted_score": 0.0,
+            "critical_alerts": [],
+            "clustered_items": [],
+        }
+
+    bull_cnt = 0
+    bear_cnt = 0
+    neut_cnt = 0
+    weighted_sum = 0.0
+    total_wt = 0.0
+    critical_alerts: List[str] = []
+
+    for it in clustered:
+        lbl = str(it.get("sentiment_label") or "")
+        is_bull = "Bullish" in lbl
+        is_bear = "Bearish" in lbl
+        if is_bull:
+            bull_cnt += 1
+            base_pol = 1.0
+        elif is_bear:
+            bear_cnt += 1
+            base_pol = -1.0
+        else:
+            neut_cnt += 1
+            base_pol = 0.0
+
+        # Prefer signed score magnitude when present (at least 0.6 for unambiguous Bullish/Bearish)
+        raw_sc = it.get("sentiment_score")
+        if raw_sc is not None:
+            try:
+                sc_f = float(raw_sc)
+                if is_bull:
+                    signed = max(0.6, min(1.0, abs(sc_f)))
+                elif is_bear:
+                    signed = -max(0.6, min(1.0, abs(sc_f)))
+                else:
+                    signed = max(-1.0, min(1.0, sc_f))
+            except (TypeError, ValueError):
+                signed = base_pol
+        else:
+            signed = base_pol
+
+        cred_wt = get_source_credibility_weight(it.get("source"))
+        decay_wt = compute_time_decay_weight(it.get("pub_date"), now=now)
+        sev_wt, sev_tier = compute_event_severity(it.get("title", ""), it.get("snippet", ""))
+        item_wt = cred_wt * decay_wt * sev_wt
+
+        it["credibility_weight"] = cred_wt
+        it["time_decay_weight"] = decay_wt
+        it["severity_tier"] = sev_tier
+        it["effective_weight"] = round(item_wt, 3)
+
+        if sev_tier == "CRITICAL" and it.get("title"):
+            critical_alerts.append(it["title"])
+
+        weighted_sum += signed * item_wt
+        total_wt += item_wt
+
+    w_score = round(weighted_sum / total_wt, 3) if total_wt > 0 else 0.0
+    w_score = max(-1.0, min(1.0, w_score))
+
+    return {
+        "raw_count": raw_count,
+        "clustered_count": len(clustered),
+        "bullish": bull_cnt,
+        "bearish": bear_cnt,
+        "neutral": neut_cnt,
+        "weighted_score": w_score,
+        "critical_alerts": critical_alerts,
+        "clustered_items": clustered,
+    }
+
+
 class NewsSentimentEngine:
     def __init__(self, cache_manager: CacheManager = None):
         self.cache_manager = cache_manager or CacheManager()
 
     def _quick_sentiment_score(self, text: str):
-        """Financial rule-based sentiment classifier for genuine corporate operational events."""
+        """Word-boundary, negation-aware sentiment classifier for genuine corporate operational events."""
         text_lower = text.lower()
+        # Normalize negated/idiomatic phrases before lexicon matching so e.g. "ban" never matches "bank",
+        # "stop-loss" doesn't trigger "loss", and "cuts dividend" scores bearish instead of bullish.
+        text_norm = re.sub(r"\bstop[-\s]?loss\b", " ", text_lower)
+        text_norm = re.sub(r"\b(?:loss\s+narrows|narrows\s+loss|lifts\s+ban|ban\s+lifted|lifts\s+curbs|curbs\s+lifted|strikes\s+deal)\b", " __pos__ ", text_norm)
+        text_norm = re.sub(r"\b(?:no\s+dividend|cuts?\s+dividend|skips?\s+dividend|slowing\s+growth|weak\s+demand|cancels?\s+order|order\s+cancelled|no\s+expansion)\b", " __neg__ ", text_norm)
+
         bullish_words = [
             "order win", "bags contract", "secures order", "profit surge", "profit rise",
             "profit jump", "revenue surge", "revenue growth", "capacity expansion",
             "commissioning", "approval granted", "patent granted", "debt reduction",
             "dividend", "record profit", "margin expansion", "acquisition", "deal signed",
             "joint venture", "commercial operations", "contract award", "expansion",
-            "growth", "turnaround", "order book", "strong demand", "partnership"
+            "growth", "turnaround", "order book", "strong demand", "partnership", "__pos__"
         ]
         bearish_words = [
             "order cancellation", "profit drop", "profit slump", "loss widens",
             "revenue decline", "plant shutdown", "tax notice", "penalty",
             "investigation", "sebi probe", "fraud", "debt default", "litigation",
             "strike", "credit downgrade", "resignation", "margin contraction",
-            "curbs", "ban", "loss", "slump", "deficit", "scam", "delay"
+            "curbs", "ban", "loss", "slump", "deficit", "scam", "delay", "__neg__"
         ]
 
-        bull_count = sum(1 for w in bullish_words if w in text_lower)
-        bear_count = sum(1 for w in bearish_words if w in text_lower)
+        tagged = []
+        for w in bullish_words:
+            tagged.append((w, 1))
+        for w in bearish_words:
+            tagged.append((w, -1))
+        # Longest phrases first so composite phrases consume spans and prevent double-counting
+        tagged.sort(key=lambda item: len(item[0]), reverse=True)
+
+        bull_count = 0
+        bear_count = 0
+        masked = text_norm
+        for w, polarity in tagged:
+            pat = re.compile(rf"(?<![a-z0-9]){re.escape(w)}(?![a-z0-9])")
+            if pat.search(masked):
+                if polarity > 0:
+                    bull_count += 1
+                else:
+                    bear_count += 1
+                masked = pat.sub(" ", masked)
 
         score = bull_count - bear_count
         if score > 0:
@@ -180,12 +465,18 @@ class NewsSentimentEngine:
         fetched_items: List[Dict[str, Any]] = []
         seen_titles = set()
 
-        # Build query focused on actual business activity:
-        clean_name = re.sub(r"\b(Limited|Ltd\.|Ltd|Industries|Technologies|Services|Corp|Corporation)\b", "", company_name or "", flags=re.I).strip()
+        # Build query focused on actual business activity without stripping distinctive words down to generic stems
+        clean_name = re.sub(r"\b(Limited|Ltd\.?|Corp\.?|Corporation|Pvt\.?|Private)\b", "", company_name or "", flags=re.I)
+        clean_name = re.sub(r"\(India\)", "", clean_name, flags=re.I)
+        clean_name = " ".join(clean_name.split())
+        if len(clean_name.split()) >= 2:
+            stripped_suffix = " ".join(re.sub(r"\b(Industries|Technologies|Services)\b", "", clean_name, flags=re.I).split())
+            if len(stripped_suffix.split()) >= 2:
+                clean_name = stripped_suffix
         name_term = f'"{clean_name}"' if (clean_name and len(clean_name) >= 3) else f'"{symbol}"'
 
-        # Primary query: Target business activity, exclude recommendation spam
-        query_str = f'{name_term} (order OR contract OR deal OR acquisition OR expansion OR profit OR plant OR commissioning OR partnership OR revenue OR dividend) -recommendation -brokerage -"stocks to watch" -"share price"'
+        # Primary query: Target recent (14d) business activity, exclude recommendation spam
+        query_str = f'{name_term} (order OR contract OR deal OR acquisition OR expansion OR profit OR plant OR commissioning OR partnership OR revenue OR dividend) -recommendation -brokerage -"stocks to watch" -"share price" when:14d'
 
         rss_items = self._fetch_rss_query(query_str, symbol, max_items=max_items)
         for item in rss_items:
@@ -196,7 +487,7 @@ class NewsSentimentEngine:
 
         # Fallback query if no operational news found
         if not fetched_items:
-            fallback_query = f'{name_term} (business OR company OR management OR quarterly OR results) -recommendation -brokerage'
+            fallback_query = f'{name_term} (business OR company OR management OR quarterly OR results) -recommendation -brokerage when:14d'
             fallback_items = self._fetch_rss_query(fallback_query, symbol, max_items=max_items)
             for item in fallback_items:
                 norm_title = re.sub(r"[^\w\s]", "", item["title"].lower())
@@ -367,6 +658,8 @@ class NewsSentimentEngine:
                     pub_date = item_elem.findtext("pubDate", "")
                     desc = clean_text(item_elem.findtext("description", ""))
                     if title:
+                        if is_recommendation_spam(title, desc):
+                            continue
                         label, score = self._quick_sentiment_score(f"{title}. {desc}")
                         items.append({
                             "source": source_name,

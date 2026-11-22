@@ -86,7 +86,8 @@ export interface PriceInfo {
   price: number | null;
   change_pct: number | null;
   prev_close: number | null;
-  source: 'quote' | 'close' | 'analysis' | 'unknown';
+  kind?: 'quote' | 'close' | 'analysis' | 'unknown';
+  source?: 'quote' | 'close' | 'analysis' | 'unknown' | string;
   as_of?: string | null;
   as_of_date?: string | null;
   analysis_price?: number | null;
@@ -219,9 +220,13 @@ export interface SearchResult {
 }
 
 export interface QueueStatus {
-  pending_count: number;
-  in_progress_count: number;
-  completed_count: number;
+  engine?: string;
+  pending?: number;
+  in_progress?: number;
+  completed?: number;
+  pending_count?: number;
+  in_progress_count?: number;
+  completed_count?: number;
 }
 
 export interface MarketBadge {

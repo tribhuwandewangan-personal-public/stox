@@ -243,6 +243,18 @@ class StocksStore {
     }
   }
 
+  async refreshCurrentUniverse(): Promise<void> {
+    const seq = ++this.loadSeq;
+    const universe = this.state().activeUniverse;
+    try {
+      const stocks = await ApiService.getStocks(universe);
+      if (seq !== this.loadSeq) return;
+      this.setStocks(Array.isArray(stocks) ? stocks : []);
+    } catch (err) {
+      console.error('[StocksStore] Failed to refresh current universe:', err);
+    }
+  }
+
   setSectorFilter(sector: string | null): void {
     this.updateState(s => ({
       ...s,

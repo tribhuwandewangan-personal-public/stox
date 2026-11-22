@@ -10,7 +10,7 @@ import json
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List
 
-from config import CACHE_DB_PATH
+from config import CACHE_DB_PATH, MODEL_VERSION
 
 class _ClosingConnection(sqlite3.Connection):
     """`with conn:` commits/rolls back like stock sqlite3 AND closes the connection afterwards.
@@ -46,10 +46,11 @@ class CacheManager:
             # WAL lets the dashboard read while analysis workers write (persistent DB setting)
             cursor.execute("PRAGMA journal_mode=WAL")
 
-            # Drop legacy bhavcopy table if present (check first: DROP takes a write lock every start)
-            cursor.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='bhavcopy_cache'")
-            if cursor.fetchone():
-                cursor.execute("DROP TABLE bhavcopy_cache")
+            # Drop legacy/unused tables if present (check first: DROP takes a write lock every start)
+            for obsolete_tbl in ("bhavcopy_cache", "tech_cache"):
+                cursor.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (obsolete_tbl,))
+                if cursor.fetchone():
+                    cursor.execute(f"DROP TABLE {obsolete_tbl}")
 
             # Reliable historical adjusted candles per stock
             cursor.execute("""
@@ -64,9 +65,21 @@ class CacheManager:
                     volume INTEGER,
                     dividends REAL DEFAULT 0.0,
                     splits REAL DEFAULT 0.0,
+                    delivery_qty INTEGER DEFAULT NULL,
+                    delivery_pct REAL DEFAULT NULL,
+                    adj_factor REAL DEFAULT 1.0,
                     PRIMARY KEY (symbol, date)
                 )
             """)
+            for col_ddl in (
+                "ALTER TABLE historical_candles ADD COLUMN delivery_qty INTEGER DEFAULT NULL",
+                "ALTER TABLE historical_candles ADD COLUMN delivery_pct REAL DEFAULT NULL",
+                "ALTER TABLE historical_candles ADD COLUMN adj_factor REAL DEFAULT 1.0",
+            ):
+                try:
+                    cursor.execute(col_ddl)
+                except sqlite3.OperationalError:
+                    pass
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_hist_candles_sym_date 
                 ON historical_candles(symbol, date)
@@ -118,25 +131,6 @@ class CacheManager:
                 )
             """)
 
-            # Technical Analysis Cache
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS tech_cache (
-                    symbol TEXT,
-                    date TEXT,
-                    sma_20 REAL,
-                    sma_50 REAL,
-                    sma_200 REAL,
-                    rsi_14 REAL,
-                    macd REAL,
-                    macd_signal REAL,
-                    bollinger_upper REAL,
-                    bollinger_lower REAL,
-                    support REAL,
-                    resistance REAL,
-                    PRIMARY KEY (symbol, date)
-                )
-            """)
-
             # Shared Common Market Context Bulletin Table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS shared_market_bulletin (
@@ -167,11 +161,23 @@ class CacheManager:
                     day_high REAL,
                     day_low REAL,
                     volume INTEGER,
+                    vwap REAL DEFAULT NULL,
+                    upper_circuit REAL DEFAULT NULL,
+                    lower_circuit REAL DEFAULT NULL,
                     quote_ts TEXT,
                     fetched_at TEXT,
                     source TEXT
                 )
             """)
+            for col_ddl in (
+                "ALTER TABLE quotes ADD COLUMN vwap REAL DEFAULT NULL",
+                "ALTER TABLE quotes ADD COLUMN upper_circuit REAL DEFAULT NULL",
+                "ALTER TABLE quotes ADD COLUMN lower_circuit REAL DEFAULT NULL",
+            ):
+                try:
+                    cursor.execute(col_ddl)
+                except sqlite3.OperationalError:
+                    pass
 
             # Every verdict ever produced, later scored against actual prices (see tools/outcome_tracker.py)
             cursor.execute("""
@@ -194,9 +200,19 @@ class CacheManager:
                     resolved_at TEXT,
                     outcome_price REAL,
                     return_pct REAL,
+                    model_version TEXT DEFAULT 'legacy',
+                    split_adjusted_factor REAL DEFAULT 1.0,
                     UNIQUE(symbol, as_of_date)
                 )
             """)
+            for col_ddl in (
+                "ALTER TABLE prediction_log ADD COLUMN model_version TEXT DEFAULT 'legacy'",
+                "ALTER TABLE prediction_log ADD COLUMN split_adjusted_factor REAL DEFAULT 1.0",
+            ):
+                try:
+                    cursor.execute(col_ddl)
+                except sqlite3.OperationalError:
+                    pass
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_prediction_status ON prediction_log(status)
             """)
@@ -255,7 +271,7 @@ class CacheManager:
             cursor = conn.cursor()
             # Newest limit_days rows (+1 context row so the first returned row has a true PREV_CLOSE)
             cursor.execute("""
-                SELECT date, open, high, low, close, adj_close, volume, dividends, splits
+                SELECT date, open, high, low, close, adj_close, volume, dividends, splits, delivery_qty, delivery_pct
                 FROM historical_candles
                 WHERE symbol = ?
                 ORDER BY date DESC
@@ -286,7 +302,9 @@ class CacheManager:
                 "TTL_TRD_QNTY": int(r[6] or 0),
                 "VOLUME": int(r[6] or 0),
                 "DIVIDENDS": float(r[7] or 0.0),
-                "SPLITS": float(r[8] or 0.0)
+                "SPLITS": float(r[8] or 0.0),
+                "DELIVERY_QTY": int(r[9]) if r[9] is not None else None,
+                "DELIVERY_PCT": float(r[10]) if r[10] is not None else None,
             })
             prev_close = close_val
 
@@ -303,9 +321,20 @@ class CacheManager:
             if replace_symbol:
                 cursor.execute("DELETE FROM historical_candles WHERE symbol = ?", (replace_symbol.upper(),))
             cursor.executemany("""
-                INSERT OR REPLACE INTO historical_candles
-                (symbol, date, open, high, low, close, adj_close, volume, dividends, splits)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO historical_candles
+                (symbol, date, open, high, low, close, adj_close, volume, dividends, splits, delivery_qty, delivery_pct)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(symbol, date) DO UPDATE SET
+                    open = excluded.open,
+                    high = excluded.high,
+                    low = excluded.low,
+                    close = excluded.close,
+                    adj_close = excluded.adj_close,
+                    volume = excluded.volume,
+                    dividends = excluded.dividends,
+                    splits = excluded.splits,
+                    delivery_qty = COALESCE(excluded.delivery_qty, historical_candles.delivery_qty),
+                    delivery_pct = COALESCE(excluded.delivery_pct, historical_candles.delivery_pct)
             """, [
                 (
                     r["symbol"].upper(),
@@ -317,11 +346,43 @@ class CacheManager:
                     float(r.get("adj_close", r.get("close", 0.0))),
                     int(r.get("volume", 0)),
                     float(r.get("dividends", 0.0)),
-                    float(r.get("splits", 0.0))
+                    float(r.get("splits", 0.0)),
+                    int(r["delivery_qty"]) if r.get("delivery_qty") is not None else None,
+                    float(r["delivery_pct"]) if r.get("delivery_pct") is not None else None,
                 )
                 for r in records
             ])
             conn.commit()
+
+    def update_delivery_data(self, records: List[Dict[str, Any]]) -> int:
+        """
+        Updates delivery_qty and delivery_pct on existing (symbol, date) rows in historical_candles.
+        Returns the total count of matched rows updated.
+        """
+        if not records:
+            return 0
+        rows_to_update = []
+        for r in records:
+            sym = str(r.get("symbol", "")).upper().strip()
+            dt = str(r.get("date", "")).strip()
+            if not sym or not dt:
+                continue
+            dqty = int(r["delivery_qty"]) if r.get("delivery_qty") is not None else None
+            dpct = float(r["delivery_pct"]) if r.get("delivery_pct") is not None else None
+            rows_to_update.append((dqty, dpct, sym, dt))
+        if not rows_to_update:
+            return 0
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.executemany("""
+                UPDATE historical_candles
+                SET delivery_qty = COALESCE(?, delivery_qty),
+                    delivery_pct = COALESCE(?, delivery_pct)
+                WHERE symbol = ? AND date = ?
+            """, rows_to_update)
+            updated = max(0, cursor.rowcount)
+            conn.commit()
+        return updated
 
     def get_latest_candle_date(self, symbol: str) -> Optional[str]:
         """Date (YYYY-MM-DD) of the newest stored candle for a symbol, or None. Cheap (index lookup)."""
@@ -556,18 +617,21 @@ class CacheManager:
 
     # --- Live quotes API ---
     def save_quotes(self, quotes: List[Dict[str, Any]]):
-        """Upsert latest quotes. Each dict: symbol, ltp, prev_close, day_high, day_low, volume, quote_ts, source."""
+        """Upsert latest quotes including Kite VWAP & circuit limits."""
         if not quotes:
             return
         now_str = datetime.now().isoformat()
         with self._get_connection() as conn:
             conn.executemany("""
                 INSERT OR REPLACE INTO quotes
-                (symbol, ltp, prev_close, day_high, day_low, volume, quote_ts, fetched_at, source)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (symbol, ltp, prev_close, day_high, day_low, volume, vwap, upper_circuit, lower_circuit, quote_ts, fetched_at, source)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, [
-                (q["symbol"].upper(), q.get("ltp"), q.get("prev_close"), q.get("day_high"), q.get("day_low"),
-                 q.get("volume"), q.get("quote_ts"), now_str, q.get("source"))
+                (
+                    q["symbol"].upper(), q.get("ltp"), q.get("prev_close"), q.get("day_high"), q.get("day_low"),
+                    q.get("volume"), q.get("vwap"), q.get("upper_circuit"), q.get("lower_circuit"),
+                    q.get("quote_ts"), now_str, q.get("source"),
+                )
                 for q in quotes
             ])
             conn.commit()
@@ -575,10 +639,129 @@ class CacheManager:
     def get_all_quotes(self) -> Dict[str, Dict[str, Any]]:
         with self._get_connection() as conn:
             rows = conn.execute(
-                "SELECT symbol, ltp, prev_close, day_high, day_low, volume, quote_ts, fetched_at, source FROM quotes"
+                "SELECT symbol, ltp, prev_close, day_high, day_low, volume, vwap, upper_circuit, lower_circuit, quote_ts, fetched_at, source FROM quotes"
             ).fetchall()
-        keys = ("symbol", "ltp", "prev_close", "day_high", "day_low", "volume", "quote_ts", "fetched_at", "source")
+        keys = ("symbol", "ltp", "prev_close", "day_high", "day_low", "volume", "vwap", "upper_circuit", "lower_circuit", "quote_ts", "fetched_at", "source")
         return {r[0]: dict(zip(keys, r)) for r in rows}
+
+    def get_candles_bulk_summary(
+        self,
+        symbols: Optional[List[str]] = None,
+        limit_days: int = 260,
+        sparkline_days: int = 25,
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Reads candle summaries (25-bar sparkline, 52W high/low, latest close/date, prev_close) for all
+        or selected symbols in a single SQLite query instead of N per-symbol queries.
+        """
+        lim = max(25, int(limit_days))
+        with self._get_connection() as conn:
+            if symbols:
+                clean_syms = sorted({str(s).upper().strip() for s in symbols if str(s).strip()})
+                if not clean_syms:
+                    return {}
+                out: Dict[str, Dict[str, Any]] = {}
+                # SQLite host-parameter limit is 999 -> query in batches of 400
+                for start in range(0, len(clean_syms), 400):
+                    batch = clean_syms[start:start + 400]
+                    placeholders = ",".join("?" for _ in batch)
+                    rows = conn.execute(
+                        f"SELECT symbol, date, high, low, close FROM historical_candles "
+                        f"WHERE symbol IN ({placeholders}) ORDER BY symbol, date DESC",
+                        tuple(batch),
+                    ).fetchall()
+                    out.update(self._aggregate_bulk_candle_rows(rows, lim, sparkline_days))
+                return out
+            rows = conn.execute(
+                "SELECT symbol, date, high, low, close FROM historical_candles ORDER BY symbol, date DESC"
+            ).fetchall()
+        return self._aggregate_bulk_candle_rows(rows, lim, sparkline_days)
+
+    @staticmethod
+    def _aggregate_bulk_candle_rows(rows, limit_days: int, sparkline_days: int) -> Dict[str, Dict[str, Any]]:
+        summary: Dict[str, Dict[str, Any]] = {}
+        grouped: Dict[str, List[tuple]] = {}
+        for sym, d, h, l, c in rows:
+            bucket = grouped.setdefault(sym, [])
+            if len(bucket) < limit_days:
+                bucket.append((d, h, l, c))
+
+        for sym, desc_rows in grouped.items():
+            # desc_rows is newest-first
+            if not desc_rows:
+                continue
+            closes_desc = [float(r[3] or 0.0) for r in desc_rows]
+            highs = [float(r[1] or r[3] or 0.0) for r in desc_rows]
+            lows = [float(r[2] or r[3] or 0.0) for r in desc_rows if (r[2] or r[3])]
+            spark = [round(x, 2) for x in reversed(closes_desc[:sparkline_days])]
+            latest_c = round(closes_desc[0], 2) if closes_desc else None
+            latest_d = str(desc_rows[0][0])[:10]
+            prev_c = round(closes_desc[1], 2) if len(closes_desc) > 1 else latest_c
+            summary[sym] = {
+                "sparkline": spark,
+                "latest_close": latest_c,
+                "latest_date": latest_d,
+                "prev_close": prev_c,
+                "high_52w": round(max(highs), 2) if highs else None,
+                "low_52w": round(min(lows), 2) if lows else None,
+            }
+        return summary
+
+    def get_cached_events_bulk(self) -> Dict[str, Dict[str, Any]]:
+        """Reads all cached corporate events in ONE query and strips expired event dates."""
+        today = datetime.now().strftime("%Y-%m-%d")
+        with self._get_connection() as conn:
+            has_tbl = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='events_cache'"
+            ).fetchone()
+            if not has_tbl:
+                return {}
+            rows = conn.execute("SELECT symbol, events_data FROM events_cache").fetchall()
+
+        result: Dict[str, Dict[str, Any]] = {}
+        for sym, blob in rows:
+            try:
+                data = json.loads(blob)
+            except Exception:
+                continue
+            if data.get("earnings_date") and str(data["earnings_date"]) < today:
+                data["earnings_date"] = None
+            if data.get("dividend_ex_date") and str(data["dividend_ex_date"]) < today:
+                data["dividend_ex_date"] = None
+                data["dividend_amount"] = None
+                data["dividend_per_share"] = None
+            if isinstance(data.get("upcoming_macro_catalysts"), list):
+                data["upcoming_macro_catalysts"] = [
+                    m for m in data["upcoming_macro_catalysts"] if str(m.get("date") or "") >= today
+                ]
+            result[str(sym).upper()] = data
+        return result
+
+    def prune_macro_history(self, keep_bulletins: int = 200, keep_days: int = 14) -> Dict[str, int]:
+        """Bounds shared_market_bulletin and macro_cache table growth."""
+        cutoff = (datetime.now() - timedelta(days=max(1, int(keep_days)))).isoformat()
+        with self._get_connection() as conn:
+            c1 = conn.execute(
+                """
+                DELETE FROM shared_market_bulletin
+                WHERE id NOT IN (
+                    SELECT id FROM shared_market_bulletin ORDER BY id DESC LIMIT ?
+                )
+                """,
+                (max(1, int(keep_bulletins)),),
+            )
+            c2 = conn.execute(
+                """
+                DELETE FROM macro_cache
+                WHERE fetch_date < ?
+                  AND fetch_date NOT IN (
+                    SELECT MAX(fetch_date) FROM macro_cache m2 WHERE m2.indicator_name = macro_cache.indicator_name
+                  )
+                """,
+                (cutoff,),
+            )
+            conn.commit()
+            return {"bulletins_pruned": max(0, c1.rowcount), "macro_rows_pruned": max(0, c2.rowcount)}
 
     # --- Prediction log API ---
     def log_prediction(self, rec: Dict[str, Any]):
@@ -586,43 +769,95 @@ class CacheManager:
         Record a verdict. One row per (symbol, as_of_date): re-analysing the same day refreshes the row while it
         is still OPEN, but never rewrites an already-resolved prediction.
         """
+        from tools import market_calendar
+        made_at_val = rec.get("made_at") or market_calendar.now_ist().isoformat()
+        model_ver = str(rec.get("model_version") or MODEL_VERSION)
+        split_fac = float(rec.get("split_adjusted_factor") or 1.0)
         with self._get_connection() as conn:
             conn.execute("""
                 INSERT INTO prediction_log
                 (symbol, made_at, as_of_date, verdict, confidence_pct, price_at_signal, entry_lo, entry_hi,
-                 target, stop, evidence_score, breakdown, horizon_days)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 target, stop, evidence_score, breakdown, horizon_days, model_version, split_adjusted_factor)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(symbol, as_of_date) DO UPDATE SET
                     made_at=excluded.made_at, verdict=excluded.verdict, confidence_pct=excluded.confidence_pct,
                     price_at_signal=excluded.price_at_signal, entry_lo=excluded.entry_lo, entry_hi=excluded.entry_hi,
                     target=excluded.target, stop=excluded.stop, evidence_score=excluded.evidence_score,
-                    breakdown=excluded.breakdown, horizon_days=excluded.horizon_days
+                    breakdown=excluded.breakdown, horizon_days=excluded.horizon_days,
+                    model_version=excluded.model_version, split_adjusted_factor=excluded.split_adjusted_factor
                 WHERE prediction_log.status = 'OPEN'
             """, (
-                rec["symbol"].upper(), rec.get("made_at") or datetime.now().isoformat(), rec["as_of_date"],
+                rec["symbol"].upper(), made_at_val, rec["as_of_date"],
                 rec.get("verdict"), rec.get("confidence_pct"), rec.get("price_at_signal"), rec.get("entry_lo"),
                 rec.get("entry_hi"), rec.get("target"), rec.get("stop"), rec.get("evidence_score"),
                 self._safe_json_dumps(rec.get("breakdown") or []), rec.get("horizon_days"),
+                model_ver, split_fac,
             ))
             conn.commit()
 
-    def get_predictions(self, status: Optional[str] = None) -> List[Dict[str, Any]]:
-        sql = ("SELECT id, symbol, made_at, as_of_date, verdict, confidence_pct, price_at_signal, entry_lo, entry_hi, "
-               "target, stop, evidence_score, horizon_days, status, resolved_at, outcome_price, return_pct "
-               "FROM prediction_log")
-        params: tuple = ()
+    def get_predictions(
+        self,
+        status: Optional[str] = None,
+        model_version: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        sql = (
+            "SELECT id, symbol, made_at, as_of_date, verdict, confidence_pct, price_at_signal, entry_lo, entry_hi, "
+            "target, stop, evidence_score, horizon_days, status, resolved_at, outcome_price, return_pct, "
+            "COALESCE(model_version, 'legacy'), COALESCE(split_adjusted_factor, 1.0) "
+            "FROM prediction_log"
+        )
+        clauses: List[str] = []
+        params_list: List[Any] = []
         if status == "RESOLVED":
-            sql += " WHERE status != 'OPEN'"
+            clauses.append("status != 'OPEN'")
         elif status:
-            sql += " WHERE status = ?"
-            params = (status,)
+            clauses.append("status = ?")
+            params_list.append(status)
+        if model_version:
+            clauses.append("COALESCE(model_version, 'legacy') = ?")
+            params_list.append(model_version)
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
         sql += " ORDER BY as_of_date, id"
-        keys = ("id", "symbol", "made_at", "as_of_date", "verdict", "confidence_pct", "price_at_signal", "entry_lo",
-                "entry_hi", "target", "stop", "evidence_score", "horizon_days", "status", "resolved_at",
-                "outcome_price", "return_pct")
+        keys = (
+            "id", "symbol", "made_at", "as_of_date", "verdict", "confidence_pct", "price_at_signal", "entry_lo",
+            "entry_hi", "target", "stop", "evidence_score", "horizon_days", "status", "resolved_at",
+            "outcome_price", "return_pct", "model_version", "split_adjusted_factor",
+        )
         with self._get_connection() as conn:
-            rows = conn.execute(sql, params).fetchall()
+            rows = conn.execute(sql, tuple(params_list)).fetchall()
         return [dict(zip(keys, r)) for r in rows]
+
+    def rebase_open_predictions(
+        self,
+        symbol: str,
+        factor: float,
+        as_of_cutoff: Optional[str] = None,
+    ) -> int:
+        """
+        Re-baselines price levels on OPEN predictions when corporate actions (splits/bonuses) rescale historical candles.
+        """
+        if factor is None or factor <= 0 or abs(factor - 1.0) <= 1e-4:
+            return 0
+        sym_u = symbol.upper().strip()
+        sql = """
+            UPDATE prediction_log
+            SET price_at_signal = ROUND(price_at_signal * ?, 2),
+                entry_lo = CASE WHEN entry_lo IS NOT NULL THEN ROUND(entry_lo * ?, 2) ELSE NULL END,
+                entry_hi = CASE WHEN entry_hi IS NOT NULL THEN ROUND(entry_hi * ?, 2) ELSE NULL END,
+                target = ROUND(target * ?, 2),
+                stop = ROUND(stop * ?, 2),
+                split_adjusted_factor = COALESCE(split_adjusted_factor, 1.0) * ?
+            WHERE symbol = ? AND status = 'OPEN'
+        """
+        params: List[Any] = [factor, factor, factor, factor, factor, factor, sym_u]
+        if as_of_cutoff:
+            sql += " AND as_of_date <= ?"
+            params.append(as_of_cutoff)
+        with self._get_connection() as conn:
+            cur = conn.execute(sql, tuple(params))
+            conn.commit()
+            return max(0, cur.rowcount)
 
     def resolve_prediction(self, prediction_id: int, status: str, outcome_price: Optional[float],
                            return_pct: Optional[float], resolved_at: Optional[str] = None):

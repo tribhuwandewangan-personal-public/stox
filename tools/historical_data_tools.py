@@ -6,8 +6,12 @@ persists into SQLite (historical_candles table), and exports to Excel (.xlsx).
 
 import os
 import sys
+import csv
+import io
 import json
 import time
+import threading
+import urllib.request
 import concurrent.futures
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
@@ -125,11 +129,84 @@ INCREMENTAL_OVERLAP_DAYS = 7   # re-fetched on every refresh to detect split/div
 ADJUSTMENT_TOLERANCE = 0.001   # >0.1% change in an overlapping close => history was re-adjusted
 RECHECK_SECONDS = 1800         # don't re-ask the vendor for a symbol more often than this (unlisted holidays)
 DF_CACHE_TTL_SECONDS = 900     # in-memory frames are reloaded from SQLite after this (long-running dashboard)
+BENCHMARK_NIFTY50 = "^NSEI"
+BENCHMARK_MIDCAP150 = "^CRSMID"
+BENCHMARK_SYMBOLS = (BENCHMARK_NIFTY50, BENCHMARK_MIDCAP150)
+NSE_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Accept": "text/csv,application/csv,text/plain,*/*",
+    "Referer": "https://www.nseindia.com/",
+}
+
+
+def parse_nse_delivery_csv(csv_text: str) -> List[Dict[str, Any]]:
+    """
+    Parses NSE `sec_bhavdata_full_DDMMYYYY.csv` text into standardized delivery records:
+      [{"symbol", "date", "delivery_qty", "delivery_pct"}].
+    Keeps SERIES == "EQ" rows and safely skips "-" or non-numeric delivery fields.
+    """
+    if not csv_text or not csv_text.strip():
+        return []
+    reader = csv.DictReader(io.StringIO(csv_text.strip()))
+    if not reader.fieldnames:
+        return []
+
+    records: List[Dict[str, Any]] = []
+    for raw_row in reader:
+        row = {str(k).strip().upper(): (v.strip() if isinstance(v, str) else "") for k, v in raw_row.items() if k is not None}
+        if row.get("SERIES", "").upper() != "EQ":
+            continue
+        sym = row.get("SYMBOL", "").upper().strip()
+        if not sym:
+            continue
+
+        date_raw = row.get("DATE1") or row.get("TIMESTAMP") or row.get("DATE") or ""
+        iso_date = None
+        for fmt in ("%d-%b-%Y", "%d-%b-%y", "%Y-%m-%d", "%d-%m-%Y"):
+            try:
+                iso_date = datetime.strptime(date_raw.strip(), fmt).strftime("%Y-%m-%d")
+                break
+            except ValueError:
+                continue
+        if not iso_date:
+            continue
+
+        dqty_raw = row.get("DELIV_QTY", "").replace(",", "").strip()
+        dpct_raw = row.get("DELIV_PER", "").replace(",", "").replace("%", "").strip()
+
+        delivery_qty: Optional[int] = None
+        delivery_pct: Optional[float] = None
+        if dqty_raw and dqty_raw != "-":
+            try:
+                q_val = int(float(dqty_raw))
+                if q_val >= 0:
+                    delivery_qty = q_val
+            except ValueError:
+                pass
+        if dpct_raw and dpct_raw != "-":
+            try:
+                p_val = float(dpct_raw)
+                if np.isfinite(p_val) and 0.0 <= p_val <= 100.0:
+                    delivery_pct = round(p_val, 2)
+            except ValueError:
+                pass
+
+        if delivery_qty is None and delivery_pct is None:
+            continue
+
+        records.append({
+            "symbol": sym,
+            "date": iso_date,
+            "delivery_qty": delivery_qty,
+            "delivery_pct": delivery_pct,
+        })
+    return records
 
 
 class HistoricalDataEngine:
     def __init__(self, cache_manager: Optional[CacheManager] = None):
         self.cache_manager = cache_manager or CacheManager()
+        self._cache_lock = threading.Lock()
         self.df_cache: Dict[str, pd.DataFrame] = {}
         self._df_loaded_at: Dict[str, float] = {}
         self._last_sync_attempt: Dict[str, float] = {}
@@ -145,20 +222,25 @@ class HistoricalDataEngine:
         import yfinance as yf
 
         symbol_clean = symbol.upper().strip()
+        is_index = symbol_clean.startswith("^")
 
-        # Use smart candidate builder (handles special chars, known overrides, .NS → .BO fallback)
-        try:
-            from tools.ticker_validator import build_yf_candidates, get_tracker, _is_sme_or_derivative
-            # Skip symbols known to be SME / derivatives / unavailable upfront
-            if _is_sme_or_derivative(symbol_clean):
-                return pd.DataFrame()
-            tracker = get_tracker()
-            if tracker.is_unavailable(symbol_clean):
-                return pd.DataFrame()
-            candidates = build_yf_candidates(symbol_clean)
-        except ImportError:
+        # Use smart candidate builder (handles special chars, known overrides, .NS -> .BO fallback)
+        if is_index:
             tracker = None
-            candidates = [f"{symbol_clean}.NS", f"{symbol_clean}.BO"]
+            candidates = [symbol_clean]
+        else:
+            try:
+                from tools.ticker_validator import build_yf_candidates, get_tracker, _is_sme_or_derivative
+                # Skip symbols known to be SME / derivatives / unavailable upfront
+                if _is_sme_or_derivative(symbol_clean):
+                    return pd.DataFrame()
+                tracker = get_tracker()
+                if tracker.is_unavailable(symbol_clean):
+                    return pd.DataFrame()
+                candidates = build_yf_candidates(symbol_clean)
+            except ImportError:
+                tracker = None
+                candidates = [f"{symbol_clean}.NS", f"{symbol_clean}.BO"]
 
         df_history = pd.DataFrame()
 
@@ -247,25 +329,34 @@ class HistoricalDataEngine:
         """Stored candles reach the last completed session, or the vendor was asked very recently."""
         if latest_dt.date() >= market_calendar.last_completed_session():
             return True
-        return (time.time() - self._last_sync_attempt.get(symbol, 0.0)) < RECHECK_SECONDS
+        with self._cache_lock:
+            last_try = self._last_sync_attempt.get(symbol, 0.0)
+        return (time.time() - last_try) < RECHECK_SECONDS
 
     def _remember(self, symbol: str, df: pd.DataFrame) -> pd.DataFrame:
-        self.df_cache[symbol] = df
-        self._df_loaded_at[symbol] = time.time()
+        with self._cache_lock:
+            self.df_cache[symbol] = df
+            self._df_loaded_at[symbol] = time.time()
         return df
 
     @staticmethod
     def _df_to_records(symbol: str, df: pd.DataFrame) -> List[Dict[str, Any]]:
         dates = df['DATE'].dt.strftime('%Y-%m-%d')
+        has_dqty = 'DELIVERY_QTY' in df.columns
+        has_dpct = 'DELIVERY_PCT' in df.columns
+        dqtys = df['DELIVERY_QTY'] if has_dqty else [None] * len(df)
+        dpcts = df['DELIVERY_PCT'] if has_dpct else [None] * len(df)
         return [
             {
                 "symbol": symbol, "date": d,
                 "open": float(o), "high": float(h), "low": float(l), "close": float(c),
                 "adj_close": float(a), "volume": int(v), "dividends": float(dv), "splits": float(sp),
+                "delivery_qty": (int(dq) if dq is not None and pd.notna(dq) else None),
+                "delivery_pct": (float(dp) if dp is not None and pd.notna(dp) else None),
             }
-            for d, o, h, l, c, a, v, dv, sp in zip(
+            for d, o, h, l, c, a, v, dv, sp, dq, dp in zip(
                 dates, df['OPEN_PRICE'], df['HIGH_PRICE'], df['LOW_PRICE'], df['CLOSE_PRICE'],
-                df['ADJ_CLOSE'], df['VOLUME'], df['DIVIDENDS'], df['SPLITS']
+                df['ADJ_CLOSE'], df['VOLUME'], df['DIVIDENDS'], df['SPLITS'], dqtys, dpcts
             )
         ]
 
@@ -287,15 +378,69 @@ class HistoricalDataEngine:
         rel = (new_c - old_c).abs() / old_c.abs().clip(lower=1e-9)
         return bool((rel > ADJUSTMENT_TOLERANCE).any())
 
+    @staticmethod
+    def _compute_rebaseline_factor(cached_df: pd.DataFrame, df_new: pd.DataFrame) -> Optional[float]:
+        """Computes median price adjustment factor (new / old) across overlapping dates when history is re-adjusted."""
+        if cached_df is None or cached_df.empty or df_new is None or df_new.empty:
+            return None
+        try:
+            old = cached_df.set_index(cached_df['DATE'].dt.strftime('%Y-%m-%d'))['CLOSE_PRICE']
+            new = df_new.set_index(df_new['DATE'].dt.strftime('%Y-%m-%d'))['CLOSE_PRICE']
+            common = old.index.intersection(new.index)
+            if len(common) == 0:
+                return None
+            old_c = old[common].astype(float)
+            new_c = new[common].astype(float)
+            valid = (old_c > 0) & (new_c > 0)
+            if not valid.any():
+                return None
+            ratios = new_c[valid] / old_c[valid]
+            rel = (new_c[valid] - old_c[valid]).abs() / old_c[valid]
+            if not (rel > ADJUSTMENT_TOLERANCE).any():
+                return None
+            med = float(ratios.median())
+            if abs(med - 1.0) > ADJUSTMENT_TOLERANCE and 0.01 <= med <= 100.0:
+                return round(med, 6)
+        except Exception:
+            return None
+        return None
+
     def _full_refresh(self, symbol: str, period: str, fallback: pd.DataFrame) -> pd.DataFrame:
         df_fresh = self.fetch_from_source(symbol, period=period)
         if df_fresh.empty:
             if not fallback.empty:
                 return self._remember(symbol, fallback)
             return pd.DataFrame()
+        rebase_factor = self._compute_rebaseline_factor(fallback, df_fresh) if not fallback.empty else None
+        cutoff_date = (
+            fallback['DATE'].iloc[-1].strftime('%Y-%m-%d')
+            if (rebase_factor is not None and not fallback.empty)
+            else None
+        )
         # replace_symbol: drop old rows so every stored candle shares one adjustment basis
         self.cache_manager.save_historical_candles(self._df_to_records(symbol, df_fresh), replace_symbol=symbol)
+        if rebase_factor is not None and hasattr(self.cache_manager, "rebase_open_predictions"):
+            try:
+                self.cache_manager.rebase_open_predictions(symbol, rebase_factor, as_of_cutoff=cutoff_date)
+            except Exception:
+                pass
         return self._remember(symbol, self._load_cached_df(symbol))
+
+    def sync_benchmarks(
+        self, benchmarks: tuple = BENCHMARK_SYMBOLS, force: bool = False
+    ) -> Dict[str, bool]:
+        """Synchronizes index benchmarks (^NSEI Nifty 50, ^CRSMID Nifty Midcap 150) into SQLite."""
+        results: Dict[str, bool] = {}
+        for bm in benchmarks:
+            sym = str(bm or "").upper().strip()
+            if not sym:
+                continue
+            try:
+                df = self.sync_symbol_data(sym, period="5y", force=force)
+                results[sym] = df is not None and not df.empty
+            except Exception:
+                results[sym] = False
+        return results
 
     # ---- public API ----------------------------------------------------------------------------
     def sync_symbol_data(self, symbol: str, period: str = "5y", force: bool = False) -> pd.DataFrame:
@@ -314,7 +459,8 @@ class HistoricalDataEngine:
             if self._is_up_to_date(symbol, latest_dt):
                 return self._remember(symbol, cached_df)
 
-            self._last_sync_attempt[symbol] = time.time()
+            with self._cache_lock:
+                self._last_sync_attempt[symbol] = time.time()
             start = (latest_dt - timedelta(days=INCREMENTAL_OVERLAP_DAYS)).strftime('%Y-%m-%d')
             df_new = self.fetch_from_source(symbol, start=start)
             if df_new.empty:
@@ -336,8 +482,10 @@ class HistoricalDataEngine:
         The in-memory frame always holds the full window, never just the last request's slice.
         """
         symbol = symbol.upper().strip()
-        df = self.df_cache.get(symbol)
-        if df is None or (time.time() - self._df_loaded_at.get(symbol, 0.0)) > DF_CACHE_TTL_SECONDS:
+        with self._cache_lock:
+            df = self.df_cache.get(symbol)
+            loaded_at = self._df_loaded_at.get(symbol, 0.0)
+        if df is None or (time.time() - loaded_at) > DF_CACHE_TTL_SECONDS:
             loaded = self._load_cached_df(symbol)
             if not loaded.empty:
                 df = self._remember(symbol, loaded)
@@ -346,6 +494,92 @@ class HistoricalDataEngine:
                 if df.empty:
                     return pd.DataFrame()
         return df.tail(limit_days).reset_index(drop=True)
+
+    def load_benchmark_history(
+        self,
+        benchmark: str = BENCHMARK_NIFTY50,
+        limit_days: int = 500,
+        allow_fetch: bool = False,
+    ) -> pd.DataFrame:
+        """
+        Returns historical candles for benchmark index (default ^NSEI Nifty 50).
+        When allow_fetch=False (default), serves cached SQLite data cleanly with zero network calls.
+        """
+        bench_sym = str(benchmark or BENCHMARK_NIFTY50).upper().strip()
+        try:
+            with self._cache_lock:
+                df = self.df_cache.get(bench_sym)
+                loaded_at = self._df_loaded_at.get(bench_sym, 0.0)
+            if df is None or (time.time() - loaded_at) > DF_CACHE_TTL_SECONDS:
+                loaded = self._load_cached_df(bench_sym)
+                if not loaded.empty:
+                    df = self._remember(bench_sym, loaded)
+                elif allow_fetch:
+                    df = self.sync_symbol_data(bench_sym, period="5y")
+                else:
+                    return pd.DataFrame()
+            elif allow_fetch and not df.empty:
+                latest_dt = df['DATE'].iloc[-1].to_pydatetime()
+                if not self._is_up_to_date(bench_sym, latest_dt):
+                    df = self.sync_symbol_data(bench_sym, period="5y")
+            if df is None or df.empty:
+                return pd.DataFrame()
+            return df.tail(limit_days).reset_index(drop=True)
+        except Exception:
+            return pd.DataFrame()
+
+    def sync_nse_delivery_data(
+        self,
+        dates: Optional[List[str]] = None,
+        lookback_days: int = 5,
+    ) -> int:
+        """
+        Downloads official NSE security-wise full bhavdata CSVs for recent trading days and updates
+        delivery_qty & delivery_pct in SQLite historical_candles. Degrades gracefully returning 0 offline.
+        """
+        target_dates: List[datetime] = []
+        if dates:
+            for d_str in dates:
+                try:
+                    target_dates.append(datetime.strptime(str(d_str)[:10], "%Y-%m-%d"))
+                except ValueError:
+                    continue
+        else:
+            try:
+                cur_d = market_calendar.last_completed_session()
+            except Exception:
+                cur_d = datetime.now().date() - timedelta(days=1)
+            attempts = 0
+            while len(target_dates) < max(1, lookback_days) and attempts < max(5, lookback_days * 4):
+                is_td = (
+                    market_calendar.is_trading_day(cur_d)
+                    if hasattr(market_calendar, "is_trading_day")
+                    else (cur_d.weekday() < 5)
+                )
+                if is_td:
+                    target_dates.append(datetime.combine(cur_d, datetime.min.time()))
+                cur_d = cur_d - timedelta(days=1)
+                attempts += 1
+
+        total_updated = 0
+        for dt in target_dates:
+            ddmmyyyy = dt.strftime("%d%m%Y")
+            url = f"https://nsearchives.nseindia.com/products/content/sec_bhavdata_full_{ddmmyyyy}.csv"
+            try:
+                req = urllib.request.Request(url, headers=NSE_HEADERS)
+                with urllib.request.urlopen(req, timeout=8) as resp:
+                    text = resp.read().decode("utf-8", errors="replace")
+                recs = parse_nse_delivery_csv(text)
+                if recs:
+                    total_updated += self.cache_manager.update_delivery_data(recs)
+            except Exception:
+                continue
+
+        if total_updated > 0:
+            with self._cache_lock:
+                self.df_cache.clear()
+                self._df_loaded_at.clear()
+        return total_updated
 
     def get_historical_summary(self, symbol: str) -> Dict[str, Any]:
         """

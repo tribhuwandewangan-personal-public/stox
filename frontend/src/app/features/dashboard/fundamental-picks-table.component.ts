@@ -3,15 +3,16 @@
  * Direct parity with Jinja fundPicksBanner (Image 2).
  */
 
-import { Component, computed, signal } from '@angular/core';
+import { Component, effect, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { stocksStore } from '../../core/stores/stocks.store';
+import { ApiService } from '../../core/services/api.service';
 
 interface FundPickRow {
   symbol: string;
   score: number;
   sector: string;
-  ltp: number;
+  ltp: number | null;
   peg: string;
   intrinsic_value: string;
   margin_of_safety: number | null;
@@ -70,7 +71,7 @@ interface FundPickRow {
                       <span class="score-pill" [class.high-score]="p.score >= 75">{{ p.score }}</span>
                     </td>
                     <td class="col-sec">{{ p.sector }}</td>
-                    <td class="col-mono">₹{{ p.ltp | number:'1.2-2' }}</td>
+                    <td class="col-mono">{{ p.ltp != null ? ('Rs. ' + (p.ltp | number:'1.2-2')) : 'N/A' }}</td>
                     <td class="col-mono">{{ p.peg }}</td>
                     <td class="col-mono">
                       <span>{{ p.intrinsic_value }}</span>
@@ -236,64 +237,63 @@ interface FundPickRow {
 export class FundamentalPicksTableComponent {
   stocksStore = stocksStore;
   collapsed = signal(false);
+  picks = signal<FundPickRow[]>([]);
+  private fetchSeq = 0;
 
-  picks = computed<FundPickRow[]>(() => {
-    const list: FundPickRow[] = [];
-    const stocks = this.stocksStore.stocks();
+  constructor() {
+    effect(() => {
+      const universe = this.stocksStore.activeUniverse();
+      // Re-fetch backend-scored picks whenever universe switches or stock list refreshes
+      this.stocksStore.stocks();
+      void this.loadPicks(universe);
+    });
+  }
 
-    for (const s of stocks) {
-      const synth = s.synth_output || ({} as any);
-      const sig = synth.structured_signal || ({} as any);
-      const tech = s.tech_output?.raw_indicators || ({} as any);
-      const lt = s.long_term_signal || sig.long_term_signal || {};
-
-      const verdict = (sig.action_verdict || 'HOLD').toUpperCase();
-      if (verdict === 'SELL') continue;
-
-      // Filter out value traps and severe accounting distortions from Fundamental Picks
-      const forensic = s.fund_output?.forensic_analysis || {};
-      const fVerdict = (s.fund_output?.forensic_verdict || forensic.verdict || '').toUpperCase();
-      if (fVerdict.includes('AVOID') || fVerdict.includes('DISTRESSED')) continue;
-
-      const fundRaw = s.fund_output?.raw_fundamentals || {};
-      const lp = Number(tech.last_price || s.price_info?.price || 0);
-      let pct52w = '-4.5%';
-      if (tech.high_52w && lp) {
-        pct52w = (((lp - tech.high_52w) / tech.high_52w) * 100).toFixed(1) + '%';
-      }
-
-      // Calculate score based on LT rating, valuation, and confidence
-      let score = 65;
-      if (lt.is_top_wealth_pick) score += 15;
-      if (verdict.includes('BUY')) score += 10;
-      if (sig.confidence_percentage && sig.confidence_percentage > 85) score += 5;
-
-      // Intrinsic value and margin of safety
-      const fVal = forensic?.fair_value || forensic?.valuation_metrics?.intrinsic_fair_value;
-      const mos = forensic?.margin_of_safety_pct ?? forensic?.valuation_metrics?.margin_of_safety_pct ?? null;
-      let ivDisplay = 'N/A';
-      if (fVal && fVal > 0) {
-        ivDisplay = `₹${Number(fVal).toFixed(2)}`;
-      }
-
-      list.push({
-        symbol: s.symbol,
-        score: Math.min(score, 95),
-        sector: s.sector || 'Indian Equities',
-        ltp: lp,
-        peg: (fundRaw.peg_ratio && fundRaw.peg_ratio !== 'N/A') ? `${fundRaw.peg_ratio}x` : '1.12x',
-        intrinsic_value: ivDisplay,
-        margin_of_safety: typeof mos === 'number' ? mos : null,
-        valuation: fundRaw.valuation_assessment || 'Undervalued',
-        pct_52w: pct52w,
-        inst_flow: tech.up_down_vol_ratio ? `${tech.up_down_vol_ratio.toFixed(1)}x` : 'Accum. (2.5x)',
-        lt_rating: lt.long_term_verdict || 'ACCUMULATE ON DIPS'
-      });
+  private async loadPicks(universe: string): Promise<void> {
+    const seq = ++this.fetchSeq;
+    try {
+      const resp = await ApiService.getFundamentalPicks(universe);
+      if (seq !== this.fetchSeq) return;
+      const rawPicks = Array.isArray(resp?.picks) ? resp.picks : [];
+      this.picks.set(rawPicks.map((p: any): FundPickRow => {
+        const ltp = typeof p.last_price === 'number' && Number.isFinite(p.last_price) && p.last_price > 0
+          ? p.last_price
+          : null;
+        const pegVal = typeof p.peg === 'number' && Number.isFinite(p.peg)
+          ? `${p.peg.toFixed(2)}x`
+          : 'N/A';
+        const ivVal = typeof p.intrinsic_value === 'number' && Number.isFinite(p.intrinsic_value) && p.intrinsic_value > 0
+          ? `Rs. ${p.intrinsic_value.toFixed(2)}`
+          : 'N/A';
+        const mosVal = typeof p.margin_of_safety_pct === 'number' && Number.isFinite(p.margin_of_safety_pct)
+          ? p.margin_of_safety_pct
+          : null;
+        const pct52 = typeof p.pct52w === 'number' && Number.isFinite(p.pct52w)
+          ? `${p.pct52w > 0 ? '+' : ''}${p.pct52w.toFixed(1)}%`
+          : '—';
+        const flow = typeof p.ud_ratio === 'number' && Number.isFinite(p.ud_ratio)
+          ? `${p.ud_ratio.toFixed(2)}x`
+          : '—';
+        return {
+          symbol: String(p.sym || ''),
+          score: Number(p.score ?? 0),
+          sector: String(p.sector || '—'),
+          ltp,
+          peg: pegVal,
+          intrinsic_value: ivVal,
+          margin_of_safety: mosVal,
+          valuation: String(p.valuation || 'N/A'),
+          pct_52w: pct52,
+          inst_flow: flow,
+          lt_rating: String(p.lt_verdict || '—'),
+        };
+      }));
+    } catch (err) {
+      if (seq !== this.fetchSeq) return;
+      console.error('[FundamentalPicks] Failed to load picks:', err);
+      this.picks.set([]);
     }
-
-    list.sort((a, b) => b.score - a.score);
-    return list.slice(0, 10);
-  });
+  }
 
   onSelect(symbol: string): void {
     stocksStore.selectSymbol(symbol);

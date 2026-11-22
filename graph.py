@@ -163,7 +163,7 @@ class MultiAgentWorkflow:
             if VERBOSE_LOGGING:
                 safe_print(f"  ├─ [Parallel Task 5/6] Analyzing Fundamental Valuation Agent...")
             t0 = time.time()
-            out = self.fund_agent.run(symbol)
+            out = self.fund_agent.run(symbol, sector=sector)
             self.cache_manager.save_agent_output(symbol, "Fundamental Analyst Agent", out)
             if VERBOSE_LOGGING:
                 safe_print(f"  ├─ [Done 5/6] Fundamental Analyst Agent completed in {time.time()-t0:.2f}s")
@@ -215,7 +215,7 @@ class MultiAgentWorkflow:
             safe_print(f"  └─ [Synthesis Phase] Master Synthesizer combining all 6 agent outputs...")
         
         t_synth = time.time()
-        final_synth = self.synth_agent.run(symbol, company_name, agent_outputs)
+        final_synth = self.synth_agent.run(symbol, company_name, agent_outputs, sector=sector)
         final_synth["data_quality"] = {
             "failed_agents": sorted(failed_agents),
             "agents_ok": sorted(agent_outputs.keys()),

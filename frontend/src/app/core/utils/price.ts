@@ -18,7 +18,7 @@ export function bestPrice(stock: Stock): BestPrice {
   return {
     price: info.price,
     change_pct: info.change_pct,
-    source: info.source
+    source: info.kind || info.source || 'unknown'
   };
 }
 
@@ -54,7 +54,8 @@ export function priceTag(info: PriceInfo): string {
     'analysis': 'Analysis',
     'unknown': 'Stale'
   };
-  return sourceMap[info.source] || 'Unknown';
+  const key = info.kind || info.source || 'unknown';
+  return sourceMap[key] || 'Unknown';
 }
 
 /**

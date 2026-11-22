@@ -29,6 +29,7 @@ class FundamentalAnalysisEngine:
     def _unavailable(symbol: str) -> Dict[str, Any]:
         return {
             "symbol": symbol,
+            "sector": "",
             "available": False,
             "pe_ratio": "N/A",
             "peg_ratio": "N/A",
@@ -45,6 +46,13 @@ class FundamentalAnalysisEngine:
             "free_cashflow": "N/A",
             "revenue_growth_pct": "N/A",
             "profit_margin_pct": "N/A",
+            "book_value": "N/A",
+            "eps": "N/A",
+            "ev_to_ebitda": "N/A",
+            "enterprise_value": "N/A",
+            "ebitda": "N/A",
+            "roa_pct": "N/A",
+            "shares_outstanding": "N/A",
             "valuation_assessment": "Unavailable",
             "market_cap": "N/A",
             "status": "Fundamental data unavailable from market feed",
@@ -114,11 +122,8 @@ class FundamentalAnalysisEngine:
                             denom_g = min(eg_val, 100.0)
                             peg_val = round(pe_val / denom_g, 2)
                         elif eg_val <= 0:
-                            # Earnings contraction: fallback to revenue growth proxy if company is expanding top-line
-                            if isinstance(rg_val, (int, float)) and rg_val > 5.0:
-                                peg_val = round(pe_val / min(rg_val, 100.0), 2)
-                            else:
-                                peg_val = "N/A (Negative Growth)"
+                            # Earnings contraction: never mask declining profit with a revenue-growth PEG proxy
+                            peg_val = "N/A (Negative Growth)"
                     elif isinstance(rg_val, (int, float)) and rg_val > 5.0:
                         # Earnings growth unavailable; use top-line revenue expansion proxy
                         peg_val = round(pe_val / min(rg_val, 100.0), 2)
@@ -158,12 +163,20 @@ class FundamentalAnalysisEngine:
 
                 return {
                     "symbol": symbol_clean,
+                    "sector": info.get("sector") or info.get("industry") or "",
                     "available": True,
                     "pe_ratio": pe_val,
                     "peg_ratio": peg_val,
                     "earnings_growth_pct": eg_val,
                     "pb_ratio": _num(info.get("priceToBook")),
                     "roe_pct": _num(info.get("returnOnEquity"), 100),
+                    "roa_pct": _num(info.get("returnOnAssets"), 100),
+                    "book_value": _num(info.get("bookValue")),
+                    "eps": _num(info.get("trailingEps") or info.get("forwardEps")),
+                    "ev_to_ebitda": _num(info.get("enterpriseToEbitda")),
+                    "enterprise_value": _num(info.get("enterpriseValue")),
+                    "ebitda": _num(info.get("ebitda")),
+                    "shares_outstanding": _num(info.get("sharesOutstanding")),
                     "debt_to_equity": de_ratio,
                     "total_debt": total_debt,
                     "total_cash": total_cash,

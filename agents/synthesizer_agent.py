@@ -14,9 +14,22 @@ Design rules:
 """
 
 import math
+import re
 from typing import Dict, Any, List, Optional, Tuple
 
 from storage.cache_manager import CacheManager
+from tools.indicators import snap_nse_tick
+from tools.events_tools import evaluate_pre_event_guardrail
+from tools.macro_tools import apply_sector_macro_beta
+
+_BFSI_RE = re.compile(
+    r"\b(bank|banking|nbfc|financial services|insurance|housing finance|microfinance|capital markets|fintech)\b",
+    re.I,
+)
+
+
+def _is_bfsi_sector(sector: str) -> bool:
+    return bool(sector and _BFSI_RE.search(sector))
 
 # --------------------------------------------------------------------------------------------------
 # Tunable model parameters (single place, documented)
@@ -84,20 +97,26 @@ def _pattern_signal(top_pattern: Optional[dict], all_patterns: Optional[List[dic
                 contrary_warnings.append(f"countered by {p_name} ({p_qual:.0f}/100)")
 
     warning_str = f" [Caution: {', '.join(contrary_warnings)}]" if contrary_warnings else ""
-    if direction == "Bullish":
+    dir_lower = str(direction).lower()
+    if "neutral" in dir_lower:
+        return 0.0, f"neutral {name}"
+    if "bullish" in dir_lower:
         return quality, f"bullish {name} ({quality * 100:.0f}/100){warning_str}"
-    if direction == "Bearish":
+    if "bearish" in dir_lower:
         return -quality, f"bearish {name} ({quality * 100:.0f}/100){warning_str}"
     return 0.0, f"neutral {name}"
 
 
-def _trend_signal(lp: float, sma50: Optional[float], sma200: Optional[float],
-                   sma50_slope: Optional[float] = None) -> Optional[Tuple[float, str]]:
-    """Stage-2 aware trend filter.
-    - Base: price vs SMA-50 and SMA-200 (each contributes ±1.0, averaged)
-    - Bonus +0.3 when SMA-50 > SMA-200 AND SMA-50 slope > 0  (classic Stage-2 uptrend)
-    - Penalty -0.2 when SMA-50 < SMA-200 (Stage-4 / distribution phase)
-    """
+def _trend_signal(
+    lp: float,
+    sma50: Optional[float],
+    sma200: Optional[float],
+    sma50_slope: Optional[float] = None,
+    adx_14: Optional[float] = None,
+    weekly_trend: Optional[str] = None,
+    mansfield_rs: Optional[float] = None,
+) -> Optional[Tuple[float, str]]:
+    """Stage-2, ADX, Weekly MTF, and Mansfield RS aware trend filter."""
     parts = []
     if sma50 is not None and sma50 > 0:
         parts.append(("SMA-50", 1.0 if lp > sma50 else -1.0))
@@ -124,30 +143,73 @@ def _trend_signal(lp: float, sma50: Optional[float], sma200: Optional[float],
             value = _clamp(value - 0.2)
             desc += "; Stage-4 distribution (SMA-50 < SMA-200)"
 
+    if adx_14 is not None:
+        if adx_14 < 18.0:
+            value *= 0.65
+            desc += f"; weak ADX ({adx_14:.0f}) choppy regime"
+        elif adx_14 >= 25.0:
+            desc += f"; strong ADX ({adx_14:.0f})"
+
+    if weekly_trend in ("Bullish", "Bearish"):
+        if (value > 0 and weekly_trend == "Bullish") or (value < 0 and weekly_trend == "Bearish"):
+            step = 0.15 if value > 0 else -0.15
+            value = _clamp(value + step)
+            desc += "; weekly MTF aligned"
+        elif value > 0 and weekly_trend == "Bearish":
+            value = _clamp(value - 0.20)
+            desc += "; weekly MTF divergent (Bearish)"
+        elif value < 0 and weekly_trend == "Bullish":
+            value = _clamp(value + 0.20)
+            desc += "; weekly MTF divergent (Bullish)"
+
+    if mansfield_rs is not None:
+        if mansfield_rs >= 5.0:
+            value = _clamp(value + 0.15)
+            desc += f"; RS leader vs Nifty ({mansfield_rs:+.1f})"
+        elif mansfield_rs <= -5.0:
+            value = _clamp(value - 0.15)
+            desc += f"; RS lagging Nifty ({mansfield_rs:+.1f})"
+
     return value, desc
 
 
-def _volume_signal(rvol: Optional[float], ud_ratio: Optional[float] = None) -> Optional[Tuple[float, str]]:
-    """Volume confirmation: combines intraday RVOL surge with 20-day Up/Down accumulation ratio.
-    - RVOL: detects instant breakout/breakdown force
-    - U/D Ratio: institutional accumulation (CANSLIM / O'Neil standard)
-    """
-    if rvol is None and ud_ratio is None:
+def _volume_signal(
+    rvol: Optional[float],
+    ud_ratio: Optional[float] = None,
+    day_change_pct: Optional[float] = None,
+    delivery_pct: Optional[float] = None,
+    delivery_avg: Optional[float] = None,
+) -> Optional[Tuple[float, str]]:
+    """Volume confirmation: price-direction-aware RVOL, 20D U/D ratio, and NSE Delivery % conviction."""
+    if rvol is None and ud_ratio is None and delivery_pct is None:
         return None
 
     val = 0.0
     parts = []
 
     if rvol is not None:
-        if rvol >= 1.5:
-            val += 0.5
-            parts.append(f"strong volume surge (RVOL {rvol:.2f}x)")
-        elif rvol >= 1.2:
-            val += 0.25
-            parts.append(f"above-average volume (RVOL {rvol:.2f}x)")
-        elif rvol < 0.8:
-            val -= 0.25
-            parts.append(f"low-volume drift (RVOL {rvol:.2f}x)")
+        if day_change_pct is not None and day_change_pct <= -0.5:
+            if rvol >= 1.5:
+                val -= 0.5
+                parts.append(f"heavy selling volume surge (RVOL {rvol:.2f}x, {day_change_pct:+.1f}%)")
+            elif rvol >= 1.2:
+                val -= 0.25
+                parts.append(f"above-average selling volume (RVOL {rvol:.2f}x, {day_change_pct:+.1f}%)")
+            elif rvol < 0.8:
+                val -= 0.1
+                parts.append(f"low-volume drift (RVOL {rvol:.2f}x)")
+        elif day_change_pct is None and ud_ratio is not None and ud_ratio <= 0.75 and rvol >= 1.2:
+            parts.append(f"elevated volume in distribution regime (RVOL {rvol:.2f}x)")
+        else:
+            if rvol >= 1.5:
+                val += 0.5
+                parts.append(f"strong volume surge (RVOL {rvol:.2f}x)")
+            elif rvol >= 1.2:
+                val += 0.25
+                parts.append(f"above-average volume (RVOL {rvol:.2f}x)")
+            elif rvol < 0.8:
+                val -= 0.25
+                parts.append(f"low-volume drift (RVOL {rvol:.2f}x)")
 
     if ud_ratio is not None:
         if ud_ratio >= 1.25:
@@ -157,14 +219,51 @@ def _volume_signal(rvol: Optional[float], ud_ratio: Optional[float] = None) -> O
             val -= 0.3
             parts.append(f"institutional distribution (20d U/D vol {ud_ratio:.2f}x)")
 
+    if delivery_pct is not None:
+        high_rel = bool(delivery_avg and delivery_avg > 0 and delivery_pct >= delivery_avg * 1.25)
+        is_down_day = day_change_pct is not None and day_change_pct <= -0.5
+        if delivery_pct >= 55.0 or high_rel:
+            if is_down_day:
+                val -= 0.20
+                parts.append(f"high-delivery distribution ({delivery_pct:.0f}% deliv)")
+            else:
+                val += 0.25
+                parts.append(f"strong NSE delivery conviction ({delivery_pct:.0f}%)")
+        elif delivery_pct < 25.0 and (rvol or 1.0) >= 1.2:
+            if val > 0:
+                val *= 0.5
+            else:
+                val -= 0.15
+            parts.append(f"low-delivery intraday churn ({delivery_pct:.0f}%)")
+
     if not parts:
         return None
     return _clamp(val), "; ".join(parts)
 
 
-def _momentum_signal(rsi: Optional[float]) -> Optional[Tuple[float, str]]:
+def _momentum_signal(
+    rsi: Optional[float],
+    trend_regime: Optional[str] = None,
+    adx_14: Optional[float] = None,
+) -> Optional[Tuple[float, str]]:
     if rsi is None:
         return None
+    strong_adx = adx_14 is None or adx_14 >= 25.0
+    if trend_regime == "strong_bull" and strong_adx:
+        if rsi < 35:
+            return 0.5, f"RSI {rsi:.0f} deep pullback in strong bull trend"
+        if rsi < 45:
+            return 0.2, f"RSI {rsi:.0f} shallow pullback in bull trend"
+        if rsi <= 76:
+            return 0.35, f"RSI {rsi:.0f} bullish trend momentum"
+        return 0.0, f"RSI {rsi:.0f} overextended bull trend"
+    if trend_regime == "strong_bear" and strong_adx:
+        if rsi <= 30:
+            return -0.1, f"RSI {rsi:.0f} oversold in strong downtrend (avoid falling knife)"
+        if rsi <= 55:
+            return -0.25, f"RSI {rsi:.0f} bearish trend momentum"
+        return -0.4, f"RSI {rsi:.0f} bear-rally exhaustion"
+
     if rsi < 30:
         return 0.5, f"RSI {rsi:.0f} oversold (reversal setup)"
     if rsi < 45:
@@ -179,93 +278,118 @@ def _momentum_signal(rsi: Optional[float]) -> Optional[Tuple[float, str]]:
 def _news_signal(news: Optional[dict]) -> Optional[Tuple[float, str]]:
     if not news:
         return None
-    total = int(news.get("total") or 0)
+    total = int(news.get("clustered_count") or news.get("total") or 0)
     if total <= 0:
         return None
     bull, bear = int(news.get("bullish") or 0), int(news.get("bearish") or 0)
+    weighted_sc = _to_float(news.get("weighted_score"))
+    if weighted_sc is not None:
+        # Few unique stories are weak evidence: full weight from 3 deduplicated clusters up
+        value = _clamp(weighted_sc * min(1.0, total / 3.0))
+        note = f"news weighted {weighted_sc:+.2f} ({bull} bull / {bear} bear across {total} stories)"
+        if news.get("critical_alerts"):
+            note += " [CRITICAL corporate alert]"
+        return value, note
     net = (bull - bear) / total
-    # Few headlines are weak evidence: full weight only from 3 headlines up
     value = _clamp(net * min(1.0, total / 3.0))
     return value, f"news {bull} bullish vs {bear} bearish of {total}"
 
 
-def _macro_signal(macro: Optional[dict]) -> Optional[Tuple[float, str]]:
+def _macro_signal(macro: Optional[dict], sector: str = "") -> Optional[Tuple[float, str]]:
     if not macro or not macro.get("available"):
         return None
     score = _to_float(macro.get("score"))
     if score is None:
         return None
+    if sector:
+        adj_res = apply_sector_macro_beta(score, sector, indicators=macro.get("indicators"))
+        adj_sc = _clamp(adj_res["adjusted_score"])
+        note = (
+            f"macro backdrop {macro.get('label', 'Neutral')} "
+            f"({score:+.2f} -> sector-adj {adj_sc:+.2f}, {adj_res['adjustment_note']})"
+        )
+        return adj_sc, note
     return _clamp(score), f"macro backdrop {macro.get('label', 'Neutral')} ({score:+.2f})"
 
 
 def _fundamental_signal(fund: Optional[dict]) -> Optional[Tuple[float, str]]:
-    if not fund or not fund.get("available", False):
+    if not fund:
         return None
+    forensic = fund.get("forensic_analysis") or {}
+    forensic_verdict = fund.get("forensic_verdict") or forensic.get("verdict")
+    has_forensic = bool(forensic_verdict and forensic_verdict not in ("UNAUDITED", "ERROR"))
+    fund_available = bool(fund.get("available", False))
+    if not fund_available and not has_forensic:
+        return None
+
+    is_bfsi = _is_bfsi_sector(str(fund.get("sector") or ""))
     val = str(fund.get("valuation_assessment", ""))
     peg = _to_float(fund.get("peg_ratio"))
     value, notes = 0.0, []
 
-    # 1. P/E valuation, calibrated by PEG when available
-    if val.startswith("Undervalued"):
-        if peg is not None and (peg < 0 or peg > 2.5):
-            value += 0.2
-            notes.append("low P/E with growth concern")
-        else:
-            value += 0.6
-            notes.append("undervalued on P/E")
-    elif val.startswith("High Growth"):
-        if peg is not None and 0 < peg <= 1.5:
-            # High growth justifies premium multiple (GARP)
-            value += 0.1
-            notes.append("premium P/E backed by high growth")
-        else:
-            value -= 0.3
-            notes.append("premium P/E")
-    elif val.startswith("Fairly"):
-        notes.append("fair P/E")
+    if fund_available:
+        # 1. P/E valuation, calibrated by PEG when available
+        if val.startswith("Undervalued"):
+            if peg is not None and (peg < 0 or peg > 2.5):
+                value += 0.2
+                notes.append("low P/E with growth concern")
+            else:
+                value += 0.6
+                notes.append("undervalued on P/E")
+        elif val.startswith("High Growth"):
+            if peg is not None and 0 < peg <= 1.5:
+                # High growth justifies premium multiple (GARP)
+                value += 0.1
+                notes.append("premium P/E backed by high growth")
+            else:
+                value -= 0.3
+                notes.append("premium P/E")
+        elif val.startswith("Fairly"):
+            notes.append("fair P/E")
 
-    # 2. PEG Ratio assessment (Growth at a Reasonable Price)
-    if peg is not None:
-        if 0 < peg < 1.0:
-            value += 0.4
-            notes.append(f"PEG {peg:.2f} (attractive growth at discount)")
-        elif 1.0 <= peg <= 1.5:
-            value += 0.15
-            notes.append(f"PEG {peg:.2f} (fair growth valuation)")
-        elif 1.5 < peg <= 2.2:
-            notes.append(f"PEG {peg:.2f} (moderate growth premium)")
-        elif peg > 2.5:
-            value -= 0.35
-            notes.append(f"PEG {peg:.2f} (growth overvalued / high valuation risk)")
-        elif peg < 0:
-            value -= 0.3
-            notes.append("negative PEG (declining earnings)")
+        # 2. PEG Ratio assessment (Growth at a Reasonable Price)
+        if peg is not None:
+            if 0 < peg < 1.0:
+                value += 0.4
+                notes.append(f"PEG {peg:.2f} (attractive growth at discount)")
+            elif 1.0 <= peg <= 1.5:
+                value += 0.15
+                notes.append(f"PEG {peg:.2f} (fair growth valuation)")
+            elif 1.5 < peg <= 2.2:
+                notes.append(f"PEG {peg:.2f} (moderate growth premium)")
+            elif peg > 2.5:
+                value -= 0.35
+                notes.append(f"PEG {peg:.2f} (growth overvalued / high valuation risk)")
+            elif peg < 0:
+                value -= 0.3
+                notes.append("negative PEG (declining earnings)")
 
-    # 3. ROE Quality Check
-    roe = _to_float(fund.get("roe_pct"))
-    if roe is not None:
-        if roe >= 15:
-            value += 0.2
-            notes.append(f"ROE {roe:.0f}%")
-        elif roe < 8:
-            value -= 0.2
-            notes.append(f"weak ROE {roe:.0f}%")
+        # 3. ROE Quality Check
+        roe = _to_float(fund.get("roe_pct"))
+        if roe is not None:
+            if roe >= 15:
+                value += 0.2
+                notes.append(f"ROE {roe:.0f}%")
+            elif roe < 8:
+                value -= 0.2
+                notes.append(f"weak ROE {roe:.0f}%")
 
-    # 4. Balance Sheet Health (Solvency & Working Capital)
-    de = _to_float(fund.get("debt_to_equity"))
-    cr = _to_float(fund.get("current_ratio"))
-    net_cash_status = str(fund.get("net_cash_status", ""))
+        # 4. Balance Sheet Health (exempt BFSI where deposits/borrowings are operating raw material)
+        if not is_bfsi:
+            de = _to_float(fund.get("debt_to_equity"))
+            cr = _to_float(fund.get("current_ratio"))
+            net_cash_status = str(fund.get("net_cash_status", ""))
 
-    if "Net Cash Positive" in net_cash_status or (de is not None and 0 <= de < 15):
-        value += 0.15
-        notes.append("virtually debt-free balance sheet")
-    elif de is not None and de > 150:
-        value -= 0.20
-        notes.append(f"high leverage (D/E {de:.0f})")
+            if "Net Cash Positive" in net_cash_status or (de is not None and 0 <= de < 15):
+                value += 0.15
+                notes.append("virtually debt-free balance sheet")
+            elif de is not None and de > 150:
+                value -= 0.20
+                notes.append(f"high leverage (D/E {de:.0f})")
 
-    if cr is not None and cr < 0.9:
-        value -= 0.15
-        notes.append(f"tight liquidity (Current Ratio {cr:.2f})")
+            if cr is not None and cr < 0.9:
+                value -= 0.15
+                notes.append(f"tight liquidity (Current Ratio {cr:.2f})")
 
     # 5. Corporate Order Book & Contract Pipeline Catalyst
     order_catalyst = fund.get("order_book_catalyst")
@@ -274,15 +398,13 @@ def _fundamental_signal(fund: Optional[dict]) -> Optional[Tuple[float, str]]:
         notes.append("contract pipeline / order inflow")
 
     # 6. Forensic Due-Diligence & Earnings Normalization
-    forensic = fund.get("forensic_analysis") or {}
-    forensic_verdict = fund.get("forensic_verdict") or forensic.get("verdict")
     distortion_pct = _to_float(forensic.get("earnings_quality", {}).get("distortion_pct"))
     cfo_ratio = _to_float(forensic.get("cash_conversion", {}).get("cfo_to_pat_ratio"))
 
     if forensic_verdict in ("AVOID_OR_VALUE_TRAP", "HIGH_RISK_DISTRESSED") or (distortion_pct and distortion_pct > 35.0):
         value -= 0.55
         notes.append(f"forensic red flag ({forensic.get('verdict_badge', 'DISTORTED EARNINGS')})")
-    elif cfo_ratio is not None and cfo_ratio < 0.50:
+    elif (not is_bfsi) and cfo_ratio is not None and cfo_ratio < 0.50:
         value -= 0.30
         notes.append(f"weak cash conversion (CFO/PAT {cfo_ratio*100:.0f}%)")
     elif forensic_verdict in ("STRONG_BUY", "BUY") and cfo_ratio and cfo_ratio >= 0.85:
@@ -310,21 +432,41 @@ def score_evidence(
 ) -> Dict[str, Any]:
     """Weighted evidence score. Returns score, per-signal breakdown, agreement and coverage."""
     ctx = context or {}
+    sma50_val = _to_float(raw_tech.get("sma_50"))
+    sma200_val = _to_float(raw_tech.get("sma_200"))
+    adx_val = _to_float(raw_tech.get("adx_14"))
+    trend_regime = None
+    if adx_val is not None and adx_val >= 25.0 and sma50_val and sma200_val:
+        if lp > sma50_val > sma200_val:
+            trend_regime = "strong_bull"
+        elif lp < sma50_val < sma200_val:
+            trend_regime = "strong_bear"
+
     signals: Dict[str, Optional[Tuple[float, str]]] = {
         "pattern": _pattern_signal(top_pattern, all_patterns=all_patterns),
         "trend": _trend_signal(
             lp,
-            _to_float(raw_tech.get("sma_50")),
-            _to_float(raw_tech.get("sma_200")),
+            sma50_val,
+            sma200_val,
             _to_float(raw_tech.get("sma_50_slope")),
+            adx_14=adx_val,
+            weekly_trend=raw_tech.get("weekly_trend"),
+            mansfield_rs=_to_float(raw_tech.get("mansfield_rs")),
         ),
-        "momentum": _momentum_signal(_to_float(raw_tech.get("rsi_14"))),
+        "momentum": _momentum_signal(
+            _to_float(raw_tech.get("rsi_14")),
+            trend_regime=trend_regime,
+            adx_14=adx_val,
+        ),
         "volume": _volume_signal(
             _to_float(raw_tech.get("rvol")),
             _to_float(raw_tech.get("up_down_vol_ratio")),
+            _to_float(raw_tech.get("day_change_pct")),
+            delivery_pct=_to_float(raw_tech.get("delivery_pct")),
+            delivery_avg=_to_float(raw_tech.get("delivery_pct_20d_avg")),
         ),
         "news": _news_signal(ctx.get("news")),
-        "macro": _macro_signal(ctx.get("macro")),
+        "macro": _macro_signal(ctx.get("macro"), sector=str((ctx.get("fundamental") or {}).get("sector") or "")),
         "fundamental": _fundamental_signal(ctx.get("fundamental")),
         "historical": _historical_signal(ctx.get("historical")),
     }
@@ -477,17 +619,32 @@ class MasterPredictionSynthesizerAgent:
         earnings_str = f"Next results: {earnings_date}" if earnings_date else ""
         earnings_clause = f" {earnings_str}." if earnings_str else ""
 
-        # Step 1: weighted evidence -> verdict + confidence
+        # Step 1: weighted evidence -> verdict + confidence (+ pre-event & surveillance guardrails)
         ev = score_evidence(lp, raw_tech, top_pattern, context, all_patterns=detected_patterns)
         verdict = _verdict_from_score(ev["score"])
         if verdict != "HOLD" and ev["support_points"] < MIN_SUPPORT_POINTS:
             verdict = "HOLD"   # a single weak signal (e.g. trend alone) is not enough to act on
         conf_pct = ev["confidence_pct"]
+
+        guardrail = evaluate_pre_event_guardrail(events_data)
+        if guardrail["earnings_guardrail_active"]:
+            conf_pct = min(conf_pct, 65)
+            days_e = guardrail.get("days_to_earnings")
+            if verdict == "BUY" or (verdict == "ACCUMULATE" and days_e is not None and days_e <= 2):
+                verdict = "HOLD"
+
+        surv_flag = bool(raw_risk.get("surveillance_flag"))
+        surv_warning = raw_risk.get("surveillance_warning")
+        if surv_flag:
+            conf_pct = min(conf_pct, 60)
         conf = _confidence_label(conf_pct)
 
         basis = _explain_evidence(ev, verdict)
+        tick = 0.01 if lp < 250.0 else 0.05
+        atr_val = _to_float(raw_tech.get("atr_14")) or _to_float(raw_risk.get("atr_14"))
+        div_ps = guardrail.get("dividend_per_share") if guardrail.get("ex_div_guardrail_active") else None
 
-        # Step 2: levels strictly aligned with the verdict
+        # Step 2: levels strictly aligned with the verdict & snapped to NSE exchange ticks
         rr_ratio = 1.0
         if verdict in ("BUY", "ACCUMULATE"):
             # Bullish: target MUST be above price, stop MUST be below price
@@ -500,18 +657,29 @@ class MasterPredictionSynthesizerAgent:
             else:
                 sl = suggested_sl
 
-            # Hardened Risk-to-Reward & Noise Floor:
-            # Stop loss must be at least 3.5% below lp to prevent market noise shakeout
-            if sl > round(lp * 0.965, 2):
-                sl = round(lp * 0.962, 2)
-            # Stop loss should not exceed 8.0% risk for swing trades
-            if sl < round(lp * 0.92, 2):
-                sl = round(lp * 0.925, 2)
+            # ATR-Adaptive Stop Loss bounds (falls back to 3.5%-8.0% when ATR absent)
+            if atr_val is not None and atr_val > 0:
+                atr_pct = atr_val / lp
+                min_risk_pct = max(0.015, min(0.06, 1.5 * atr_pct))
+                max_risk_pct = max(min_risk_pct + 0.015, min(0.12, 3.0 * atr_pct))
+                sl = max(round(lp * (1.0 - max_risk_pct), 2), min(sl, round(lp * (1.0 - min_risk_pct), 2)))
+            else:
+                if sl > round(lp * 0.965, 2):
+                    sl = round(lp * 0.962, 2)
+                if sl < round(lp * 0.92, 2):
+                    sl = round(lp * 0.925, 2)
+
+            if div_ps and div_ps > 0:
+                sl = max(0.05, sl - min(div_ps, lp * 0.08))
+
+            sl = snap_nse_tick(sl, direction="down")
+            if sl >= lp:
+                sl = round(max(0.05, lp - tick), 2)
 
             risk_dist = max(0.01, lp - sl)
-            # Target must guarantee at least 1:1.80 Risk-to-Reward ratio
-            min_target = round(lp + 1.8 * risk_dist, 2)
-            if target < min_target:
+            min_target = snap_nse_tick(lp + 1.8 * risk_dist, direction="up")
+            target = snap_nse_tick(target, direction="nearest")
+            if target < min_target or target <= lp:
                 target = min_target
 
             rr_ratio = round((target - lp) / risk_dist, 2)
@@ -529,8 +697,12 @@ class MasterPredictionSynthesizerAgent:
                 entry_ceiling = round(lp * 1.015, 2)
 
             # Entry ceiling must never reach the target; floor strictly below ceiling
-            entry_ceiling = min(entry_ceiling, round(target * 0.96, 2))
-            entry_floor = min(entry_floor, round(entry_ceiling * 0.985, 2))
+            entry_ceiling = snap_nse_tick(min(entry_ceiling, target * 0.96), direction="down")
+            if entry_ceiling >= target:
+                entry_ceiling = round(target - tick, 2)
+            entry_floor = snap_nse_tick(min(entry_floor, entry_ceiling * 0.985), direction="down")
+            if entry_floor >= entry_ceiling:
+                entry_floor = round(max(0.01, entry_ceiling - tick), 2)
             entry = f"Rs. {entry_floor:.2f} - {entry_ceiling:.2f}"
 
             rationale = f"{verdict} bias for {symbol}. {basis} Upside target near Rs. {target}.{earnings_clause}"
@@ -558,34 +730,76 @@ class MasterPredictionSynthesizerAgent:
                 target = round(lp * 0.92, 2)
             sl = round(raw_p_sl, 2) if (raw_p_sl and raw_p_sl > lp) else round(lp * 1.05, 2)
 
+            target = snap_nse_tick(target, direction="down")
+            if target >= lp:
+                target = round(max(0.05, lp - tick), 2)
+            sl = snap_nse_tick(sl, direction="up")
+            if sl <= lp:
+                sl = round(lp + tick, 2)
+
             entry = "Defensive / Avoid fresh entry"
             rationale = f"SELL bias for {symbol}. {basis} Downside target near Rs. {target}.{earnings_clause}"
-            action = f"Protect capital: maintain strict trailing stop at Rs. {sl}. Avoid fresh long positions until reversal is confirmed."
+            action = (
+                f"Protect capital: bearish invalidation level at Rs. {sl}. "
+                "Long holders: review capital protection / exit below support and avoid fresh long positions until reversal is confirmed."
+            )
 
         else:
             if p_dir == "Bearish" or ev["score"] <= DEFENSIVE_HOLD_THRESHOLD:
-                target = round(lp * 0.94, 2)
-                sl = round(lp * 1.04, 2)
+                target = snap_nse_tick(lp * 0.94, direction="down")
+                if target >= lp:
+                    target = round(max(0.05, lp - tick), 2)
+                sl = snap_nse_tick(lp * 1.04, direction="up")
+                if sl <= lp:
+                    sl = round(lp + tick, 2)
                 entry = "Hold existing / No fresh entry"
                 rationale = f"HOLD (defensive) for {symbol}. {basis}{earnings_clause}"
-                action = f"Hold existing exposure with trailing stop at Rs. {sl}. Wait for a clear directional breakout before fresh allocation."
+                action = (
+                    f"Defensive posture: bearish invalidation level at Rs. {sl}. "
+                    "Long holders: avoid fresh allocation until a clear directional breakout above resistance."
+                )
             else:
-                target = suggested_tp
-                sl = suggested_sl
-                entry_ceiling = min(round(lp * 1.015, 2), round(target * 0.96, 2))
-                entry_floor = min(round(lp * 0.98, 2), round(entry_ceiling * 0.985, 2))
+                target = snap_nse_tick(suggested_tp, direction="nearest")
+                if target <= lp:
+                    target = snap_nse_tick(lp + tick, direction="up")
+                adj_hold_sl = suggested_sl - (min(div_ps, lp * 0.08) if (div_ps and div_ps > 0) else 0.0)
+                sl = snap_nse_tick(max(0.05, adj_hold_sl), direction="down")
+                if sl >= lp:
+                    sl = round(max(0.05, lp - tick), 2)
+                entry_ceiling = snap_nse_tick(min(lp * 1.015, target * 0.96), direction="down")
+                if entry_ceiling >= target:
+                    entry_ceiling = round(target - tick, 2)
+                entry_floor = snap_nse_tick(min(lp * 0.98, entry_ceiling * 0.985), direction="down")
+                if entry_floor >= entry_ceiling:
+                    entry_floor = round(max(0.01, entry_ceiling - tick), 2)
                 entry = f"Rs. {entry_floor:.2f} - {entry_ceiling:.2f}"
                 rationale = f"HOLD (range-bound) for {symbol}. {basis}{earnings_clause}"
                 action = f"Accumulate on dips in {entry} with protective stop loss at Rs. {sl} targeting Rs. {target}."
 
+        if surv_flag:
+            note_txt = surv_warning or "NSE surveillance or recent circuit-lock activity detected"
+            rationale += f" Caution: {note_txt}; confidence capped due to liquidity/circuit risk."
+            action += f" [{note_txt} — size conservatively.]"
+
+        if guardrail.get("warnings"):
+            g_msg = " ".join(guardrail["warnings"])
+            rationale += f" Pre-Event Guardrail: {g_msg}"
+            action += f" [{g_msg}]"
+
+        events_note_parts = [p for p in [earnings_str, " | ".join(guardrail.get("warnings") or [])] if p]
+        upcoming_events_note = " — ".join(events_note_parts)
+
         from tools.long_term_strategy import long_term_engine
-        raw_sector = (context.get("fundamental") or {}).get("sector") if context else None
+        fund_ctx = (context.get("fundamental") or {}) if context else {}
+        raw_sector = fund_ctx.get("sector")
         lt_eval = long_term_engine.evaluate_long_term_stock(
             symbol,
             company_name,
             sector=raw_sector or "",
             last_price=lp,
-            short_verdict=verdict
+            short_verdict=verdict,
+            fund_data=fund_ctx,
+            forensic_data=fund_ctx.get("forensic_analysis"),
         )
 
         return {
@@ -605,7 +819,8 @@ class MasterPredictionSynthesizerAgent:
             "long_term_horizon": lt_eval["long_term_horizon"],
             "suggested_long_term_peers": lt_eval["suggested_long_term_peers"],
             "chart_patterns": p_name,
-            "upcoming_events_note": earnings_str,
+            "upcoming_events_note": upcoming_events_note,
+            "event_guardrail": guardrail,
             "key_rationale": rationale,
             "actionable_recommendation": action,
             "evidence_score": ev["score"],
@@ -627,11 +842,12 @@ class MasterPredictionSynthesizerAgent:
         bear = sum(1 for i in items if "Bearish" in (i.get("sentiment_label") or ""))
         return {"bullish": bull, "bearish": bear, "total": len(items)}
 
-    def run(self, symbol: str, company_name: str, agent_outputs: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, symbol: str, company_name: str, agent_outputs: Dict[str, Any], sector: str = "") -> Dict[str, Any]:
         raw_tech = agent_outputs.get("technical", {}).get("raw_indicators", {})
         raw_risk = agent_outputs.get("risk", {}).get("raw_risk", {})
         raw_hist = agent_outputs.get("historical_rag", {}).get("raw_stats", {})
-        events_data = agent_outputs.get("fundamental", {}).get("upcoming_events", {})
+        fund_agent_out = agent_outputs.get("fundamental", {}) or {}
+        events_data = fund_agent_out.get("upcoming_events", {})
         detected_patterns = agent_outputs.get("technical", {}).get("detected_patterns") or raw_tech.get("detected_patterns", [])
 
         last_price = _to_float(raw_tech.get("last_price")) or _to_float(raw_risk.get("last_price")) or _to_float(raw_hist.get("last_close"))
@@ -642,10 +858,29 @@ class MasterPredictionSynthesizerAgent:
         if last_price is not None:
             last_price = round(last_price, 2)
 
+        forensic_data = fund_agent_out.get("forensic_analysis", {}) or {}
+        fund_ctx = dict(fund_agent_out.get("raw_fundamentals") or {})
+        if forensic_data and not fund_ctx.get("forensic_analysis"):
+            fund_ctx["forensic_analysis"] = forensic_data
+        if fund_agent_out.get("forensic_verdict") and not fund_ctx.get("forensic_verdict"):
+            fund_ctx["forensic_verdict"] = fund_agent_out.get("forensic_verdict")
+        eff_sector = fund_ctx.get("sector") or forensic_data.get("sector") or sector or ""
+        if eff_sector and eff_sector != "N/A":
+            fund_ctx["sector"] = eff_sector
+        if not fund_ctx.get("order_book_catalyst"):
+            try:
+                from agents.fundamental_agent import _detect_order_book_catalyst
+                news_items = (agent_outputs.get("news_sentiment") or {}).get("news_items") or []
+                detected_cat = _detect_order_book_catalyst(events_data or {}, news_items)
+                if detected_cat:
+                    fund_ctx["order_book_catalyst"] = detected_cat
+            except Exception:
+                pass
+
         context = {
             "news": self._news_context(agent_outputs.get("news_sentiment", {})),
             "macro": agent_outputs.get("macro", {}).get("macro_sentiment"),
-            "fundamental": agent_outputs.get("fundamental", {}).get("raw_fundamentals"),
+            "fundamental": fund_ctx or None,
             "historical": raw_hist,
         }
 
@@ -654,7 +889,6 @@ class MasterPredictionSynthesizerAgent:
         )
 
         # Intrinsic Valuation & Margin of Safety
-        forensic_data = agent_outputs.get("fundamental", {}).get("forensic_analysis", {})
         fair_val = forensic_data.get("fair_value") or forensic_data.get("valuation_metrics", {}).get("intrinsic_fair_value")
         mos_val = forensic_data.get("margin_of_safety_pct") or forensic_data.get("valuation_metrics", {}).get("margin_of_safety_pct")
         if fair_val is not None:
@@ -714,7 +948,7 @@ class MasterPredictionSynthesizerAgent:
         de_val = raw_fund.get("debt_to_equity")
         cr_val = raw_fund.get("current_ratio")
         cash_status = raw_fund.get("net_cash_status")
-        order_catalyst = raw_fund.get("order_book_catalyst")
+        order_catalyst = fund_ctx.get("order_book_catalyst") or raw_fund.get("order_book_catalyst")
 
         fund_profile_parts = []
         if pe_val and pe_val != "N/A":

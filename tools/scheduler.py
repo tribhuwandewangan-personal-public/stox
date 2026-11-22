@@ -20,7 +20,7 @@ from tools.outcome_tracker import resolve_open_predictions
 from tools import events_bus
 
 PREMARKET_FROM = dtime(8, 45)
-POSTCLOSE_FROM = dtime(16, 0)
+POSTCLOSE_FROM = dtime(16, 15)   # wait until 15:30 + 45m EOD_DATA_BUFFER (16:15 IST) so today's candle is final
 TICK_SECONDS = 60
 PRUNE_KEEP_DAYS = 30
 
@@ -121,6 +121,11 @@ class Scheduler:
         workflow = self.workflow_getter()
         print(f"🗓️ [Scheduler] Post-close run for {len(symbols)} symbols: sync -> analyse -> score -> prune", flush=True)
         workflow.hist_engine.sync_all_symbols(symbols)
+        if hasattr(workflow.hist_engine, "sync_benchmarks"):
+            try:
+                workflow.hist_engine.sync_benchmarks()
+            except Exception as e:
+                print(f"⚠️ [Scheduler] benchmark sync warning: {type(e).__name__}: {e}", flush=True)
 
         def _analyse(item: Dict[str, Any]) -> None:
             sym = item["symbol"].upper()

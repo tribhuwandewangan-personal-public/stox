@@ -15,7 +15,7 @@ import { PatternPick } from '../../core/models/stock.model';
 type SortKey = 'upside_pct' | 'risk_reward' | 'confidence_score' | 'timestamp';
 type VerdictFilter = 'ALL' | 'BUY' | 'ACCUMULATE' | 'HOLD' | 'REDUCE' | 'SELL';
 type DirectionFilter = 'ALL' | 'Bullish' | 'Bearish';
-type CategoryFilter = 'ALL' | 'Moving Average' | 'Reversal' | 'Breakout' | 'Accumulation' | 'Candlestick';
+type CategoryFilter = 'ALL' | 'Moving Average' | 'Reversal' | 'Breakout' | 'Accumulation' | 'Candlestick' | 'Classical Chart';
 
 @Component({
   selector: 'app-pattern-screener',
@@ -260,7 +260,14 @@ type CategoryFilter = 'ALL' | 'Moving Average' | 'Reversal' | 'Breakout' | 'Accu
   styles: [`
     :host {
       display: block;
+      width: 100%;
+      height: 100%;
+      overflow-y: auto;
       padding: 20px;
+      box-sizing: border-box;
+    }
+
+    .screener-wrapper {
       max-width: 1400px;
       margin: 0 auto;
     }
@@ -520,7 +527,7 @@ export class PatternScreenerComponent implements OnInit, OnDestroy {
   // ---- Filter options ----
   verdicts: VerdictFilter[]    = ['ALL', 'BUY', 'ACCUMULATE', 'HOLD', 'REDUCE', 'SELL'];
   directions: DirectionFilter[] = ['ALL', 'Bullish', 'Bearish'];
-  categories: CategoryFilter[]  = ['ALL', 'Moving Average', 'Reversal', 'Breakout', 'Accumulation', 'Candlestick'];
+  categories: CategoryFilter[]  = ['ALL', 'Moving Average', 'Reversal', 'Breakout', 'Accumulation', 'Candlestick', 'Classical Chart'];
 
   // ---- Computed: filtered + sorted picks ----
   filteredPicks = computed(() => {
@@ -533,7 +540,8 @@ export class PatternScreenerComponent implements OnInit, OnDestroy {
       picks = picks.filter(p => p.direction === this.directionFilter());
     }
     if (this.categoryFilter() !== 'ALL') {
-      picks = picks.filter(p => p.pattern_category === this.categoryFilter());
+      const cat = this.categoryFilter();
+      picks = picks.filter(p => (p.pattern_category || '') === cat || (p.pattern_category || '').startsWith(cat));
     }
     if (this.minUpside() > 0) {
       picks = picks.filter(p => p.upside_pct >= this.minUpside());
@@ -564,7 +572,7 @@ export class PatternScreenerComponent implements OnInit, OnDestroy {
     this.loading.set(true);
     this.error.set(null);
     try {
-      const resp = await ApiService.getPatternPicks(this.minUpside());
+      const resp = await ApiService.getPatternPicks(0);
       this.allPicks.set(resp.picks ?? []);
       this.lastUpdated.set(new Date().toLocaleTimeString('en-IN'));
     } catch (err: any) {
@@ -590,14 +598,13 @@ export class PatternScreenerComponent implements OnInit, OnDestroy {
 
   // ---- Helpers ----
   categoryClass(cat: string): string {
-    switch (cat) {
-      case 'Moving Average': return 'ma';
-      case 'Reversal':       return 'reversal';
-      case 'Breakout':       return 'breakout';
-      case 'Accumulation':   return 'accumulation';
-      case 'Candlestick':    return 'candlestick';
-      default:               return 'other';
-    }
+    const c = (cat || '').trim();
+    if (c.startsWith('Moving Average')) return 'ma';
+    if (c.startsWith('Reversal')) return 'reversal';
+    if (c.startsWith('Breakout')) return 'breakout';
+    if (c.startsWith('Accumulation')) return 'accumulation';
+    if (c.startsWith('Candlestick')) return 'candlestick';
+    return 'other';
   }
 
   sparkPoints(prices: number[]): string {

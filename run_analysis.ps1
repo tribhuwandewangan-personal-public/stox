@@ -356,11 +356,13 @@ else {
     }
 }
 
-# Launch browser if interactive
+$FrontendUrl = "http://localhost:4200"
+
+# Launch Angular frontend workstation in browser if interactive
 if (-not $NonInteractive) {
     try {
-        Start-Process $DashUrl
-        Write-Host "   Dashboard opened in browser: $DashUrl" -ForegroundColor Cyan
+        Start-Process $FrontendUrl
+        Write-Host "   Workstation opened in browser: $FrontendUrl (ensure 'npm start' is running in frontend/)" -ForegroundColor Cyan
     }
     catch {}
 }
@@ -443,7 +445,8 @@ $predReport = if ($AllNse) { "$ScriptDir\reports\NSE_All_Stocks_Predictions_late
 Write-Host ""
 Write-Host "========================================================================" -ForegroundColor Cyan
 Write-Host "  RUN COMPLETE! Reports and dashboard are ready:" -ForegroundColor Cyan
-Write-Host "  * Realtime Web Dashboard:     $DashUrl" -ForegroundColor Green
+Write-Host "  * Angular Analyst Workstation: $FrontendUrl" -ForegroundColor Green
+Write-Host "  * Backend HTTP API Server:     $DashUrl" -ForegroundColor Cyan
 Write-Host "  * Daily Predictions Report:   $predReport" -ForegroundColor Green
 Write-Host "  * Portfolio Action Report:    $ScriptDir\reports\Portfolio_Holdings_Analysis_latest.md" -ForegroundColor Green
 Write-Host "  * Historical Excel Dataset:   $ScriptDir\reports\NSE_Historical_Data.xlsx" -ForegroundColor Green

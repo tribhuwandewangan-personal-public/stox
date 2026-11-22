@@ -7,24 +7,40 @@ The actual logic is handler-independent and can be reused by any HTTP framework.
 
 import os
 import sys
+import threading
 import urllib.parse
 from datetime import datetime
 from typing import Dict, Any
 from starlette.routing import Route
-from starlette.responses import JSONResponse, FileResponse, HTMLResponse, Response
+from starlette.responses import Response
 from starlette.requests import Request
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from config import SYMBOLS_FILE_PATH
+from config import SYMBOLS_FILE_PATH, ENGINE_LABEL, MAX_CONCURRENT_TRIGGERS
 from tools.web_security import valid_symbol, resolve_within
 from tools.quote_tools import build_quotes_response
 from tools.outcome_tracker import compute_accuracy
 from tools.symbol_search_tools import search_internet_symbols, add_symbol_to_json, remove_symbol_from_json
 from api.services import safe_json_dumps, get_stocks_response_body, get_history_response_body, get_top_pattern_picks
 from api.services import _load_symbols_list
+from tools import events_bus
+
+_trigger_slots = threading.BoundedSemaphore(MAX_CONCURRENT_TRIGGERS)
+_running_symbols = set()
+_running_lock = threading.Lock()
+
+
+def _json_response(data: Any, status_code: int = 200) -> Response:
+    """Emit NaN/Infinity-safe JSON with consistent HTTP status code and no-store caching."""
+    return Response(
+        content=safe_json_dumps(data),
+        status_code=status_code,
+        media_type="application/json",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 # Injected by app factory; these are set during app startup
@@ -48,7 +64,7 @@ def set_managers(cache_mgr, queue_mgr, hist_engine, tech_engine, events_engine, 
 
 # ===================================================================================== Routes
 
-async def status(request: Request) -> JSONResponse:
+async def status(request: Request) -> Response:
     """GET /api/status: Server status, queue, and macro indicators."""
     try:
         cache_mgr = _managers["cache_mgr"]
@@ -59,14 +75,15 @@ async def status(request: Request) -> JSONResponse:
         macro_items = cache_mgr.get_cached_macro(max_age_hours=24)
 
         resp_data = {
+            "model": ENGINE_LABEL,
             "timestamp": datetime.now().isoformat(),
             "queue_status": q_status,
             "bulletin": shared_bulletin,
             "macro_items": macro_items
         }
-        return JSONResponse(resp_data)
+        return _json_response(resp_data)
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return _json_response({"error": str(e)}, status_code=500)
 
 
 async def stocks(request: Request) -> Response:
@@ -83,34 +100,34 @@ async def stocks(request: Request) -> Response:
             universe = "curated"
 
         body = get_stocks_response_body(cache_mgr, queue_mgr, hist_engine, tech_engine, events_engine, universe=universe)
-        return Response(content=body, media_type="application/json")
+        return Response(content=body, media_type="application/json", headers={"Cache-Control": "no-store"})
     except Exception as e:
-        return JSONResponse({"error": str(e), "stocks": []}, status_code=500)
+        return _json_response({"error": str(e), "stocks": []}, status_code=500)
 
 
-async def quotes(request: Request) -> JSONResponse:
+async def quotes(request: Request) -> Response:
     """GET /api/quotes: Current live quotes for all symbols."""
     try:
         cache_mgr = _managers["cache_mgr"]
         quote_poller = _managers["quote_poller"]
 
         resp = build_quotes_response(cache_mgr, quote_poller)
-        return JSONResponse(resp)
+        return _json_response(resp)
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return _json_response({"error": str(e)}, status_code=500)
 
 
-async def accuracy(request: Request) -> JSONResponse:
+async def accuracy(request: Request) -> Response:
     """GET /api/accuracy: Prediction accuracy report."""
     try:
         cache_mgr = _managers["cache_mgr"]
         resp = compute_accuracy(cache_mgr)
-        return JSONResponse(resp)
+        return _json_response(resp)
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return _json_response({"error": str(e)}, status_code=500)
 
 
-async def history(request: Request) -> JSONResponse:
+async def history(request: Request) -> Response:
     """GET /api/history?symbol=XXX&days=90: Chart data for a symbol."""
     try:
         cache_mgr = _managers["cache_mgr"]
@@ -118,8 +135,10 @@ async def history(request: Request) -> JSONResponse:
 
         query_params = request.query_params
         sym = query_params.get("symbol", "").upper().strip()
-        if sym and not valid_symbol(sym):
-            return JSONResponse({"error": "Invalid symbol", "candles": []}, status_code=400)
+        if not sym:
+            return _json_response({"error": "Missing symbol", "candles": []}, status_code=400)
+        if not valid_symbol(sym):
+            return _json_response({"error": "Invalid symbol", "candles": []}, status_code=400)
 
         raw_days = query_params.get("days", "90")
         try:
@@ -127,17 +146,14 @@ async def history(request: Request) -> JSONResponse:
         except Exception:
             days = 90
 
-        if not sym:
-            return JSONResponse({"error": "Missing symbol", "candles": []})
-
         body = get_history_response_body(sym, days, cache_mgr, tech_engine)
-        return Response(content=body, media_type="application/json")
+        return Response(content=body, media_type="application/json", headers={"Cache-Control": "no-store"})
     except Exception as e:
         print(f"Error fetching chart data: {e}", flush=True)
-        return JSONResponse({"error": str(e), "candles": []}, status_code=500)
+        return _json_response({"error": str(e), "candles": []}, status_code=500)
 
 
-async def events(request: Request) -> JSONResponse:
+async def events(request: Request) -> Response:
     """GET /api/events?symbol=XXX: Stock events and macro catalysts."""
     try:
         events_engine = _managers["events_engine"]
@@ -145,35 +161,32 @@ async def events(request: Request) -> JSONResponse:
         query_params = request.query_params
         sym = query_params.get("symbol", "").upper().strip()
         if sym and not valid_symbol(sym):
-            return JSONResponse({"error": "Invalid symbol"}, status_code=400)
+            return _json_response({"error": "Invalid symbol"}, status_code=400)
 
         if sym:
             events_data = events_engine.fetch_stock_events(sym)
         else:
             events_data = {"upcoming_macro_catalysts": events_engine.get_upcoming_macro_events()}
 
-        return JSONResponse(events_data)
+        return _json_response(events_data)
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return _json_response({"error": str(e)}, status_code=500)
 
 
-async def search_symbol(request: Request) -> JSONResponse:
+async def search_symbol(request: Request) -> Response:
     """GET /api/search-symbol?q=ABC: Search for symbols on the internet."""
     try:
         query_params = request.query_params
         q_str = query_params.get("q", "").strip()
         matches = search_internet_symbols(q_str) if q_str else []
-        return JSONResponse({"query": q_str, "results": matches})
+        return _json_response({"query": q_str, "results": matches})
     except Exception as e:
-        return JSONResponse({"error": str(e), "results": []}, status_code=500)
+        return _json_response({"error": str(e), "results": []}, status_code=500)
 
 
-async def trigger(request: Request) -> JSONResponse:
-    """POST /api/trigger: Manually trigger re-analysis of a single stock."""
+async def trigger(request: Request) -> Response:
+    """POST /api/trigger: Manually trigger re-analysis of a single stock (semaphore-bounded)."""
     try:
-        import threading
-        from datetime import datetime
-
         cache_mgr = _managers["cache_mgr"]
         queue_mgr = _managers["queue_mgr"]
         get_workflow = _managers["get_workflow"]
@@ -182,20 +195,35 @@ async def trigger(request: Request) -> JSONResponse:
         symbol = str(data.get("symbol", "")).upper().strip()
 
         if not symbol:
-            return JSONResponse({"status": "error", "message": "Missing symbol"}, status_code=400)
+            return _json_response({"status": "error", "message": "Missing symbol"}, status_code=400)
         if not valid_symbol(symbol):
-            return JSONResponse({"status": "error", "message": "Invalid symbol"}, status_code=400)
+            return _json_response({"status": "error", "message": "Invalid symbol"}, status_code=400)
 
-        # Find company name and sector from symbols.json
         c_name, c_sec = "", ""
-        for s_item in _load_symbols_list():
-            if s_item.get("symbol", "").upper() == symbol:
-                c_name = s_item.get("name", "")
-                c_sec = s_item.get("sector", "")
+        for univ in ("curated", "midcap250", "all_nse"):
+            for s_item in _load_symbols_list(universe=univ):
+                if s_item.get("symbol", "").upper() == symbol:
+                    c_name = s_item.get("name", "")
+                    c_sec = s_item.get("sector", "")
+                    break
+            if c_name:
                 break
 
-        # Placeholder: in the real implementation, this would check _trigger_slots and _running_symbols
-        # For now, just launch it
+        with _running_lock:
+            if symbol in _running_symbols:
+                return _json_response({
+                    "status": "already_running",
+                    "symbol": symbol,
+                    "message": f"{symbol} is already being analyzed.",
+                })
+            if not _trigger_slots.acquire(blocking=False):
+                return _json_response({
+                    "status": "busy",
+                    "symbol": symbol,
+                    "message": f"{MAX_CONCURRENT_TRIGGERS} analyses are already running. Try again shortly.",
+                }, status_code=429)
+            _running_symbols.add(symbol)
+
         def run_single():
             try:
                 with cache_mgr._get_connection() as conn:
@@ -203,20 +231,26 @@ async def trigger(request: Request) -> JSONResponse:
                 try:
                     get_workflow().run_analysis(symbol, company_name=c_name, sector=c_sec, force_refresh=True)
                     queue_mgr.mark_completed(symbol)
+                    events_bus.publish(events_bus.ANALYSIS_DONE, {
+                        "symbol": symbol,
+                        "timestamp": datetime.now().isoformat(),
+                    })
                 except Exception as e:
                     print(f"⚠️ Error in single stock analysis for {symbol}: {e}")
                     with cache_mgr._get_connection() as conn:
                         conn.execute("UPDATE persistent_stock_queue SET status = 'pending' WHERE symbol = ?", (symbol,))
-            except Exception as e:
-                print(f"⚠️ Error in run_single: {e}")
+            finally:
+                with _running_lock:
+                    _running_symbols.discard(symbol)
+                _trigger_slots.release()
 
         threading.Thread(target=run_single, daemon=True).start()
-        return JSONResponse({"status": "triggered", "symbol": symbol})
+        return _json_response({"status": "triggered", "symbol": symbol})
     except Exception as e:
-        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+        return _json_response({"status": "error", "message": str(e)}, status_code=500)
 
 
-async def add_symbol(request: Request) -> JSONResponse:
+async def add_symbol(request: Request) -> Response:
     """POST /api/add-symbol: Add a symbol to the watchlist."""
     try:
         data = await request.json()
@@ -226,103 +260,54 @@ async def add_symbol(request: Request) -> JSONResponse:
         exchange = str(data.get("exchange", "NSE")).strip()[:10]
 
         if not valid_symbol(sym):
-            return JSONResponse({"status": "error", "message": "Invalid symbol"}, status_code=400)
+            return _json_response({"status": "error", "message": "Invalid symbol"}, status_code=400)
 
         result = add_symbol_to_json(symbol=sym, name=name, sector=sector, exchange=exchange)
-        return JSONResponse(result)
+        return _json_response(result)
     except Exception as e:
-        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+        return _json_response({"status": "error", "message": str(e)}, status_code=500)
 
 
-async def remove_symbol(request: Request) -> JSONResponse:
+async def remove_symbol(request: Request) -> Response:
     """POST /api/remove-symbol: Remove a symbol from the watchlist."""
     try:
         data = await request.json()
         sym = str(data.get("symbol", "")).upper().strip()
 
         if not valid_symbol(sym):
-            return JSONResponse({"status": "error", "message": "Invalid symbol"}, status_code=400)
+            return _json_response({"status": "error", "message": "Invalid symbol"}, status_code=400)
 
         result = remove_symbol_from_json(symbol=sym)
-        return JSONResponse(result)
+        return _json_response(result)
     except Exception as e:
-        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+        return _json_response({"status": "error", "message": str(e)}, status_code=500)
 
 
-async def portfolio(request: Request) -> JSONResponse:
+async def portfolio(request: Request) -> Response:
     """GET /api/portfolio: User's portfolio holdings with multi-agent long-term & swing diagnostics."""
     try:
         from tools.kite_portfolio import KitePortfolioEngine
         cache_mgr = _managers.get("cache_mgr")
         engine = KitePortfolioEngine(cache_manager=cache_mgr)
         data = engine.evaluate_portfolio()
-        return JSONResponse(data)
+        return _json_response(data)
     except Exception as e:
-        return JSONResponse({"error": str(e), "summary": {}, "holdings": []}, status_code=500)
+        return _json_response({"error": str(e), "summary": {}, "holdings": []}, status_code=500)
 
 
-async def fundamental_picks(request: Request) -> JSONResponse:
+async def fundamental_picks(request: Request) -> Response:
     """GET /api/fundamental-picks: Top 10 fundamentally sound stocks at the right technical entry."""
     try:
-        from tools.fundamental_picks import score_fundamental_pick
+        from api.services import get_fundamental_picks_data
         cache_mgr = _managers.get("cache_mgr")
-        symbols_list = _load_symbols_list()
-
-        SYNTH_AGENT_NAME = "Master Prediction Synthesizer Agent"
-        TECH_AGENT_NAME  = "Technical Analysis Agent"
-
-        picks = []
-        for item in symbols_list:
-            sym   = item.get("symbol", "").upper()
-            cname = item.get("name", "")
-            sec   = item.get("sector", "")
-
-            synth_res = cache_mgr.get_latest_agent_output(sym, SYNTH_AGENT_NAME, max_age_hours=168)
-            if not synth_res:
-                synth_res = cache_mgr.get_latest_agent_output(sym, SYNTH_AGENT_NAME, max_age_hours=None)
-            if not synth_res:
-                continue
-
-            tech_res = cache_mgr.get_latest_agent_output(sym, TECH_AGENT_NAME, max_age_hours=168)
-            fund_res = cache_mgr.get_latest_agent_output(sym, "Fundamental Analyst Agent", max_age_hours=168)
-            if not fund_res:
-                fund_res = cache_mgr.get_latest_agent_output(sym, "Fundamental Analyst Agent", max_age_hours=None)
-
-            # Compute 52W metrics from cached candles if missing
-            raw_tech = (tech_res or {}).get("raw_indicators", {})
-            if raw_tech.get("pct_from_52w_high") is None:
-                try:
-                    c_list = cache_mgr.get_cached_candles(sym, limit_days=260)
-                    if c_list:
-                        h_max = max(float(c.get("HIGH_PRICE") or c.get("CLOSE_PRICE") or 0.0) for c in c_list)
-                        p_now = float(c_list[-1].get("CLOSE_PRICE") or 0.0)
-                        if h_max > 0 and p_now > 0:
-                            if not tech_res:
-                                tech_res = {"raw_indicators": {}}
-                            tech_res.setdefault("raw_indicators", {})
-                            tech_res["raw_indicators"]["pct_from_52w_high"] = round((p_now - h_max) / h_max * 100, 2)
-                            tech_res["raw_indicators"]["high_52w"] = round(h_max, 2)
-                            tech_res["raw_indicators"]["last_price"] = p_now
-                except Exception:
-                    pass
-
-            pick = score_fundamental_pick(sym, synth_res, tech_res, fund_res=fund_res)
-            if pick is None:
-                continue
-
-            pick["company"] = cname
-            pick["sector"]  = sec
-            picks.append(pick)
-
-        picks.sort(key=lambda x: x["score"], reverse=True)
-        top10 = picks[:10]
-
-        return JSONResponse({"picks": top10, "count": len(top10), "universe": len(symbols_list)})
+        universe = request.query_params.get("universe", "curated").lower().strip()
+        data = get_fundamental_picks_data(cache_mgr, universe=universe)
+        return _json_response(data)
     except Exception as e:
-        return JSONResponse({"error": str(e), "picks": [], "count": 0}, status_code=500)
+        return _json_response({"error": str(e), "picks": [], "count": 0}, status_code=500)
 
 
-async def macro_risk_shield(request: Request) -> JSONResponse:
+async def macro_risk_shield(request: Request) -> Response:
     """GET /api/macro-risk-shield: Multi-tier macro risk level and portfolio safeguarding playbook."""
     try:
         from tools.macro_tools import GlobalMacroEngine, compute_macro_sentiment
@@ -344,48 +329,45 @@ async def macro_risk_shield(request: Request) -> JSONResponse:
             pass
 
         shield_data = build_macro_risk_shield(sentiment, holdings)
-        return JSONResponse(shield_data)
+        return _json_response(shield_data)
     except Exception as e:
-        return JSONResponse({"error": str(e), "risk_key": "ELEVATED", "risk_label": "🟡 ELEVATED"}, status_code=500)
+        return _json_response({"error": str(e), "risk_key": "UNAVAILABLE", "risk_label": "⚪ UNAVAILABLE"}, status_code=500)
 
 
-async def market_scanner(request: Request) -> JSONResponse:
+async def market_scanner(request: Request) -> Response:
     """GET /api/market-scanner: Returns latest market scan results of strong non-symbols.json stocks."""
     try:
-        import threading
         from tools.market_scanner import get_latest_cached_scan, run_market_scan
         cached = get_latest_cached_scan()
         if cached.get("stocks"):
-            return JSONResponse(cached)
+            return _json_response(cached)
 
-        # If no cached scan exists yet, run a quick background scan of top candidates
         threading.Thread(target=run_market_scan, kwargs={"max_scan_count": 25, "top_n": 10}, daemon=True).start()
-        return JSONResponse({"status": "scanning", "stocks": [], "message": "Initial market scan in progress..."})
+        return _json_response({"status": "scanning", "stocks": [], "message": "Initial market scan in progress..."})
     except Exception as e:
-        return JSONResponse({"error": str(e), "stocks": []}, status_code=500)
+        return _json_response({"error": str(e), "stocks": []}, status_code=500)
 
 
-async def market_scanner_trigger(request: Request) -> JSONResponse:
+async def market_scanner_trigger(request: Request) -> Response:
     """POST /api/market-scanner/scan: Triggers a fresh scan of non-watchlist stocks."""
     try:
-        import threading
         from tools.market_scanner import run_market_scan
         threading.Thread(target=run_market_scan, kwargs={"max_scan_count": 50, "top_n": 15}, daemon=True).start()
-        return JSONResponse({"status": "triggered", "message": "Market scan started in background"})
+        return _json_response({"status": "triggered", "message": "Market scan started in background"})
     except Exception as e:
-        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+        return _json_response({"status": "error", "message": str(e)}, status_code=500)
 
 
-async def top_patterns(request: Request) -> JSONResponse:
+async def top_patterns(request: Request) -> Response:
     """GET /api/patterns/top: High-conviction technical chart patterns across all analyzed stocks."""
     try:
         cache_mgr = _managers["cache_mgr"]
         tech_engine = _managers["tech_engine"]
         min_upside = float(request.query_params.get("min_upside", 0.0))
         picks = get_top_pattern_picks(cache_mgr, tech_engine, min_upside=min_upside)
-        return JSONResponse({"count": len(picks), "picks": picks})
+        return _json_response({"count": len(picks), "picks": picks})
     except Exception as e:
-        return JSONResponse({"error": str(e), "picks": []}, status_code=500)
+        return _json_response({"error": str(e), "picks": []}, status_code=500)
 
 
 async def favicon(request: Request) -> Response:
@@ -393,12 +375,12 @@ async def favicon(request: Request) -> Response:
     return Response(status_code=204)
 
 
-async def company_profile(request: Request) -> JSONResponse:
+async def company_profile(request: Request) -> Response:
     """GET /api/company/{ticker}: Full company profile including forensic analysis, governance, and peers."""
     try:
         ticker = request.path_params.get("ticker", "").upper().strip()
         if not ticker or not valid_symbol(ticker):
-            return JSONResponse({"error": "Invalid ticker"}, status_code=400)
+            return _json_response({"error": "Invalid ticker"}, status_code=400)
 
         cache_mgr = _managers.get("cache_mgr")
         from tools.forensic_financial_engine import ForensicFinancialEngine
@@ -408,65 +390,76 @@ async def company_profile(request: Request) -> JSONResponse:
         gov = analysis.get("governance_telemetry", {})
         eq = analysis.get("earnings_quality", {})
 
+        exc_amt = eq.get("exceptional_items")
+        exc_items = [
+            {
+                "description": "Exceptional Items",
+                "amount": exc_amt,
+                "type": "income" if exc_amt >= 0 else "expense",
+                "category": "Other",
+            }
+        ] if (exc_amt is not None and exc_amt != 0.0) else []
+
         company_data = {
             "ticker": ticker,
             "exchange": "NSE",
             "name": analysis.get("company_name", ticker),
             "sector": analysis.get("sector", "N/A"),
             "promoterHoldingPct": gov.get("promoter_holding_pct"),
-            "promoterPledgePct": 0.0 if gov.get("pledge_risk") == "LOW" else 25.0,
+            "promoterPledgePct": gov.get("promoter_pledge_pct"),
             "auditRiskScore": gov.get("audit_risk_score"),
-            "governanceGrade": gov.get("governance_grade", "SOUND"),
+            "governanceGrade": gov.get("governance_grade", "UNAUDITED"),
             "earningsQuality": {
-                "reportedPAT": eq.get("reported_pat", 0.0),
-                "adjustedPAT": eq.get("adjusted_pat", 0.0),
-                "sustainablePAT": eq.get("sustainable_pat", 0.0),
-                "exceptionalItems": [],
+                "reportedPAT": eq.get("reported_pat"),
+                "adjustedPAT": eq.get("adjusted_pat"),
+                "sustainablePAT": eq.get("sustainable_pat"),
+                "exceptionalItems": exc_items,
                 "redFlag": eq.get("quality_grade") in ("SEVERELY_DISTORTED", "MODERATELY_DISTORTED")
             },
             "forensicAnalysis": analysis
         }
-        return JSONResponse(company_data)
+        return _json_response(company_data)
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return _json_response({"error": str(e)}, status_code=500)
 
 
-async def earnings_profile(request: Request) -> JSONResponse:
+async def earnings_profile(request: Request) -> Response:
     """GET /api/earnings/{ticker}: Earnings quality and exceptional items breakdown."""
     try:
         ticker = request.path_params.get("ticker", "").upper().strip()
         if not ticker or not valid_symbol(ticker):
-            return JSONResponse({"error": "Invalid ticker"}, status_code=400)
+            return _json_response({"error": "Invalid ticker"}, status_code=400)
 
         cache_mgr = _managers.get("cache_mgr")
         from tools.forensic_financial_engine import ForensicFinancialEngine
         forensic_engine = ForensicFinancialEngine(cache_manager=cache_mgr)
         analysis = forensic_engine.analyze_company(ticker)
         eq = analysis.get("earnings_quality", {})
+        exc_amt = eq.get("exceptional_items")
 
-        return JSONResponse({
-            "reportedPAT": eq.get("reported_pat", 0.0),
-            "adjustedPAT": eq.get("adjusted_pat", 0.0),
-            "sustainablePAT": eq.get("sustainable_pat", 0.0),
+        return _json_response({
+            "reportedPAT": eq.get("reported_pat"),
+            "adjustedPAT": eq.get("adjusted_pat"),
+            "sustainablePAT": eq.get("sustainable_pat"),
             "exceptionalItems": [
                 {
                     "description": "Exceptional Items",
-                    "amount": eq.get("exceptional_items", 0.0),
-                    "type": "income" if eq.get("exceptional_items", 0.0) >= 0 else "expense",
+                    "amount": exc_amt,
+                    "type": "income" if exc_amt >= 0 else "expense",
                     "category": "Other"
                 }
-            ] if eq.get("exceptional_items", 0.0) != 0.0 else []
+            ] if (exc_amt is not None and exc_amt != 0.0) else []
         })
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return _json_response({"error": str(e)}, status_code=500)
 
 
-async def financial_income(request: Request) -> JSONResponse:
+async def financial_income(request: Request) -> Response:
     """GET /api/financial/{ticker}/income: Income statements."""
     try:
         ticker = request.path_params.get("ticker", "").upper().strip()
         if not ticker or not valid_symbol(ticker):
-            return JSONResponse({"error": "Invalid ticker"}, status_code=400)
+            return _json_response({"error": "Invalid ticker"}, status_code=400)
 
         cache_mgr = _managers.get("cache_mgr")
         from tools.forensic_financial_engine import ForensicFinancialEngine
@@ -478,23 +471,24 @@ async def financial_income(request: Request) -> JSONResponse:
         statements = [
             {
                 "period": "LTM",
-                "revenue": cf.get("revenue_growth_pct"),
+                "revenue": eq.get("revenue"),
+                "revenueGrowthPct": cf.get("revenue_growth_pct"),
                 "reportedPAT": eq.get("reported_pat"),
                 "exceptionalItems": eq.get("exceptional_items"),
                 "sustainablePAT": eq.get("sustainable_pat")
             }
         ]
-        return JSONResponse(statements)
+        return _json_response(statements)
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return _json_response({"error": str(e)}, status_code=500)
 
 
-async def financial_balance(request: Request) -> JSONResponse:
+async def financial_balance(request: Request) -> Response:
     """GET /api/financial/{ticker}/balance: Balance sheet telemetry."""
     try:
         ticker = request.path_params.get("ticker", "").upper().strip()
         if not ticker or not valid_symbol(ticker):
-            return JSONResponse({"error": "Invalid ticker"}, status_code=400)
+            return _json_response({"error": "Invalid ticker"}, status_code=400)
 
         cache_mgr = _managers.get("cache_mgr")
         from tools.forensic_financial_engine import ForensicFinancialEngine
@@ -512,17 +506,17 @@ async def financial_balance(request: Request) -> JSONResponse:
                 "debtToEquity": solv.get("debt_to_equity")
             }
         ]
-        return JSONResponse(statements)
+        return _json_response(statements)
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return _json_response({"error": str(e)}, status_code=500)
 
 
-async def financial_cashflow(request: Request) -> JSONResponse:
+async def financial_cashflow(request: Request) -> Response:
     """GET /api/financial/{ticker}/cashflow: Cash flow statements."""
     try:
         ticker = request.path_params.get("ticker", "").upper().strip()
         if not ticker or not valid_symbol(ticker):
-            return JSONResponse({"error": "Invalid ticker"}, status_code=400)
+            return _json_response({"error": "Invalid ticker"}, status_code=400)
 
         cache_mgr = _managers.get("cache_mgr")
         from tools.forensic_financial_engine import ForensicFinancialEngine
@@ -539,9 +533,9 @@ async def financial_cashflow(request: Request) -> JSONResponse:
                 "cfoToPatRatio": cf.get("cfo_to_pat_ratio")
             }
         ]
-        return JSONResponse(statements)
+        return _json_response(statements)
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return _json_response({"error": str(e)}, status_code=500)
 
 
 # Route definitions

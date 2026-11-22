@@ -91,7 +91,7 @@ type SidebarFilter = 'ALL' | 'BUY' | 'HOLD' | 'SELL' | 'ACTIVE';
                 </span>
               </div>
               <div class="stock-item-bottom">
-                <span class="stock-price">₹{{ getPrice(stock) }}</span>
+                <span class="stock-price">{{ getPrice(stock) }}</span>
                 <span class="stock-chg" *ngIf="stock.price_info.change_pct != null" [class.up]="(stock.price_info.change_pct || 0) >= 0" [class.down]="(stock.price_info.change_pct || 0) < 0">
                   {{ (stock.price_info.change_pct || 0) >= 0 ? '+' : '' }}{{ stock.price_info.change_pct | number:'1.2-2' }}%
                 </span>
@@ -123,7 +123,7 @@ type SidebarFilter = 'ALL' | 'BUY' | 'HOLD' | 'SELL' | 'ACTIVE';
                   </span>
                 </div>
                 <div class="stock-item-bottom">
-                  <span class="stock-price">₹{{ getPrice(stock) }}</span>
+                  <span class="stock-price">{{ getPrice(stock) }}</span>
                   <span class="stock-chg" *ngIf="stock.price_info.change_pct != null" [class.up]="(stock.price_info.change_pct || 0) >= 0" [class.down]="(stock.price_info.change_pct || 0) < 0">
                     {{ (stock.price_info.change_pct || 0) >= 0 ? '+' : '' }}{{ stock.price_info.change_pct | number:'1.2-2' }}%
                   </span>

@@ -41,3 +41,4 @@ HISTORICAL_EXCEL_PATH = os.path.join(REPORTS_DIR, "NSE_Historical_Data.xlsx")
 
 # Label shown in the dashboard / reports for the analysis engine
 ENGINE_LABEL = "Rule-based engine (no LLM)"
+MODEL_VERSION = "2.1.0"

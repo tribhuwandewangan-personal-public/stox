@@ -544,7 +544,10 @@ export class StockCardComponent {
     if (c == null) return 'neutral';
     return c > 0 ? 'positive' : c < 0 ? 'negative' : 'neutral';
   }
-  get isLive(): boolean { return this.stock.price_info?.source === 'quote'; }
+  get isLive(): boolean {
+    const info = this.stock.price_info;
+    return (info?.kind || info?.source) === 'quote';
+  }
 
   /* ── Price Drift Subtitle (Levels computed at ...) ── */
   get driftNote(): string | null {
@@ -580,6 +583,9 @@ export class StockCardComponent {
 
   /* ── Pattern Badges (Matching static/index.html renderPatternBadges) ── */
   get patternBadges(): Array<{ label: string; icon: string; cssClass: string }> {
+    if (!this.stock.has_analysis) {
+      return [];
+    }
     const patterns = this.stock.patterns || [];
     if (!patterns.length) {
       return [{ label: 'Range Consolidation', icon: '📐', cssClass: 'neutral' }];
@@ -757,22 +763,28 @@ export class StockCardComponent {
   }
   get ltTargetDisplay(): string | null {
     const lt = this.stock.long_term_signal || this.stock.synth_output?.structured_signal?.long_term_signal;
-    if (!lt?.long_term_target) return null;
-    if (typeof lt.long_term_target === 'string') {
-      return lt.long_term_target.startsWith('Rs.') ? lt.long_term_target : `Rs. ${lt.long_term_target}`;
+    const raw = lt?.long_term_target;
+    if (raw === null || raw === undefined) return null;
+    if (typeof raw === 'string') {
+      const trimmed = raw.trim();
+      if (!trimmed || trimmed.toUpperCase() === 'N/A' || trimmed === '—' || trimmed === '-') return null;
+      return trimmed.startsWith('Rs.') ? trimmed : `Rs. ${trimmed}`;
     }
-    return fmtPrice(lt.long_term_target);
+    return fmtPrice(raw);
   }
   get ltGainPctDisplay(): string | null {
     const lt = this.stock.long_term_signal || this.stock.synth_output?.structured_signal?.long_term_signal;
-    if (lt?.long_term_upside_pct) {
-      return lt.long_term_upside_pct.startsWith('+') ? lt.long_term_upside_pct : `+${lt.long_term_upside_pct}`;
+    if (lt?.long_term_upside_pct != null) {
+      const raw = String(lt.long_term_upside_pct).trim();
+      if (!raw || raw.toUpperCase() === 'N/A' || raw === '—') return null;
+      return (raw.startsWith('+') || raw.startsWith('-')) ? raw : `+${raw}`;
     }
     const tNum = lt?.long_term_target_num || (typeof lt?.long_term_target === 'number' ? lt.long_term_target : null);
     const p = this.stock.price_info?.price;
     if (tNum && p && p > 0) {
-      const pct = ((tNum - p) / p * 100).toFixed(1);
-      return `+${pct}%`;
+      const pctNum = (tNum - p) / p * 100;
+      const pct = pctNum.toFixed(1);
+      return pctNum >= 0 ? `+${pct}%` : `${pct}%`;
     }
     return null;
   }

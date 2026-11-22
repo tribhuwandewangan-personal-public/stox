@@ -9,8 +9,8 @@ export class AuthInterceptor implements HttpInterceptor {
   intercept(req: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
     const authReq = req.clone({
       setHeaders: {
-        // The backend expects this custom header for all POST/GET calls.
-        'X-Stox-Request': 'true',
+        // The backend expects exact '1' on this custom header for POST CSRF validation.
+        'X-Stox-Request': '1',
         // Ensure JSON payloads are correctly typed.
         'Content-Type': 'application/json'
       }

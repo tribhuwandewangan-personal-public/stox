@@ -38,7 +38,7 @@ DEFAULT_SCANNER_UNIVERSE: List[Dict[str, str]] = [
     {"symbol": "INFY", "name": "Infosys Ltd", "sector": "Information Technology"},
     {"symbol": "HCLTECH", "name": "HCL Technologies Ltd", "sector": "Information Technology"},
     {"symbol": "WIPRO", "name": "Wipro Ltd", "sector": "Information Technology"},
-    {"symbol": "LTIM", "name": "LTIMindtree Ltd", "sector": "Information Technology"},
+    {"symbol": "LTM", "name": "LTIMindtree / LTM Ltd", "sector": "Information Technology"},
     {"symbol": "PERSISTENT", "name": "Persistent Systems Ltd", "sector": "Information Technology"},
     {"symbol": "OFSS", "name": "Oracle Financial Services Software", "sector": "Information Technology"},
     {"symbol": "TATACOMM", "name": "Tata Communications Ltd", "sector": "Telecom & Cloud"},
@@ -78,7 +78,7 @@ DEFAULT_SCANNER_UNIVERSE: List[Dict[str, str]] = [
     {"symbol": "DABUR", "name": "Dabur India Ltd", "sector": "FMCG & Ayurvedic Care"},
     {"symbol": "MARICO", "name": "Marico Ltd", "sector": "FMCG & Consumer Goods"},
     {"symbol": "TATACONSUM", "name": "Tata Consumer Products Ltd", "sector": "FMCG & Beverages"},
-    {"symbol": "ZOMATO", "name": "Zomato Ltd", "sector": "Consumer Tech & Quick Commerce"},
+    {"symbol": "ETERNAL", "name": "Eternal Ltd (Zomato)", "sector": "Consumer Tech & Quick Commerce"},
     # Auto & Auto Components
     {"symbol": "MARUTI", "name": "Maruti Suzuki India Ltd", "sector": "Automobiles & Mobility"},
     {"symbol": "M&M", "name": "Mahindra & Mahindra Ltd", "sector": "Automobiles & Mobility"},
@@ -129,7 +129,7 @@ DEFAULT_SCANNER_UNIVERSE: List[Dict[str, str]] = [
     {"symbol": "INDIGO", "name": "InterGlobe Aviation Ltd (IndiGo)", "sector": "Aviation & Logistics"},
     {"symbol": "CONCOR", "name": "Container Corporation of India", "sector": "Logistics & Transport"},
     {"symbol": "DELHIVERY", "name": "Delhivery Ltd", "sector": "Logistics & Supply Chain"},
-    {"symbol": "GMRINFRA", "name": "GMR Airports Infrastructure Ltd", "sector": "Airports & Infrastructure"},
+    {"symbol": "GMRAIRPORT", "name": "GMR Airports Ltd", "sector": "Airports & Infrastructure"},
     {"symbol": "IRCTC", "name": "Indian Railway Catering & Tourism", "sector": "Railways & Travel Services"},
 ]
 
@@ -434,9 +434,10 @@ def run_market_scan(
 
     print(f"🔍 Market Scanner starting: Evaluating {len(to_scan)} stocks outside symbols.json...")
 
+    from tools.ticker_validator import build_yf_candidates
     for item in to_scan:
         sym = item["symbol"]
-        ticker_str = f"{sym}.NS"
+        ticker_str = build_yf_candidates(sym)[0]
         try:
             t = yf.Ticker(ticker_str)
             res = evaluate_stock_strength(sym, item, t)
@@ -462,22 +463,23 @@ def run_market_scan(
 def _cache_scan_results(results: List[Dict[str, Any]]):
     """Saves scanner results into storage/cache.db kv_state."""
     import sqlite3
+    from contextlib import closing
     try:
         os.makedirs(os.path.dirname(CACHE_DB_PATH), exist_ok=True)
-        with sqlite3.connect(CACHE_DB_PATH) as conn:
-            conn.execute(
-                "CREATE TABLE IF NOT EXISTS kv_state (key TEXT PRIMARY KEY, value TEXT, updated_at TIMESTAMP)"
-            )
-            payload = json.dumps({
-                "timestamp": datetime.datetime.now().isoformat(),
-                "count": len(results),
-                "stocks": results
-            })
-            conn.execute(
-                "INSERT OR REPLACE INTO kv_state (key, value, updated_at) VALUES (?, ?, ?)",
-                ("market_scanner_latest", payload, datetime.datetime.now().isoformat())
-            )
-            conn.commit()
+        with closing(sqlite3.connect(CACHE_DB_PATH)) as conn:
+            with conn:
+                conn.execute(
+                    "CREATE TABLE IF NOT EXISTS kv_state (key TEXT PRIMARY KEY, value TEXT, updated_at TIMESTAMP)"
+                )
+                payload = json.dumps({
+                    "timestamp": datetime.datetime.now().isoformat(),
+                    "count": len(results),
+                    "stocks": results
+                })
+                conn.execute(
+                    "INSERT OR REPLACE INTO kv_state (key, value, updated_at) VALUES (?, ?, ?)",
+                    ("market_scanner_latest", payload, datetime.datetime.now().isoformat())
+                )
     except Exception as e:
         print(f"⚠️ Failed to cache market scanner results: {e}")
 
@@ -485,10 +487,11 @@ def _cache_scan_results(results: List[Dict[str, Any]]):
 def get_latest_cached_scan() -> Dict[str, Any]:
     """Retrieves the most recent market scanner results from SQLite."""
     import sqlite3
+    from contextlib import closing
     try:
         if not os.path.exists(CACHE_DB_PATH):
             return {"stocks": [], "timestamp": None}
-        with sqlite3.connect(CACHE_DB_PATH) as conn:
+        with closing(sqlite3.connect(CACHE_DB_PATH)) as conn:
             row = conn.execute(
                 "SELECT value FROM kv_state WHERE key = 'market_scanner_latest'"
             ).fetchone()

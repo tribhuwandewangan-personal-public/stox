@@ -38,10 +38,12 @@ from tools.historical_data_tools import HistoricalDataEngine
 from tools.tech_tools import TechnicalAnalysisEngine
 from tools.events_tools import EventsEngine
 from tools.long_term_strategy import long_term_engine
+from agents.macro_sentinel import BackgroundMacroSentinel
 from tools.quote_tools import QuoteService, QuotePoller
 from tools.scheduler import Scheduler
 from tools import events_bus
 from api.routes import routes, set_managers
+from api.services import load_active_monitored_symbols
 from api.security import SecurityMiddleware, WebSocketSecurityMiddleware
 from api.ws import websocket_endpoint, manager as ws_manager
 
@@ -56,23 +58,12 @@ events_engine = EventsEngine(cache_manager=cache_mgr)
 quote_service = QuoteService(cache_mgr, sources=QUOTE_SOURCES)
 quote_poller = QuotePoller(
     quote_service,
-    symbols_loader=lambda: [x.get("symbol", "").upper() for x in _load_symbols_list() if x.get("symbol")],
+    symbols_loader=lambda: [x["symbol"] for x in load_active_monitored_symbols()],
     poll_seconds=QUOTE_POLL_SECONDS,
 )
 _workflow_instance = None
 _scheduler_instance = None
-
-
-def _load_symbols_list():
-    """Load symbols from JSON."""
-    import json
-    if not os.path.exists(SYMBOLS_FILE_PATH):
-        return []
-    try:
-        with open(SYMBOLS_FILE_PATH, "r", encoding="utf-8") as f:
-            return json.load(f).get("symbols", [])
-    except Exception:
-        return []
+_sentinel_instance = None
 
 
 def get_workflow():
@@ -88,26 +79,28 @@ def get_workflow():
 
 async def lifespan(app: Starlette):
     """Startup and shutdown context for the app."""
-    global _scheduler_instance
+    global _scheduler_instance, _sentinel_instance
 
     # Startup
     print("🚀 [Starlette] Starting up...", flush=True)
 
     # Start quote poller
     quote_poller.start()
-    print("📊 [QuotePoller] Started (polls every {QUOTE_POLL_SECONDS}s while market is open)", flush=True)
+    print(f"📊 [QuotePoller] Started (polls every {QUOTE_POLL_SECONDS}s while market is open)", flush=True)
 
-    # Start scheduler if enabled
+    # Start scheduler & market-hours aware macro sentinel if enabled
     if AUTO_SCHEDULE:
         _scheduler_instance = Scheduler(
             cache_mgr,
             workflow_getter=get_workflow,
-            symbols_loader=_load_symbols_list,
+            symbols_loader=load_active_monitored_symbols,
             max_workers=MAX_SYMBOL_WORKERS,
             on_symbol_done=queue_mgr.mark_completed,
         )
         _scheduler_instance.start()
-        print("🗓️ [Scheduler] Auto-schedule ON (pre-market 08:45 IST, post-close 16:00 IST)", flush=True)
+        _sentinel_instance = BackgroundMacroSentinel(cache_mgr)
+        _sentinel_instance.start()
+        print("🗓️ [Scheduler] Auto-schedule ON (pre-market 08:45 IST, post-close 16:00 IST) + MacroSentinel", flush=True)
 
     # Subscribe to events_bus for WebSocket broadcast
     event_loop = asyncio.get_event_loop()
@@ -134,6 +127,8 @@ async def lifespan(app: Starlette):
     quote_poller.stop()
     if _scheduler_instance:
         _scheduler_instance.stop()
+    if _sentinel_instance:
+        _sentinel_instance.stop()
 
 
 # ===================================================================================== Middleware
@@ -181,9 +176,8 @@ def create_app() -> Starlette:
         debug=False
     )
 
-    # Add middleware (order matters: inner first, outer last)
-    # app.add_middleware(SecurityMiddleware)  # HTTP Host/CSRF checks
-    app.add_middleware(HostOnlyMiddleware)    # Host header validation
+    # Add middleware (enforces loopback Host check and POST CSRF/Content-Type guard)
+    app.add_middleware(SecurityMiddleware)
 
     # WebSocket security
     app = WebSocketSecurityMiddleware(app)

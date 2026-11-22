@@ -193,13 +193,14 @@ class TestForensicFinancialEngine(unittest.TestCase):
         self.assertIn("🔴", result["verdict_badge"])
 
     def test_piotroski_f_score_and_working_capital(self):
-        """Test Piotroski F-Score (0-9) and working capital DSO metrics."""
+        """Test authentic multi-period Piotroski F-Score (0-9) and working capital DSO metrics."""
         strong_stmts = {
             "company_name": "Titanium Financials Ltd",
             "sector": "Industrial Goods",
             "revenue": 1000.0,
             "revenue_prior": 850.0,
             "reported_pat": 120.0,
+            "reported_pat_prior": 90.0,
             "exceptional_items": 0.0,
             "other_income": 5.0,
             "minority_interest": 0.0,
@@ -208,7 +209,16 @@ class TestForensicFinancialEngine(unittest.TestCase):
             "trade_receivables": 100.0,  # DSO = (100 / 1000) * 365 = 36.5 days
             "receivables_prior": 90.0,
             "total_debt": 0.0,
+            "total_debt_prior": 10.0,
             "total_cash": 150.0,
+            "total_assets": 900.0,
+            "total_assets_prior": 880.0,
+            "current_ratio": 2.4,
+            "current_ratio_prior": 1.9,
+            "gross_profit": 420.0,
+            "gross_profit_prior": 330.0,
+            "shares_outstanding_cr": 10.0,
+            "shares_prior_cr": 10.0,
         }
 
         result = self.engine.analyze_company(

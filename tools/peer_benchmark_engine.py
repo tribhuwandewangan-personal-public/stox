@@ -7,6 +7,7 @@ No order placement. No LLM calls for quantitative numbers.
 """
 
 from typing import Dict, Any, List, Optional
+import re
 import statistics
 
 
@@ -14,46 +15,66 @@ import statistics
 # Static sector → peer symbol map (NSE)
 # ---------------------------------------------------------------------------
 SECTOR_PEER_MAP: Dict[str, List[str]] = {
-    "AUTO": ["TATAMOTORS", "M&M", "MARUTI", "BAJAJ-AUTO", "HEROMOTOCO", "EICHERMOT"],
-    "IT": ["TCS", "INFY", "WIPRO", "HCLTECH", "TECHM", "LTIM"],
+    "AUTO": ["TMPV", "M&M", "MARUTI", "BAJAJ-AUTO", "HEROMOTOCO", "EICHERMOT"],
+    "IT": ["TCS", "INFY", "WIPRO", "HCLTECH", "TECHM", "LTM"],
     "BANKING": ["HDFCBANK", "ICICIBANK", "KOTAKBANK", "SBIN", "AXISBANK", "INDUSINDBK"],
     "PHARMA": ["SUNPHARMA", "DRREDDY", "CIPLA", "DIVISLAB", "BIOCON", "AUROPHARMA"],
     "FMCG": ["HINDUNILVR", "ITC", "NESTLEIND", "BRITANNIA", "DABUR", "GODREJCP"],
     "ENERGY": ["RELIANCE", "ONGC", "BPCL", "IOC", "HINDPETRO", "GAIL"],
     "METALS": ["TATASTEEL", "JSWSTEEL", "HINDALCO", "VEDL", "COALINDIA", "NMDC"],
-    "INFRA": ["LT", "NTPC", "POWERGRID", "ADANIPORTS", "BHARTIARTL", "DLF"],
+    "INFRA": ["LT", "NTPC", "POWERGRID", "ADANIPORTS", "ULTRACEMCO", "AMBUJACEM"],
     "CONSUMER": ["TITAN", "ASIANPAINT", "PIDILITIND", "BERGEPAINT", "HAVELLS", "VGUARD"],
     "NBFC": ["BAJFINANCE", "BAJAJFINSV", "CHOLAFIN", "MUTHOOTFIN", "MANAPPURAM", "LICHSGFIN"],
+    "CAPITAL_GOODS": ["LT", "ABB", "SIEMENS", "CUMMINSIND", "POLYCAB", "BHEL"],
+    "DEFENCE": ["HAL", "BEL", "BDL", "MAZDOCK", "COCHINSHIP", "DATAPATTNS"],
+    "CHEMICALS": ["PIDILITIND", "SRF", "DEEPAKNTR", "PIIND", "NAVINFLUOR", "AETHER"],
+    "CAPITAL_MARKETS": ["BSE", "CDSL", "MCX", "ANGELONE", "360ONE", "CAMS"],
+    "TELECOM": ["BHARTIARTL", "INDUSTOWER", "TATACOMM", "IDEA", "HFCL"],
+    "REALTY": ["DLF", "GODREJPROP", "OBEROIRLTY", "LODHA", "PRESTIGE", "PHOENIXLTD"],
 }
 
 # Sector keyword aliases to map raw sector strings onto canonical keys
 _SECTOR_ALIASES: Dict[str, str] = {
     # AUTO
-    "automobile": "AUTO", "auto": "AUTO", "automotive": "AUTO",
+    "automobile": "AUTO", "automobiles": "AUTO", "auto": "AUTO", "automotive": "AUTO",
+    "auto ancillaries": "AUTO", "auto components": "AUTO",
     "two wheeler": "AUTO", "two-wheeler": "AUTO",
     # IT
     "information technology": "IT", "it services": "IT", "software": "IT",
     "technology": "IT", "it": "IT",
     # BANKING
     "bank": "BANKING", "banking": "BANKING", "financial services": "BANKING",
+    # CAPITAL MARKETS
+    "capital markets": "CAPITAL_MARKETS", "fintech": "CAPITAL_MARKETS", "exchange": "CAPITAL_MARKETS",
     # PHARMA
-    "pharma": "PHARMA", "pharmaceutical": "PHARMA", "healthcare": "PHARMA",
+    "pharma": "PHARMA", "pharmaceutical": "PHARMA", "pharmaceuticals": "PHARMA", "healthcare": "PHARMA",
     "drugs": "PHARMA",
     # FMCG
-    "fmcg": "FMCG", "consumer staples": "FMCG", "consumer goods": "FMCG",
-    "food": "FMCG",
+    "fmcg": "FMCG", "consumer staples": "FMCG", "consumer defensive": "FMCG",
+    "fast moving consumer goods": "FMCG", "food": "FMCG", "beverages": "FMCG",
     # ENERGY
     "energy": "ENERGY", "oil": "ENERGY", "gas": "ENERGY", "petroleum": "ENERGY",
     "oil & gas": "ENERGY",
     # METALS
     "metals": "METALS", "mining": "METALS", "steel": "METALS",
-    "metal & mining": "METALS", "metals & mining": "METALS",
+    "metal & mining": "METALS", "metals & mining": "METALS", "basic materials": "METALS",
+    # CAPITAL GOODS
+    "capital goods": "CAPITAL_GOODS", "electricals": "CAPITAL_GOODS", "electrical equipment": "CAPITAL_GOODS",
+    "machinery": "CAPITAL_GOODS", "industrial engineering": "CAPITAL_GOODS", "industrial": "CAPITAL_GOODS",
+    # DEFENCE
+    "defence": "DEFENCE", "defense": "DEFENCE", "aerospace": "DEFENCE", "shipbuilding": "DEFENCE",
+    # CHEMICALS
+    "chemicals": "CHEMICALS", "specialty chemicals": "CHEMICALS", "agrochemicals": "CHEMICALS",
+    # TELECOM
+    "telecom": "TELECOM", "telecommunications": "TELECOM",
+    # REALTY
+    "real estate": "REALTY", "realty": "REALTY",
     # INFRA
     "infra": "INFRA", "infrastructure": "INFRA", "construction": "INFRA",
-    "power": "INFRA", "utilities": "INFRA", "telecom": "INFRA",
+    "power": "INFRA", "utilities": "INFRA", "cement": "INFRA",
     # CONSUMER
-    "consumer discretionary": "CONSUMER", "consumer durables": "CONSUMER",
-    "consumer": "CONSUMER", "paints": "CONSUMER",
+    "consumer discretionary": "CONSUMER", "consumer cyclical": "CONSUMER", "consumer durables": "CONSUMER",
+    "consumer goods": "CONSUMER", "consumer": "CONSUMER", "paints": "CONSUMER",
     # NBFC
     "nbfc": "NBFC", "non banking financial": "NBFC",
     "non-banking financial": "NBFC", "finance": "NBFC",
@@ -86,9 +107,9 @@ def _resolve_sector(sector_raw: str) -> Optional[str]:
     # Exact alias match first
     if lower in _SECTOR_ALIASES:
         return _SECTOR_ALIASES[lower]
-    # Substring search through aliases
-    for alias, canonical in _SECTOR_ALIASES.items():
-        if alias in lower or lower in alias:
+    # Word-boundary match (longest alias first) so "it" never matches "capITal" or "equITies"
+    for alias, canonical in sorted(_SECTOR_ALIASES.items(), key=lambda kv: len(kv[0]), reverse=True):
+        if re.search(rf"(?<![a-z0-9]){re.escape(alias)}(?![a-z0-9])", lower):
             return canonical
     return None
 

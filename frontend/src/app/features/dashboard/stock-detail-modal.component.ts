@@ -267,13 +267,16 @@ import { parseMarkdown } from '../../core/utils/markdown';
 
           <!-- Income Tab -->
           <div class="fin-tab-content" *ngIf="activeFinTab() === 'income'">
-            <div class="stat-row-split" *ngIf="cp.earningsQuality">
+            <div class="stat-row-split" *ngIf="cp.earningsQuality; else incomeUnavailable">
               <span><b>Reported PAT:</b> Rs. {{ cp.earningsQuality.reportedPAT }} Cr</span>
               <span><b>Adjusted PAT:</b> Rs. {{ cp.earningsQuality.adjustedPAT }} Cr</span>
               <span><b>Sustainable PAT:</b> <strong class="text-green">Rs. {{ cp.earningsQuality.sustainablePAT }} Cr</strong></span>
             </div>
+            <ng-template #incomeUnavailable>
+              <div class="stat-line" style="color: #94a3b8;">Income statement earnings quality telemetry unavailable for this ticker.</div>
+            </ng-template>
             <div class="stat-line" style="margin-top: 6px;" *ngIf="cp.governanceGrade">
-              <span><b>Governance Status:</b> <strong [style.color]="cp.governanceGrade === 'SOUND' ? '#34d399' : '#f87171'">{{ cp.governanceGrade }}</strong></span>
+              <span><b>Governance Status:</b> <strong [style.color]="cp.governanceGrade === 'SOUND' ? '#34d399' : (cp.governanceGrade === 'UNAUDITED' ? '#94a3b8' : '#f87171')">{{ cp.governanceGrade }}</strong></span>
               <span *ngIf="cp.promoterHoldingPct != null" style="margin-left: 12px;"><b>Promoter Stake:</b> {{ cp.promoterHoldingPct }}%</span>
               <span *ngIf="cp.promoterPledgePct != null" style="margin-left: 12px;"><b>Pledged:</b> {{ cp.promoterPledgePct }}%</span>
             </div>
@@ -281,28 +284,38 @@ import { parseMarkdown } from '../../core/utils/markdown';
 
           <!-- Balance Sheet Tab -->
           <div class="fin-tab-content" *ngIf="activeFinTab() === 'balance'">
-            <div class="stat-row-split" *ngIf="cp.forensicAnalysis?.solvency_health as solv">
-              <span><b>Total Debt:</b> Rs. {{ solv.total_debt }} Cr</span>
-              <span><b>Total Cash:</b> Rs. {{ solv.total_cash }} Cr</span>
-              <span><b>Net Debt:</b> <strong [style.color]="solv.net_debt <= 0 ? '#34d399' : '#f87171'">Rs. {{ solv.net_debt }} Cr</strong></span>
-            </div>
-            <div class="stat-line" style="margin-top: 6px;" *ngIf="cp.forensicAnalysis?.solvency_health as solv">
-              <span><b>Solvency Rating:</b> <span class="text-sky">{{ solv.solvency_rating }}</span></span>
-              <span style="margin-left: 12px;"><b>Interest Coverage:</b> {{ solv.estimated_interest_coverage }}x</span>
-            </div>
+            <ng-container *ngIf="cp.forensicAnalysis?.solvency_health as solv; else balanceUnavailable">
+              <div class="stat-row-split" *ngIf="solv.total_debt != null && solv.total_cash != null && solv.net_debt != null; else balanceUnavailable">
+                <span><b>Total Debt:</b> Rs. {{ solv.total_debt }} Cr</span>
+                <span><b>Total Cash:</b> Rs. {{ solv.total_cash }} Cr</span>
+                <span><b>Net Debt:</b> <strong [style.color]="solv.net_debt <= 0 ? '#34d399' : '#f87171'">Rs. {{ solv.net_debt }} Cr</strong></span>
+              </div>
+              <div class="stat-line" style="margin-top: 6px;">
+                <span><b>Solvency Rating:</b> <span class="text-sky">{{ solv.solvency_rating || 'UNAUDITED' }}</span></span>
+                <span *ngIf="solv.estimated_interest_coverage != null" style="margin-left: 12px;"><b>Interest Coverage:</b> {{ solv.estimated_interest_coverage }}x</span>
+              </div>
+            </ng-container>
+            <ng-template #balanceUnavailable>
+              <div class="stat-line" style="color: #94a3b8;">Balance sheet solvency statements unavailable for this ticker.</div>
+            </ng-template>
           </div>
 
           <!-- Cash Flow Tab -->
           <div class="fin-tab-content" *ngIf="activeFinTab() === 'cashflow'">
-            <div class="stat-row-split" *ngIf="cp.forensicAnalysis?.cash_conversion as cf">
-              <span><b>CFO:</b> Rs. {{ cf.cfo }} Cr</span>
-              <span><b>Capex:</b> Rs. {{ cf.capex }} Cr</span>
-              <span><b>Free Cash Flow:</b> <strong class="text-green">Rs. {{ cf.fcf }} Cr</strong></span>
-            </div>
-            <div class="stat-line" style="margin-top: 6px;" *ngIf="cp.forensicAnalysis?.cash_conversion as cf">
-              <span><b>CFO / PAT Conversion:</b> <strong [style.color]="cf.cfo_to_pat_ratio >= 0.8 ? '#34d399' : '#f87171'">{{ (cf.cfo_to_pat_ratio * 100).toFixed(0) }}%</strong></span>
-              <span style="margin-left: 12px;"><b>Conversion Status:</b> {{ cf.conversion_status }}</span>
-            </div>
+            <ng-container *ngIf="cp.forensicAnalysis?.cash_conversion as cf; else cfUnavailable">
+              <div class="stat-row-split" *ngIf="cf.cfo != null && cf.capex != null && cf.fcf != null; else cfUnavailable">
+                <span><b>CFO:</b> Rs. {{ cf.cfo }} Cr</span>
+                <span><b>Capex:</b> Rs. {{ cf.capex }} Cr</span>
+                <span><b>Free Cash Flow:</b> <strong class="text-green">Rs. {{ cf.fcf }} Cr</strong></span>
+              </div>
+              <div class="stat-line" style="margin-top: 6px;">
+                <span *ngIf="cf.cfo_to_pat_ratio != null"><b>CFO / PAT Conversion:</b> <strong [style.color]="cf.cfo_to_pat_ratio >= 0.8 ? '#34d399' : '#f87171'">{{ (cf.cfo_to_pat_ratio * 100).toFixed(0) }}%</strong></span>
+                <span [style.margin-left]="cf.cfo_to_pat_ratio != null ? '12px' : '0'"><b>Conversion Status:</b> {{ cf.conversion_status || 'UNAUDITED' }}</span>
+              </div>
+            </ng-container>
+            <ng-template #cfUnavailable>
+              <div class="stat-line" style="color: #94a3b8;">Cash flow conversion statements unavailable for this ticker.</div>
+            </ng-template>
           </div>
         </div>
 
@@ -781,6 +794,11 @@ import { parseMarkdown } from '../../core/utils/markdown';
 export class StockDetailModalComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('chartCanvas', { static: false }) canvasRef!: ElementRef<HTMLCanvasElement>;
 
+  @HostListener('window:keydown.escape')
+  onEscapeKey(): void {
+    this.closeModal();
+  }
+
   @HostListener('window:resize')
   onResize(): void {
     // Redraw chart if canvas is ready
@@ -848,10 +866,10 @@ export class StockDetailModalComponent implements OnInit, AfterViewInit, OnDestr
     return {
       ticker: s?.symbol,
       name: s?.name,
-      governanceGrade: gov.governance_grade || 'SOUND',
-      promoterHoldingPct: gov.promoter_holding_pct,
-      promoterPledgePct: gov.pledge_risk === 'HIGH' ? 25.0 : 0.0,
-      earningsQuality: eq ? {
+      governanceGrade: gov.governance_grade || 'UNAUDITED',
+      promoterHoldingPct: gov.promoter_holding_pct ?? null,
+      promoterPledgePct: gov.promoter_pledge_pct ?? null,
+      earningsQuality: (eq && eq.reported_pat != null) ? {
         reportedPAT: eq.reported_pat,
         adjustedPAT: eq.adjusted_pat,
         sustainablePAT: eq.sustainable_pat

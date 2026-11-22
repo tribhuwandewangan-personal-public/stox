@@ -177,12 +177,11 @@ def build_quick_picks_section(symbols_list: list, results_dict: dict, cache_mgr)
             risk_pct = risk / _lp
             reward_pct = reward / _lp
 
-            # Hardened Quick Picks Risk Management:
-            # 1. Reject fragile/tight stops (< 3.2% risk gets noise-stopped) and wide stops (> 8.5%)
-            if risk_pct < 0.032 or risk_pct > 0.085:
+            # Hardened Quick Picks Risk Management (ATR-adaptive swing stop range):
+            if risk_pct < 0.014 or risk_pct > 0.125:
                 continue
-            # 2. Reject insufficient upside (< 5.5%)
-            if reward_pct < 0.055:
+            # 2. Reject insufficient upside (< 3.5%)
+            if reward_pct < 0.035:
                 continue
 
             rr     = round(reward / risk, 2)
@@ -196,7 +195,7 @@ def build_quick_picks_section(symbols_list: list, results_dict: dict, cache_mgr)
             if rr > 10.0:
                 continue
         except Exception:
-            upside = "N/A"
+            continue
 
         # Check institutional flow if available
         flow_str = "Neutral"

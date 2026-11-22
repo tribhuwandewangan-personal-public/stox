@@ -36,11 +36,12 @@ from tools.web_security import (LOOPBACK_NAMES, valid_symbol, host_header_ok, po
 from tools.outcome_tracker import compute_accuracy
 from tools.scheduler import Scheduler
 from tools.symbol_search_tools import search_internet_symbols, add_symbol_to_json, remove_symbol_from_json
+from agents.macro_sentinel import BackgroundMacroSentinel
 from api.services import (
     safe_json_dumps, get_all_stock_data, get_stocks_response_body, get_history_response_body,
-    get_top_pattern_picks, _load_symbols_list, NaNSafeEncoder, SYNTH_AGENT, TECH_AGENT, HIST_AGENT,
-    NEWS_AGENT, RISK_AGENT, FUND_AGENT, STALE_SYNTH_HOURS, STOCKS_CACHE_SECONDS, _stocks_lock,
-    _stocks_cache, _pattern_memo
+    get_top_pattern_picks, _load_symbols_list, load_active_monitored_symbols, NaNSafeEncoder,
+    SYNTH_AGENT, TECH_AGENT, HIST_AGENT, NEWS_AGENT, RISK_AGENT, FUND_AGENT, STALE_SYNTH_HOURS,
+    STOCKS_CACHE_SECONDS, _stocks_lock, _stocks_cache, _pattern_memo
 )
 from tools import events_bus
 
@@ -53,7 +54,7 @@ events_engine = EventsEngine(cache_manager=cache_mgr)
 quote_service = QuoteService(cache_mgr, sources=QUOTE_SOURCES)
 quote_poller = QuotePoller(
     quote_service,
-    symbols_loader=lambda: [x.get("symbol", "").upper() for x in _load_symbols_list() if x.get("symbol")],
+    symbols_loader=lambda: [x["symbol"] for x in load_active_monitored_symbols()],
     poll_seconds=QUOTE_POLL_SECONDS,
 )
 _workflow_instance = None
@@ -343,7 +344,10 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
         elif path.startswith("/api/history"):
             query = urllib.parse.parse_qs(parsed_path.query)
             sym = query.get("symbol", [""])[0].upper().strip()
-            if sym and not valid_symbol(sym):
+            if not sym:
+                self._send_json(400, {"error": "Missing symbol", "candles": []})
+                return
+            if not valid_symbol(sym):
                 self._send_json(400, {"error": "Invalid symbol", "candles": []})
                 return
             raw_days = query.get("days", ["90"])[0]
@@ -353,15 +357,11 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                 days = 90
 
             try:
-                if sym:
-                    body = get_history_response_body(sym, days, cache_mgr, tech_engine)
-                else:
-                    body = safe_json_dumps({"error": "Missing symbol", "candles": []})
+                body = get_history_response_body(sym, days, cache_mgr, tech_engine)
+                self._send_json(200, body)
             except Exception as e:
                 print(f"Error fetching chart data for {sym}: {e}", flush=True)
-                body = safe_json_dumps({"symbol": sym, "candles": [], "error": str(e)})
-
-            self._send_json(200, body)
+                self._send_json(500, {"symbol": sym, "candles": [], "error": str(e)})
             return
 
         elif path.startswith("/api/events"):
@@ -397,64 +397,20 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                 from tools.kite_portfolio import KitePortfolioEngine
                 port_engine = KitePortfolioEngine(cache_manager=cache_mgr)
                 data = port_engine.evaluate_portfolio()
-                body = safe_json_dumps(data)
+                self._send_json(200, safe_json_dumps(data))
             except Exception as e:
-                body = safe_json_dumps({"error": str(e), "summary": {}, "holdings": []})
-            self._send_json(200, body)
+                self._send_json(500, {"error": str(e), "summary": {}, "holdings": []})
             return
 
         elif path.startswith("/api/fundamental-picks"):
             try:
-                from tools.fundamental_picks import score_fundamental_pick
-                from api.services import _load_symbols_list
-                symbols_list = _load_symbols_list()
-                SYNTH_AGENT_NAME = "Master Prediction Synthesizer Agent"
-                TECH_AGENT_NAME  = "Technical Analysis Agent"
-                picks = []
-                for item in symbols_list:
-                    sym   = item.get("symbol", "").upper()
-                    cname = item.get("name", "")
-                    sec   = item.get("sector", "")
-                    synth_res = cache_mgr.get_latest_agent_output(sym, SYNTH_AGENT_NAME, max_age_hours=168)
-                    if not synth_res:
-                        synth_res = cache_mgr.get_latest_agent_output(sym, SYNTH_AGENT_NAME, max_age_hours=None)
-                    if not synth_res:
-                        continue
-                    tech_res = cache_mgr.get_latest_agent_output(sym, TECH_AGENT_NAME, max_age_hours=168)
-                    fund_res = cache_mgr.get_latest_agent_output(sym, "Fundamental Analyst Agent", max_age_hours=168)
-                    if not fund_res:
-                        fund_res = cache_mgr.get_latest_agent_output(sym, "Fundamental Analyst Agent", max_age_hours=None)
-
-                    # Compute 52W metrics from cached candles if missing
-                    raw_tech = (tech_res or {}).get("raw_indicators", {})
-                    if raw_tech.get("pct_from_52w_high") is None:
-                        try:
-                            c_list = cache_mgr.get_cached_candles(sym, limit_days=260)
-                            if c_list:
-                                h_max = max(float(c.get("HIGH_PRICE") or c.get("CLOSE_PRICE") or 0.0) for c in c_list)
-                                p_now = float(c_list[-1].get("CLOSE_PRICE") or 0.0)
-                                if h_max > 0 and p_now > 0:
-                                    if not tech_res:
-                                        tech_res = {"raw_indicators": {}}
-                                    tech_res.setdefault("raw_indicators", {})
-                                    tech_res["raw_indicators"]["pct_from_52w_high"] = round((p_now - h_max) / h_max * 100, 2)
-                                    tech_res["raw_indicators"]["high_52w"] = round(h_max, 2)
-                                    tech_res["raw_indicators"]["last_price"] = p_now
-                        except Exception:
-                            pass
-
-                    pick = score_fundamental_pick(sym, synth_res, tech_res, fund_res=fund_res)
-                    if pick is None:
-                        continue
-                    pick["company"] = cname
-                    pick["sector"]  = sec
-                    picks.append(pick)
-                picks.sort(key=lambda x: x["score"], reverse=True)
-                top10 = picks[:10]
-                body = safe_json_dumps({"picks": top10, "count": len(top10), "universe": len(symbols_list)})
+                from api.services import get_fundamental_picks_data
+                query = urllib.parse.parse_qs(parsed_path.query)
+                universe = query.get("universe", ["curated"])[0].lower().strip()
+                data = get_fundamental_picks_data(cache_mgr, universe=universe)
+                self._send_json(200, safe_json_dumps(data))
             except Exception as e:
-                body = safe_json_dumps({"error": str(e), "picks": [], "count": 0})
-            self._send_json(200, body)
+                self._send_json(500, {"error": str(e), "picks": [], "count": 0})
             return
 
         elif path.startswith("/api/macro-risk-shield"):
@@ -477,16 +433,15 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                     pass
 
                 shield_data = build_macro_risk_shield(sentiment, holdings)
-                body = safe_json_dumps(shield_data)
+                self._send_json(200, safe_json_dumps(shield_data))
             except Exception as e:
-                body = safe_json_dumps({"error": str(e), "risk_key": "ELEVATED", "risk_label": "🟡 ELEVATED"})
-            self._send_json(200, body)
+                self._send_json(500, {"error": str(e), "risk_key": "UNAVAILABLE", "risk_label": "⚪ UNAVAILABLE"})
             return
 
         elif path.startswith("/api/company/"):
             ticker = path.split("/api/company/")[1].split("/")[0].split("?")[0].upper().strip()
             if not ticker or not valid_symbol(ticker):
-                self._send_json(400, safe_json_dumps({"error": "Invalid ticker"}))
+                self._send_json(400, {"error": "Invalid ticker"})
                 return
             try:
                 from tools.forensic_financial_engine import ForensicFinancialEngine
@@ -495,46 +450,54 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                 gov = analysis.get("governance_telemetry", {})
                 eq = analysis.get("earnings_quality", {})
 
+                exc_amt = eq.get("exceptional_items")
+                exc_items = [
+                    {
+                        "description": "Exceptional Items",
+                        "amount": exc_amt,
+                        "type": "income" if exc_amt >= 0 else "expense",
+                        "category": "Other",
+                    }
+                ] if (exc_amt is not None and exc_amt != 0.0) else []
+
                 company_data = {
                     "ticker": ticker,
                     "exchange": "NSE",
                     "name": analysis.get("company_name", ticker),
                     "sector": analysis.get("sector", "N/A"),
                     "promoterHoldingPct": gov.get("promoter_holding_pct"),
-                    "promoterPledgePct": 0.0 if gov.get("pledge_risk") == "LOW" else 25.0,
+                    "promoterPledgePct": gov.get("promoter_pledge_pct"),
                     "auditRiskScore": gov.get("audit_risk_score"),
-                    "governanceGrade": gov.get("governance_grade", "SOUND"),
+                    "governanceGrade": gov.get("governance_grade", "UNAUDITED"),
                     "earningsQuality": {
-                        "reportedPAT": eq.get("reported_pat", 0.0),
-                        "adjustedPAT": eq.get("adjusted_pat", 0.0),
-                        "sustainablePAT": eq.get("sustainable_pat", 0.0),
-                        "exceptionalItems": [],
+                        "reportedPAT": eq.get("reported_pat"),
+                        "adjustedPAT": eq.get("adjusted_pat"),
+                        "sustainablePAT": eq.get("sustainable_pat"),
+                        "exceptionalItems": exc_items,
                         "redFlag": eq.get("quality_grade") in ("SEVERELY_DISTORTED", "MODERATELY_DISTORTED")
                     },
                     "forensicAnalysis": analysis
                 }
-                body = safe_json_dumps(company_data)
+                self._send_json(200, safe_json_dumps(company_data))
             except Exception as e:
-                body = safe_json_dumps({"error": str(e), "ticker": ticker})
-            self._send_json(200, body)
+                self._send_json(500, {"error": str(e), "ticker": ticker})
             return
 
         elif path.startswith("/api/earnings/"):
             ticker = path.split("/api/earnings/")[1].split("/")[0].split("?")[0].upper().strip()
             if not ticker or not valid_symbol(ticker):
-                self._send_json(400, safe_json_dumps({"error": "Invalid ticker"}))
+                self._send_json(400, {"error": "Invalid ticker"})
                 return
             try:
                 from tools.forensic_financial_engine import ForensicFinancialEngine
                 forensic_engine = ForensicFinancialEngine(cache_manager=cache_mgr)
                 analysis = forensic_engine.analyze_company(ticker)
                 eq = analysis.get("earnings_quality", {})
-                exc_amt = eq.get("exceptional_items", 0.0)
-
+                exc_amt = eq.get("exceptional_items")
                 earnings_data = {
-                    "reportedPAT": eq.get("reported_pat", 0.0),
-                    "adjustedPAT": eq.get("adjusted_pat", 0.0),
-                    "sustainablePAT": eq.get("sustainable_pat", 0.0),
+                    "reportedPAT": eq.get("reported_pat"),
+                    "adjustedPAT": eq.get("adjusted_pat"),
+                    "sustainablePAT": eq.get("sustainable_pat"),
                     "exceptionalItems": [
                         {
                             "description": "Exceptional Items",
@@ -542,12 +505,11 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                             "type": "income" if exc_amt >= 0 else "expense",
                             "category": "Other"
                         }
-                    ] if exc_amt != 0.0 else []
+                    ] if (exc_amt is not None and exc_amt != 0.0) else []
                 }
-                body = safe_json_dumps(earnings_data)
+                self._send_json(200, safe_json_dumps(earnings_data))
             except Exception as e:
-                body = safe_json_dumps({"error": str(e), "ticker": ticker})
-            self._send_json(200, body)
+                self._send_json(500, {"error": str(e), "ticker": ticker})
             return
 
         elif path.startswith("/api/financial/"):
@@ -555,7 +517,7 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
             ticker = parts[0].split("?")[0].upper().strip() if len(parts) > 0 else ""
             statement_type = parts[1].split("?")[0].lower().strip() if len(parts) > 1 else "income"
             if not ticker or not valid_symbol(ticker):
-                self._send_json(400, safe_json_dumps({"error": "Invalid ticker"}))
+                self._send_json(400, {"error": "Invalid ticker"})
                 return
             try:
                 from tools.forensic_financial_engine import ForensicFinancialEngine
@@ -585,22 +547,22 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                 else:  # income
                     statements = [{
                         "period": "LTM",
-                        "revenue": cf.get("revenue_growth_pct"),
+                        "revenue": eq.get("revenue"),
+                        "revenueGrowthPct": cf.get("revenue_growth_pct"),
                         "reportedPAT": eq.get("reported_pat"),
                         "exceptionalItems": eq.get("exceptional_items"),
                         "sustainablePAT": eq.get("sustainable_pat")
                     }]
-                body = safe_json_dumps(statements)
+                self._send_json(200, safe_json_dumps(statements))
             except Exception as e:
-                body = safe_json_dumps({"error": str(e), "ticker": ticker})
-            self._send_json(200, body)
+                self._send_json(500, {"error": str(e), "ticker": ticker})
             return
 
         elif path.startswith("/api/forensic-recommendation") or path.startswith("/api/recommendation"):
             query = urllib.parse.parse_qs(parsed_path.query)
             sym = query.get("symbol", [""])[0].upper().strip()
-            if sym and not valid_symbol(sym):
-                self._send_json(400, {"error": "Invalid symbol"})
+            if not sym or not valid_symbol(sym):
+                self._send_json(400, {"error": "Missing or invalid symbol"})
                 return
 
             price_str = query.get("price", [""])[0].strip()
@@ -614,14 +576,10 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
             try:
                 from tools.forensic_financial_engine import ForensicFinancialEngine
                 forensic_engine = ForensicFinancialEngine(cache_manager=cache_mgr)
-                if sym:
-                    data = forensic_engine.analyze_company(sym, price_override=price_val)
-                else:
-                    data = {"error": "Missing symbol parameter"}
-                body = safe_json_dumps(data)
+                data = forensic_engine.analyze_company(sym, price_override=price_val)
+                self._send_json(200, safe_json_dumps(data))
             except Exception as e:
-                body = safe_json_dumps({"error": str(e), "symbol": sym, "verdict": "ERROR"})
-            self._send_json(200, body)
+                self._send_json(500, {"error": str(e), "symbol": sym, "verdict": "ERROR"})
             return
 
         elif path.startswith("/api/market-scanner"):
@@ -630,19 +588,22 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                 cached = get_latest_cached_scan()
                 if not cached.get("stocks"):
                     threading.Thread(target=run_market_scan, kwargs={"max_scan_count": 25, "top_n": 10}, daemon=True).start()
-                body = safe_json_dumps(cached)
+                self._send_json(200, safe_json_dumps(cached))
             except Exception as e:
-                body = safe_json_dumps({"error": str(e), "stocks": []})
-            self._send_json(200, body)
+                self._send_json(500, {"error": str(e), "stocks": []})
             return
 
         elif path == "/api/patterns/top" or path == "/api/pattern-screener":
             try:
-                picks = get_top_pattern_picks(cache_mgr, tech_engine)
-                body = safe_json_dumps({"count": len(picks), "picks": picks})
+                query = urllib.parse.parse_qs(parsed_path.query)
+                try:
+                    min_upside = float(query.get("min_upside", ["0"])[0])
+                except (ValueError, TypeError):
+                    min_upside = 0.0
+                picks = get_top_pattern_picks(cache_mgr, tech_engine, min_upside=min_upside)
+                self._send_json(200, safe_json_dumps({"count": len(picks), "picks": picks}))
             except Exception as e:
-                body = safe_json_dumps({"error": str(e), "picks": []})
-            self._send_json(200, body)
+                self._send_json(500, {"error": str(e), "picks": []})
             return
 
         elif path == "/" or path == "/index.html":
@@ -853,11 +814,12 @@ def start_dashboard_server(port=None, open_browser=True):
         Scheduler(
             cache_mgr,
             workflow_getter=get_workflow,
-            symbols_loader=_load_symbols_list,
+            symbols_loader=load_active_monitored_symbols,
             max_workers=MAX_SYMBOL_WORKERS,
             on_symbol_done=queue_mgr.mark_completed,
         ).start()
-        print("🗓️ [Scheduler] Auto-schedule ON (pre-market refresh 08:45 IST, post-close analysis 16:00 IST). "
+        BackgroundMacroSentinel(cache_mgr).start()
+        print("🗓️ [Scheduler] Auto-schedule ON (pre-market refresh 08:45 IST, post-close analysis 16:00 IST) + MacroSentinel. "
               "Disable with AUTO_SCHEDULE=0.", flush=True)
     for p in [port, port + 1, port + 2]:
         try:

@@ -178,6 +178,14 @@ export class ApiService {
     const params = minUpside > 0 ? `?min_upside=${minUpside}` : '';
     return fetchJson<PatternPicksResponse>(`/patterns/top${params}`);
   }
+
+  /**
+   * GET /api/fundamental-picks: Top 10 fundamental compounders scored on 8 dimensions.
+   */
+  static getFundamentalPicks(universe: string = 'curated'): Promise<any> {
+    const params = universe && universe !== 'curated' ? `?universe=${encodeURIComponent(universe)}` : '';
+    return fetchJson<any>(`/fundamental-picks${params}`);
+  }
 }
 
 export const apiService = ApiService;

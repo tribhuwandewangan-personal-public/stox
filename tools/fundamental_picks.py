@@ -24,14 +24,26 @@ Eligibility gate (ALL must pass):
 """
 
 from __future__ import annotations
+import re
 from typing import Any
+
+_BFSI_RE = re.compile(
+    r"\b(bank|banking|nbfc|financial services|insurance|housing finance|microfinance|capital markets|fintech)\b",
+    re.I,
+)
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
-def score_fundamental_pick(sym: str, synth_res: dict, tech_res: dict | None, fund_res: dict | None = None) -> dict | None:
+def score_fundamental_pick(
+    sym: str,
+    synth_res: dict,
+    tech_res: dict | None,
+    fund_res: dict | None = None,
+    sector: str = "",
+) -> dict | None:
     """
     Score one stock for the Fundamental Picks table.
 
@@ -71,19 +83,30 @@ def score_fundamental_pick(sym: str, synth_res: dict, tech_res: dict | None, fun
     last_price    = _safe_float(synth_res.get("last_price") or tech_out.get("last_price"))
     upcoming_ev   = str(sig.get("upcoming_events_note") or "").lower()
 
-    # ── Eligibility gates ────────────────────────────────────────────────────
-    is_overvalued = any(x in val_text for x in ("overvalued", "high premium", "expensive"))
-    if is_overvalued and (peg_raw is None or peg_raw >= 1.0):
-        return None                               # overvalued without compelling PEG
-
-    if pct52w is not None and pct52w >= -3.0:
-        return None                               # too close to 52W high — not a right-time entry
-
-    # Forensic Due-Diligence Gate: Disqualify value traps, distorted earnings, or distressed leverage
+    # Forensic Due-Diligence Gate & Valuation metrics (needed prior to 52W breakout check)
     forensic = (fund_res or {}).get("forensic_analysis") or {}
     forensic_verdict = str((fund_res or {}).get("forensic_verdict") or forensic.get("verdict") or "").upper()
     if forensic_verdict in ("AVOID_OR_VALUE_TRAP", "HIGH_RISK_DISTRESSED", "AVOID_OVERVALUED"):
         return None
+
+    fair_value = _safe_float(forensic.get("fair_value") or forensic.get("valuation_metrics", {}).get("intrinsic_fair_value"))
+    mos_pct = _safe_float(forensic.get("margin_of_safety_pct") or forensic.get("valuation_metrics", {}).get("margin_of_safety_pct"))
+    if mos_pct is None and fair_value is not None and last_price is not None and last_price > 0:
+        mos_pct = round(((fair_value - last_price) / last_price) * 100.0, 2)
+
+    is_overvalued = any(x in val_text for x in ("overvalued", "high premium", "expensive"))
+    if is_overvalued and (peg_raw is None or peg_raw >= 1.0):
+        return None                               # overvalued without compelling PEG
+
+    is_52w_breakout_leader = False
+    if pct52w is not None and pct52w >= -3.0:
+        if (peg_raw is not None and 0 < peg_raw <= 1.5) or (mos_pct is not None and mos_pct >= 10.0):
+            is_52w_breakout_leader = True
+        else:
+            return None                           # expensive/non-GARP chasing near 52W high
+
+    eff_sector = str(sector or fund_raw.get("sector") or forensic.get("sector") or "")
+    is_bfsi = bool(_BFSI_RE.search(eff_sector))
 
     # ── Score ─────────────────────────────────────────────────────────────────
     score = 0
@@ -115,11 +138,6 @@ def score_fundamental_pick(sym: str, synth_res: dict, tech_res: dict | None, fun
             score -= 8
 
     # 1b. Intrinsic Fair Value & Margin of Safety (DCF / Sustainable Core Valuation)
-    fair_value = _safe_float(forensic.get("fair_value") or forensic.get("valuation_metrics", {}).get("intrinsic_fair_value"))
-    mos_pct = _safe_float(forensic.get("margin_of_safety_pct") or forensic.get("valuation_metrics", {}).get("margin_of_safety_pct"))
-    if mos_pct is None and fair_value is not None and last_price is not None and last_price > 0:
-        mos_pct = round(((fair_value - last_price) / last_price) * 100.0, 2)
-
     if mos_pct is not None:
         if mos_pct >= 25.0:
             score += 15
@@ -137,21 +155,28 @@ def score_fundamental_pick(sym: str, synth_res: dict, tech_res: dict | None, fun
             score -= 6
 
     # 2. Balance sheet quality
-    if "net cash" in net_cash_flag or "positive" in net_cash_flag or "debt-free" in net_cash_flag:
+    if is_bfsi:
+        # Banks/NBFCs carry deposits/borrowings as operating funding; D/E is inapplicable
+        pass
+    elif "net cash" in net_cash_flag or "positive" in net_cash_flag or "debt-free" in net_cash_flag:
         score += 15; reasons.append("Net Cash / Debt-Free")
-    elif "low" in net_cash_flag or "minimal" in net_cash_flag:
+    elif "low" in net_cash_flag or "minimal" in net_cash_flag or "virtually debt-free" in net_cash_flag:
         score += 8; reasons.append("Low Debt")
+    elif "high leverage" in net_cash_flag:
+        score -= 15; reasons.append("High Leverage")
     elif de_raw is not None:
-        if de_raw <= 0.3:
-            score += 12; reasons.append("Strong B/S (D/E ≤0.3)")
-        elif de_raw <= 0.8:
+        # yfinance returns debtToEquity as a percentage (e.g. 25.0 = 0.25x); normalize to ratio
+        de_ratio = (de_raw / 100.0) if ("net debt" in net_cash_flag or de_raw > 5.0) else de_raw
+        if de_ratio <= 0.3:
+            score += 12; reasons.append(f"Strong B/S (D/E {de_ratio:.2f}x)")
+        elif de_ratio <= 0.8:
             score += 6
-        elif de_raw <= 1.5:
+        elif de_ratio <= 1.5:
             score += 0
-        elif de_raw <= 2.0:
+        elif de_ratio <= 2.0:
             score -= 5
         else:
-            score -= 15; reasons.append(f"High D/E {de_raw:.1f}x")
+            score -= 15; reasons.append(f"High D/E {de_ratio:.1f}x")
 
     # 3. Valuation label
     if any(x in val_text for x in ("undervalued", "deeply undervalued")):
@@ -161,8 +186,10 @@ def score_fundamental_pick(sym: str, synth_res: dict, tech_res: dict | None, fun
     elif is_overvalued:
         score -= 15                               # rare — only reaches here if PEG < 1.0 overrode gate
 
-    # 4. 52W timing window  (sweet spot: −5% to −25% below peak)
-    if pct52w is not None:
+    # 4. 52W timing window  (sweet spot: −5% to −25% below peak, or GARP/Value 52W Breakout Leader)
+    if is_52w_breakout_leader:
+        score += 5; reasons.append(f"52W Breakout Leader ({pct52w:.1f}% off peak)")
+    elif pct52w is not None:
         if -20.0 <= pct52w <= -5.0:
             score += 15; reasons.append(f"Sweet Timing ({pct52w:.1f}% off peak)")
         elif -35.0 <= pct52w < -20.0:
@@ -195,8 +222,8 @@ def score_fundamental_pick(sym: str, synth_res: dict, tech_res: dict | None, fun
     elif "SELL" in lt_verdict:
         score -= 10
 
-    # 7. Liquidity coverage ratio
-    if cr_raw is not None:
+    # 7. Liquidity coverage ratio (skip for BFSI)
+    if cr_raw is not None and not is_bfsi:
         if cr_raw >= 2.0:
             score += 5; reasons.append(f"Strong Liquidity (CR {cr_raw:.1f})")
         elif cr_raw >= 1.5:
@@ -304,7 +331,7 @@ def build_fundamental_picks_section(symbols_list: list, results_dict: dict, cach
         if not fund_res and cache_mgr:
             fund_res = cache_mgr.get_latest_agent_output(sym, "Fundamental Analyst Agent", max_age_hours=None)
 
-        pick = score_fundamental_pick(sym, synth_res, tech_res, fund_res=fund_res)
+        pick = score_fundamental_pick(sym, synth_res, tech_res, fund_res=fund_res, sector=sec)
         if pick is None:
             continue
 

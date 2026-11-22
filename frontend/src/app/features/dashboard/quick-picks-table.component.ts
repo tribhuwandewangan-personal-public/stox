@@ -78,7 +78,7 @@ interface QuickPickRow {
             </table>
           </div>
           <div class="qp-tip">
-            💡 <strong>How to use:</strong> Place limit buy at the <em>lower end</em> of Entry Range. Stop loss is non-negotiable. Best R:R stocks listed first — on busy days, start from row #1.
+            💡 <strong>Advisory Notice:</strong> Rule-based R:R shortlist for educational analysis only (not financial advice). Verify entry range and invalidation stop loss before making any independent decision; list is ordered by R:R ratio.
           </div>
         </div>
       </div>
@@ -248,9 +248,9 @@ export class QuickPicksTableComponent {
       const verdict = (synth.action_verdict || '').toUpperCase();
       const confRaw = (synth.confidence_rating || '').toUpperCase();
 
-      if (!verdict.includes('BUY') && !verdict.includes('ACCUMULATE')) continue;
+      if ((!verdict.includes('BUY') && !verdict.includes('ACCUMULATE')) || !confRaw.includes('HIGH')) continue;
 
-      const lp = Number(tech.last_price || s.price_info?.price || 0);
+      const lp = Number(s.price_info?.price || tech.last_price || 0);
       const tgtRaw = (synth.when_to_sell_target || '').replace(/Rs\.?\s*/i, '').replace(/,/g, '').split('-')[0].trim();
       const slRaw = (synth.stop_loss || '').replace(/Rs\.?\s*/i, '').replace(/,/g, '').trim();
       const tgt = parseFloat(tgtRaw) || Number(synth.target_num || 0);
@@ -259,14 +259,18 @@ export class QuickPicksTableComponent {
       if (lp > 0 && sl > 0 && sl < lp && tgt > lp) {
         const risk = lp - sl;
         const reward = tgt - lp;
+        const riskPct = risk / lp;
+        const rewardPct = reward / lp;
         const rr = Math.round((reward / risk) * 10) / 10;
-        const upside = '+' + ((tgt - lp) / lp * 100).toFixed(1) + '%';
-        const pattern = s.patterns?.[0]?.name || synth.chart_patterns || 'High Conviction Trend';
+        if (riskPct < 0.014 || riskPct > 0.125 || rewardPct < 0.035 || rr < 1.8 || rr > 10.0) continue;
+        const upside = '+' + (rewardPct * 100).toFixed(1) + '%';
+        const rawPattern = (synth.chart_patterns || '').trim();
+        const pattern = s.patterns?.[0]?.name || (rawPattern && rawPattern !== 'N/A' ? rawPattern : '—');
 
         list.push({
           symbol: s.symbol,
           last_price: lp,
-          entry_range: synth.when_to_buy_entry || `Rs. ${fmtPrice(lp * 0.98)} - ${fmtPrice(lp * 1.01)}`,
+          entry_range: synth.when_to_buy_entry || `${fmtPrice(lp * 0.98)} - ${fmtPrice(lp * 1.01).replace(/^Rs\.\s*/, '')}`,
           target: tgt,
           stop_loss: sl,
           upside,

@@ -148,11 +148,11 @@ export class BulletinComponent {
       return b;
     }
     if (typeof b === 'string') {
-      return { summary: b, sentiment_label: 'Bullish' };
+      return { summary: b, sentiment_label: 'Neutral' };
     }
     return {
-      summary: 'Global macro backdrop is Favorable for Indian equities. Aggregating telemetry...',
-      sentiment_label: 'Bullish'
+      summary: 'Macro bulletin unavailable or awaiting latest market telemetry.',
+      sentiment_label: 'Neutral'
     };
   });
 

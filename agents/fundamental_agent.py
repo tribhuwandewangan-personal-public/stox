@@ -40,8 +40,10 @@ class FundamentalAgent:
         self.events_engine = events_engine or EventsEngine(cache_manager=self.cache_manager)
         self.forensic_engine = forensic_engine or ForensicFinancialEngine(cache_manager=self.cache_manager)
 
-    def run(self, symbol: str) -> Dict[str, Any]:
+    def run(self, symbol: str, sector: str = "") -> Dict[str, Any]:
         fund_data = self.fund_engine.get_fundamental_metrics(symbol)
+        if sector and not fund_data.get("sector"):
+            fund_data["sector"] = sector
         events_data = self.events_engine.fetch_stock_events(symbol)
         
         # Detect order book / contract pipeline from news or corporate events
@@ -67,7 +69,7 @@ class FundamentalAgent:
         events_summary = f"{earnings_part} | Dividend: {div_amt} (Ex-Date: {div_dt}) | Catalyst: {corp_action}"
         # Forensic due diligence & earnings quality audit
         try:
-            forensic_res = self.forensic_engine.analyze_company(symbol)
+            forensic_res = self.forensic_engine.analyze_company(symbol, sector_override=sector or None)
         except Exception as e:
             forensic_res = {"verdict": "UNAUDITED", "red_flags": [], "verdict_badge": "⚪ UNAUDITED", "error": str(e)}
 

@@ -42,6 +42,9 @@ STOCKS_CACHE_SECONDS = 30       # /api/stocks response is rebuilt at least this 
 _stocks_lock = threading.Lock()
 _stocks_cache = {}
 _pattern_memo = {}              # (symbol, newest candle date) -> detected patterns
+_pattern_memo_lock = threading.Lock()
+_symbols_cache: Dict[str, Dict[str, Any]] = {}
+_symbols_cache_lock = threading.Lock()
 
 
 # ===================================================================================== Utilities
@@ -86,7 +89,7 @@ def safe_json_dumps(obj) -> bytes:
 
 
 def _load_symbols_list(universe: str = "curated"):
-    """Load the list of symbols from curated symbols.json, midcap 250, or all NSE."""
+    """Load and mtime-cache symbols list from curated symbols.json, midcap 250, or all NSE."""
     target_path = SYMBOLS_FILE_PATH
     if universe == "midcap250":
         target_path = MIDCAP_250_SYMBOLS_FILE_PATH
@@ -97,11 +100,60 @@ def _load_symbols_list(universe: str = "curated"):
         target_path = SYMBOLS_FILE_PATH
 
     try:
+        mtime = os.path.getmtime(target_path)
+    except OSError:
+        return []
+
+    with _symbols_cache_lock:
+        hit = _symbols_cache.get(target_path)
+        if hit and hit.get("mtime") == mtime:
+            return list(hit["data"])
+
+    try:
         with open(target_path, "r", encoding="utf-8") as f:
-            return json.load(f).get("symbols", [])
+            data = json.load(f).get("symbols", [])
+        with _symbols_cache_lock:
+            _symbols_cache[target_path] = {"mtime": mtime, "data": data}
+        return list(data)
     except Exception as e:
         print(f"⚠️ [Services] Could not parse {target_path}: {e}", flush=True)
         return []
+
+
+def load_active_monitored_symbols(
+    include_midcap: bool = True,
+    include_holdings: bool = True,
+) -> List[Dict[str, Any]]:
+    """
+    Deduplicated active universe for QuotePoller & Scheduler:
+    curated symbols.json + Midcap 250 + local Kite holdings snapshot (if present).
+    """
+    seen: Dict[str, Dict[str, Any]] = {}
+    for item in _load_symbols_list("curated"):
+        sym = str(item.get("symbol") or "").upper().strip()
+        if sym and sym not in seen:
+            seen[sym] = dict(item, symbol=sym)
+
+    if include_midcap and os.path.exists(MIDCAP_250_SYMBOLS_FILE_PATH):
+        for item in _load_symbols_list("midcap250"):
+            sym = str(item.get("symbol") or "").upper().strip()
+            if sym and sym not in seen:
+                seen[sym] = dict(item, symbol=sym)
+
+    if include_holdings:
+        holdings_path = os.path.join(PROJECT_ROOT, "storage", "my_holdings.json")
+        if os.path.exists(holdings_path):
+            try:
+                with open(holdings_path, "r", encoding="utf-8") as f:
+                    h_data = json.load(f)
+                h_list = h_data.get("holdings", []) if isinstance(h_data, dict) else []
+                for h in h_list:
+                    sym = str(h.get("symbol") or "").upper().strip()
+                    if sym and sym not in seen:
+                        seen[sym] = {"symbol": sym, "name": sym, "sector": ""}
+            except Exception:
+                pass
+    return list(seen.values())
 
 
 # ===================================================================================== Service Functions
@@ -109,36 +161,44 @@ def _load_symbols_list(universe: str = "curated"):
 def _patterns_from_cached_candles(sym, cache_mgr, tech_engine):
     """
     Chart patterns for a symbol that has no stored analysis yet. Uses stored candles only (never the network)
-    and is computed at most once per symbol per new candle.
+    and is computed at most once per symbol per new candle (thread-safe).
     """
     last_date = cache_mgr.get_latest_candle_date(sym)
     if not last_date:
         return []
     key = (sym, last_date)
-    if key in _pattern_memo:
-        return _pattern_memo[key]
+    with _pattern_memo_lock:
+        if key in _pattern_memo:
+            return _pattern_memo[key]
     try:
         df = tech_engine._load_cached_df(sym).tail(90).reset_index(drop=True)
         patterns = tech_engine.detect_chart_patterns(df) if not df.empty else []
     except Exception:
         patterns = []
-    for stale_key in [k for k in _pattern_memo if k[0] == sym]:
-        del _pattern_memo[stale_key]
-    _pattern_memo[key] = patterns
+    with _pattern_memo_lock:
+        for stale_key in [k for k in _pattern_memo if k[0] == sym]:
+            del _pattern_memo[stale_key]
+        _pattern_memo[key] = patterns
     return patterns
 
 
 def get_all_stock_data(cache_mgr, queue_mgr, hist_engine, tech_engine, events_engine, universe: str = "curated"):
     """
     Assemble the complete stock data for all symbols: latest analysis, queue status, patterns, events, sparklines.
-    Called by GET /api/stocks and via WebSocket snapshot.
+    Uses bulk SQLite queries (single pass) instead of N+1 per-symbol queries.
     """
     symbols_list = _load_symbols_list(universe=universe)
+    sym_names = [s.get("symbol", "").upper() for s in symbols_list if s.get("symbol")]
 
-    # Live queue statuses from SQLite queue; every agent's latest output for every symbol in ONE query
     queue_statuses = queue_mgr.get_symbol_statuses()
     bulk_outputs = cache_mgr.get_latest_agent_outputs_bulk()
     quotes = cache_mgr.get_all_quotes()
+    candle_summaries = (
+        cache_mgr.get_candles_bulk_summary(sym_names, limit_days=260, sparkline_days=25)
+        if hasattr(cache_mgr, "get_candles_bulk_summary")
+        else {}
+    )
+    events_bulk = cache_mgr.get_cached_events_bulk() if hasattr(cache_mgr, "get_cached_events_bulk") else {}
     stale_cutoff = datetime.now() - timedelta(hours=STALE_SYNTH_HOURS)
 
     results = []
@@ -153,7 +213,6 @@ def get_all_stock_data(cache_mgr, queue_mgr, hist_engine, tech_engine, events_en
             rec = agents.get(agent_name)
             return rec["output"] if rec else None
 
-        # Latest synthesizer output; flagged stale when older than 72h
         synth_output = _out(SYNTH_AGENT)
         is_stale = False
         if synth_output:
@@ -168,7 +227,6 @@ def get_all_stock_data(cache_mgr, queue_mgr, hist_engine, tech_engine, events_en
         risk_output = _out(RISK_AGENT)
         fund_output = _out(FUND_AGENT)
 
-        # Detected patterns: stored analysis first, else computed once from stored candles
         if tech_output and "detected_patterns" in tech_output:
             patterns = tech_output.get("detected_patterns", [])
         elif tech_output and "raw_indicators" in tech_output and "detected_patterns" in tech_output["raw_indicators"]:
@@ -176,23 +234,34 @@ def get_all_stock_data(cache_mgr, queue_mgr, hist_engine, tech_engine, events_en
         else:
             patterns = _patterns_from_cached_candles(sym, cache_mgr, tech_engine)
 
-        # Upcoming events: stored analysis first, else whatever the events cache holds (no live fetch here)
         if fund_output and "upcoming_events" in fund_output:
             events = fund_output.get("upcoming_events", {})
+        elif sym in events_bulk:
+            events = events_bulk[sym]
         else:
-            events = events_engine.get_cached_events(sym)
+            events = {}
 
-        # Quick sparkline data (last 25 candles) & full 52-week lookback
-        try:
-            full_candles = cache_mgr.get_cached_candles(sym, limit_days=260)
-        except Exception:
-            full_candles = []
-        candles = full_candles[-25:] if len(full_candles) > 25 else full_candles
-        sparkline = [round(float(c.get("CLOSE_PRICE", 0)), 2) for c in candles]
-        latest_close = sparkline[-1] if sparkline else None
-        latest_close_date = str(candles[-1]["DATE"])[:10] if candles else None
+        c_sum = candle_summaries.get(sym)
+        if c_sum is None and not hasattr(cache_mgr, "get_candles_bulk_summary"):
+            try:
+                full_candles = cache_mgr.get_cached_candles(sym, limit_days=260)
+            except Exception:
+                full_candles = []
+            if full_candles:
+                c_sum = {
+                    "sparkline": [round(float(c.get("CLOSE_PRICE", 0)), 2) for c in full_candles[-25:]],
+                    "latest_close": round(float(full_candles[-1].get("CLOSE_PRICE") or 0.0), 2),
+                    "latest_date": str(full_candles[-1]["DATE"])[:10],
+                    "prev_close": round(float(full_candles[-2].get("CLOSE_PRICE") or full_candles[-1].get("CLOSE_PRICE") or 0.0), 2) if len(full_candles) > 1 else None,
+                    "high_52w": round(max(float(c.get("HIGH_PRICE") or c.get("CLOSE_PRICE") or 0.0) for c in full_candles), 2),
+                    "low_52w": round(min(float(c.get("LOW_PRICE") or c.get("CLOSE_PRICE") or 1e9) for c in full_candles), 2),
+                }
 
-        # Price when the analysis ran (levels were computed from it) vs the best current price
+        sparkline = c_sum["sparkline"] if c_sum else []
+        latest_close = c_sum["latest_close"] if c_sum else None
+        latest_close_date = c_sum["latest_date"] if c_sum else None
+        prev_close_candle = c_sum.get("prev_close") if c_sum else None
+
         analysis_price = None
         if tech_output and "raw_indicators" in tech_output and tech_output["raw_indicators"].get("last_price"):
             try:
@@ -202,15 +271,15 @@ def get_all_stock_data(cache_mgr, queue_mgr, hist_engine, tech_engine, events_en
         price_info = build_price_info(
             quotes.get(sym), latest_close, latest_close_date, analysis_price,
             (synth_output or {}).get("as_of_date"),
+            prev_close_from_candle=prev_close_candle,
         )
-        last_price = price_info["price"]      # None when unknown (no invented price)
+        last_price = price_info["price"]
 
-        # Guarantee high_52w, low_52w, and pct_from_52w_high are populated from candles if missing
-        if full_candles:
+        if c_sum and c_sum.get("high_52w"):
             try:
-                h_52w_val = max(float(c.get("HIGH_PRICE") or c.get("CLOSE_PRICE") or 0.0) for c in full_candles)
-                l_52w_val = min(float(c.get("LOW_PRICE") or c.get("CLOSE_PRICE") or 1e9) for c in full_candles)
-                eff_p = last_price or float(full_candles[-1].get("CLOSE_PRICE") or 0.0)
+                h_52w_val = float(c_sum["high_52w"])
+                l_52w_val = float(c_sum.get("low_52w") or 0.0)
+                eff_p = last_price or latest_close or 0.0
                 pct_52w_val = round((eff_p - h_52w_val) / h_52w_val * 100, 2) if h_52w_val > 0 else 0.0
 
                 if tech_output is not None:
@@ -229,8 +298,8 @@ def get_all_stock_data(cache_mgr, queue_mgr, hist_engine, tech_engine, events_en
                             "high_52w": round(h_52w_val, 2),
                             "low_52w": round(l_52w_val, 2),
                             "pct_from_52w_high": pct_52w_val,
-                            "last_price": eff_p
-                        }
+                            "last_price": eff_p,
+                        },
                     }
             except Exception:
                 pass
@@ -239,15 +308,18 @@ def get_all_stock_data(cache_mgr, queue_mgr, hist_engine, tech_engine, events_en
         if synth_output and "structured_signal" in synth_output:
             short_verdict = synth_output["structured_signal"].get("action_verdict", "HOLD")
 
+        raw_fund = (fund_output or {}).get("raw_fundamentals") or {}
+        forensic_d = (fund_output or {}).get("forensic_analysis")
         long_term_signal = long_term_engine.evaluate_long_term_stock(
             symbol=sym,
             name=name,
             sector=sector,
             last_price=last_price,
-            short_verdict=short_verdict
+            short_verdict=short_verdict,
+            fund_data=raw_fund,
+            forensic_data=forensic_d,
         )
 
-        # Enrich structured_signal with long-term metrics
         if synth_output and "structured_signal" in synth_output:
             synth_output["structured_signal"]["long_term_signal"] = long_term_signal
             synth_output["structured_signal"]["long_term_target"] = long_term_signal["long_term_target"]
@@ -272,7 +344,7 @@ def get_all_stock_data(cache_mgr, queue_mgr, hist_engine, tech_engine, events_en
             "patterns": patterns,
             "events": events,
             "sparkline": sparkline,
-            "price_info": price_info
+            "price_info": price_info,
         })
     return results
 
@@ -344,61 +416,34 @@ def _extract_numeric_val(val: Any) -> Optional[float]:
 
 def get_top_pattern_picks(cache_mgr, tech_engine, min_upside: float = 0.0) -> List[Dict[str, Any]]:
     """
-    Extracts, ranks, and returns all stocks across the database that have confirmed,
-    high-conviction technical chart patterns (e.g. Inverse H&S, Saucer, MA Crossovers,
-    Wyckoff Spring, TTM Squeeze, Bull Flags), sorted by profit upside and Reward:Risk ratio.
+    Extracts and ranks confirmed chart pattern picks across analyzed stocks using bulk SQLite queries.
     """
-    import sqlite3
-    from config import ALL_NSE_SYMBOLS_FILE_PATH
-
-    # Build comprehensive symbol metadata lookup from both symbols.json and symbols_nse_all.json
     sym_meta: Dict[str, Dict[str, str]] = {}
-    for fpath in (ALL_NSE_SYMBOLS_FILE_PATH, SYMBOLS_FILE_PATH):
-        if os.path.exists(fpath):
-            try:
-                with open(fpath, "r", encoding="utf-8") as f:
-                    s_data = json.load(f)
-                    items = s_data.get("symbols", []) if isinstance(s_data, dict) else s_data
-                    for item in items:
-                        k = (item.get("symbol") or "").upper().strip()
-                        if k and k not in sym_meta:
-                            sym_meta[k] = {
-                                "name": item.get("name") or k,
-                                "sector": item.get("sector") or "Indian Equities"
-                            }
-            except Exception:
-                pass
+    for univ in ("all_nse", "midcap250", "curated"):
+        for item in _load_symbols_list(universe=univ):
+            k = (item.get("symbol") or "").upper().strip()
+            if k and (k not in sym_meta or item.get("sector") != "Indian Equities"):
+                sym_meta[k] = {
+                    "name": item.get("name") or k,
+                    "sector": item.get("sector") or "Indian Equities",
+                }
 
     quotes = cache_mgr.get_all_quotes()
+    bulk_outputs = cache_mgr.get_latest_agent_outputs_bulk()
+    candle_summaries = (
+        cache_mgr.get_candles_bulk_summary(list(bulk_outputs.keys()), limit_days=60, sparkline_days=25)
+        if hasattr(cache_mgr, "get_candles_bulk_summary")
+        else {}
+    )
 
-    # Query latest synthesizer outputs across all analyzed stocks
     picks: List[Dict[str, Any]] = []
-    try:
-        conn = sqlite3.connect(cache_mgr.db_path)
-        c = conn.cursor()
-        c.execute("""
-            SELECT a.symbol, a.output_data, a.timestamp
-            FROM agent_runs_cache a
-            INNER JOIN (
-                SELECT symbol, MAX(timestamp) as max_ts
-                FROM agent_runs_cache
-                WHERE agent_name = 'Master Prediction Synthesizer Agent'
-                GROUP BY symbol
-            ) latest ON a.symbol = latest.symbol AND a.timestamp = latest.max_ts
-            WHERE a.agent_name = 'Master Prediction Synthesizer Agent'
-        """)
-        rows = c.fetchall()
-        conn.close()
-    except Exception as e:
-        print(f"⚠️ [Pattern Screener] Query error: {e}", flush=True)
-        return []
-
-    for sym, out_str, ts in rows:
-        sym_clean = sym.upper().strip()
-        try:
-            data = json.loads(out_str)
-        except Exception:
+    for sym, agents in bulk_outputs.items():
+        synth_rec = agents.get(SYNTH_AGENT)
+        if not synth_rec:
             continue
+        sym_clean = sym.upper().strip()
+        data = synth_rec.get("output") or {}
+        ts = synth_rec.get("timestamp") or ""
 
         sig = data.get("structured_signal", {})
         pattern_str = sig.get("chart_patterns") or ""
@@ -408,55 +453,30 @@ def get_top_pattern_picks(cache_mgr, tech_engine, min_upside: float = 0.0) -> Li
         verdict = str(sig.get("action_verdict", "HOLD")).upper()
         conf_score = _extract_numeric_val(sig.get("confidence_score") or sig.get("confidence_percentage")) or 70.0
 
-        # Prices & targets
         raw_lp = _extract_numeric_val(data.get("last_price"))
         quote_lp = quotes.get(sym_clean, {}).get("ltp")
         last_price = quote_lp or raw_lp
 
         target_price = _extract_numeric_val(sig.get("when_to_sell_target")) or _extract_numeric_val(sig.get("target_num"))
         entry_raw = sig.get("when_to_buy_entry") or "Near current levels"
-        entry_val = _extract_numeric_val(entry_raw) or last_price
         stop_loss = _extract_numeric_val(sig.get("stop_loss")) or _extract_numeric_val(sig.get("stop_num"))
 
-        # Fallback price from candles if quote missing
-        sparkline = []
-        try:
-            candles = cache_mgr.get_cached_candles(sym_clean, limit_days=25)
-            if candles:
-                sparkline = [round(float(c.get("CLOSE_PRICE", 0)), 2) for c in candles]
-                if not last_price and sparkline:
-                    last_price = sparkline[-1]
-        except Exception:
-            sparkline = []
+        c_sum = candle_summaries.get(sym_clean)
+        sparkline = c_sum["sparkline"] if c_sum else []
+        if not last_price and c_sum:
+            last_price = c_sum.get("latest_close")
 
         if not last_price or last_price <= 0:
             continue
 
-        # Expected Profit Upside %
-        if target_price and target_price > last_price:
-            upside_pct = round(((target_price - last_price) / last_price) * 100, 2)
-        else:
-            upside_pct = 0.0
-
-        # Downside Risk %
-        if stop_loss and stop_loss < last_price:
-            downside_pct = round(((last_price - stop_loss) / last_price) * 100, 2)
-        else:
-            downside_pct = 4.0  # conservative 4% assumption
-
-        # Reward to Risk ratio
-        if downside_pct > 0 and upside_pct > 0:
-            rr_ratio = round(upside_pct / downside_pct, 2)
-        else:
-            rr_ratio = _extract_numeric_val(sig.get("reward_to_risk_ratio")) or 1.5
+        upside_pct = round(((target_price - last_price) / last_price) * 100, 2) if (target_price and target_price > last_price) else 0.0
+        downside_pct = round(((last_price - stop_loss) / last_price) * 100, 2) if (stop_loss and stop_loss < last_price) else 4.0
+        rr_ratio = round(upside_pct / downside_pct, 2) if (downside_pct > 0 and upside_pct > 0) else (_extract_numeric_val(sig.get("reward_to_risk_ratio")) or 1.5)
 
         if upside_pct < min_upside and min_upside > 0:
             continue
 
-        # Meta
         meta = sym_meta.get(sym_clean, {"name": sym_clean, "sector": "Indian Equities"})
-
-        # Classify pattern category for intuitive frontend filtering
         p_lower = pattern_str.lower()
         if "cross" in p_lower or "moving average" in p_lower:
             category = "Moving Average"
@@ -488,15 +508,72 @@ def get_top_pattern_picks(cache_mgr, tech_engine, min_upside: float = 0.0) -> Li
             "downside_pct": round(downside_pct, 2),
             "risk_reward": rr_ratio,
             "sparkline": sparkline,
-            "timestamp": ts[:10] if ts else ""
+            "timestamp": ts[:10] if ts else "",
         })
 
-    # Sort descending by: Bullish actionable verdicts first, then Reward:Risk ratio, then Upside %
     picks.sort(key=lambda x: (
         x["action_verdict"] in ("BUY", "ACCUMULATE"),
         x["upside_pct"] > 0,
         x["risk_reward"],
-        x["upside_pct"]
+        x["upside_pct"],
     ), reverse=True)
-
     return picks
+
+
+def get_fundamental_picks_data(cache_mgr, universe: str = "curated") -> Dict[str, Any]:
+    """
+    Compute Top 10 Fundamental Picks for the requested universe using single bulk SQLite queries.
+    """
+    from tools.fundamental_picks import score_fundamental_pick
+
+    if universe not in ("curated", "midcap250", "all_nse"):
+        universe = "curated"
+
+    symbols_list = _load_symbols_list(universe=universe)
+    sym_names = [str(s.get("symbol") or "").upper().strip() for s in symbols_list if s.get("symbol")]
+    bulk_outputs = cache_mgr.get_latest_agent_outputs_bulk()
+    candle_summaries = (
+        cache_mgr.get_candles_bulk_summary(sym_names, limit_days=260, sparkline_days=5)
+        if hasattr(cache_mgr, "get_candles_bulk_summary")
+        else {}
+    )
+    picks: List[Dict[str, Any]] = []
+
+    for item in symbols_list:
+        sym = str(item.get("symbol", "")).upper().strip()
+        if not sym:
+            continue
+        cname = item.get("name", "")
+        sec = item.get("sector", "")
+
+        agents = bulk_outputs.get(sym, {})
+        synth_res = agents.get(SYNTH_AGENT, {}).get("output")
+        if not synth_res:
+            continue
+
+        tech_res = agents.get(TECH_AGENT, {}).get("output")
+        fund_res = agents.get(FUND_AGENT, {}).get("output")
+
+        raw_tech = (tech_res or {}).get("raw_indicators", {})
+        if raw_tech.get("pct_from_52w_high") is None:
+            c_sum = candle_summaries.get(sym)
+            if c_sum and c_sum.get("high_52w") and c_sum.get("latest_close"):
+                h_max = float(c_sum["high_52w"])
+                p_now = float(c_sum["latest_close"])
+                if h_max > 0 and p_now > 0:
+                    tech_res = dict(tech_res or {"raw_indicators": {}})
+                    tech_res["raw_indicators"] = dict(tech_res.get("raw_indicators", {}))
+                    tech_res["raw_indicators"]["pct_from_52w_high"] = round((p_now - h_max) / h_max * 100, 2)
+                    tech_res["raw_indicators"]["high_52w"] = round(h_max, 2)
+                    tech_res["raw_indicators"]["last_price"] = p_now
+
+        pick = score_fundamental_pick(sym, synth_res, tech_res, fund_res=fund_res, sector=sec)
+        if pick is None:
+            continue
+        pick["company"] = cname
+        pick["sector"] = sec
+        picks.append(pick)
+
+    picks.sort(key=lambda x: x["score"], reverse=True)
+    top10 = picks[:10]
+    return {"picks": top10, "count": len(top10), "universe": len(symbols_list)}

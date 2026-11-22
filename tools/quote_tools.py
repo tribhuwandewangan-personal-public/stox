@@ -30,6 +30,7 @@ KITE_TOKEN_PATH = os.path.join(PROJECT_ROOT, "storage", "kite_token.json")
 YF_TIMEOUT_SECONDS = 20
 STALE_AFTER_MINUTES = 15          # a quote older than this during market hours is flagged stale (3 five-minute bars)
 KITE_CHUNK = 400                  # Kite allows up to 500 instruments per /quote call
+YAHOO_CHUNK = 50                  # Chunk batch yfinance downloads so 250+ midcap lists don't timeout or throttle
 
 # Same ticker special cases as the history/fundamental tools
 _YAHOO_ALIAS = {"TATAMOTORS": "TMPV.NS", "NSE": "NSE.BO"}
@@ -68,43 +69,58 @@ class YahooQuoteProvider:
         except ImportError as e:
             raise ProviderUnavailable(f"yfinance not installed: {e}")
 
-        mapping = {yahoo_symbol(s): s.upper().strip() for s in symbols}
-        try:
-            # 5 days so a weekend/holiday still returns the last session; one HTTP call per ticker, threaded
-            df = yf.download(
-                tickers=list(mapping), period="5d", interval="5m", group_by="ticker",
-                threads=True, progress=False, auto_adjust=False, timeout=YF_TIMEOUT_SECONDS,
-            )
-        except Exception as e:
-            raise QuoteProviderError(f"yahoo download failed: {type(e).__name__}: {e}")
-        if df is None or df.empty:
-            raise QuoteProviderError("yahoo returned no data (rate limited or offline)")
-
-        multi = getattr(df.columns, "nlevels", 1) > 1
+        pairs = [(yahoo_symbol(s), s.upper().strip()) for s in symbols]
         out: Dict[str, Dict[str, Any]] = {}
-        for ysym, sym in mapping.items():
+        chunk_errors: List[str] = []
+
+        for start in range(0, len(pairs), YAHOO_CHUNK):
+            chunk = pairs[start:start + YAHOO_CHUNK]
+            mapping = {y: s for y, s in chunk}
             try:
-                sub = df[ysym] if multi else df
-                sub = sub.dropna(subset=["Close"])
-                if sub.empty:
-                    continue
-                last_ts = sub.index[-1]
-                session = sub[sub.index.date == last_ts.date()]   # bars of the most recent session only
-                ts = last_ts.tz_convert(market_calendar.IST) if last_ts.tzinfo else last_ts.tz_localize(market_calendar.IST)
-                out[sym] = {
-                    "symbol": sym,
-                    "ltp": _to_float(session["Close"].iloc[-1]),
-                    "prev_close": None,                       # filled from stored daily candles
-                    "day_high": _to_float(session["High"].max()),
-                    "day_low": _to_float(session["Low"].min()),
-                    "volume": int(session["Volume"].fillna(0).sum()),
-                    "quote_ts": ts.isoformat(),
-                    "source": self.name,
-                }
-            except Exception:
+                # auto_adjust=True matches HistoricalDataEngine candles; convert index to IST BEFORE date slicing
+                df = yf.download(
+                    tickers=list(mapping), period="5d", interval="5m", group_by="ticker",
+                    threads=True, progress=False, auto_adjust=True, timeout=YF_TIMEOUT_SECONDS,
+                )
+            except Exception as e:
+                chunk_errors.append(f"{type(e).__name__}: {e}")
                 continue
+            if df is None or df.empty:
+                continue
+
+            multi = getattr(df.columns, "nlevels", 1) > 1
+            for ysym, sym in mapping.items():
+                try:
+                    sub = df[ysym] if multi else df
+                    sub = sub.dropna(subset=["Close"])
+                    if sub.empty:
+                        continue
+                    idx_ist = (
+                        sub.index.tz_convert(market_calendar.IST)
+                        if sub.index.tzinfo is not None
+                        else sub.index.tz_localize(market_calendar.IST)
+                    )
+                    last_ts = idx_ist[-1]
+                    session = sub[idx_ist.date == last_ts.date()]
+                    out[sym] = {
+                        "symbol": sym,
+                        "ltp": _to_float(session["Close"].iloc[-1]),
+                        "prev_close": None,                       # filled from stored daily candles
+                        "day_high": _to_float(session["High"].max()),
+                        "day_low": _to_float(session["Low"].min()),
+                        "volume": int(session["Volume"].fillna(0).sum()),
+                        "vwap": None,
+                        "upper_circuit": None,
+                        "lower_circuit": None,
+                        "quote_ts": last_ts.isoformat(),
+                        "source": self.name,
+                    }
+                except Exception:
+                    continue
+
         if not out:
-            raise QuoteProviderError("yahoo returned no usable rows")
+            err_msg = chunk_errors[0] if chunk_errors else "yahoo returned no usable rows (rate limited or offline)"
+            raise QuoteProviderError(f"yahoo download failed: {err_msg}")
         return out
 
 
@@ -171,6 +187,9 @@ class KiteQuoteProvider:
                     "day_high": _to_float(ohlc.get("high")),
                     "day_low": _to_float(ohlc.get("low")),
                     "volume": int(q.get("volume") or 0),
+                    "vwap": _to_float(q.get("average_price")),
+                    "upper_circuit": _to_float(q.get("upper_circuit_limit")),
+                    "lower_circuit": _to_float(q.get("lower_circuit_limit")),
                     "quote_ts": ts,
                     "source": self.name,
                 }
@@ -379,6 +398,9 @@ def build_quotes_response(cache_manager, poller: Optional[QuotePoller] = None, n
             "day_high": q.get("day_high"),
             "day_low": q.get("day_low"),
             "volume": q.get("volume"),
+            "vwap": q.get("vwap"),
+            "upper_circuit": q.get("upper_circuit"),
+            "lower_circuit": q.get("lower_circuit"),
             "quote_ts": q.get("quote_ts"),
             "age_min": round(age, 1) if age is not None else None,
             "stale": bool(market_open and (age is None or age > STALE_AFTER_MINUTES)),
@@ -400,27 +422,71 @@ def build_quotes_response(cache_manager, poller: Optional[QuotePoller] = None, n
     }
 
 
-def build_price_info(quote, latest_close, latest_close_date, analysis_price, analysis_as_of) -> Dict[str, Any]:
+def _is_intraday_before_close(quote_ts: Optional[str]) -> bool:
+    if not quote_ts or len(str(quote_ts).strip()) <= 10:
+        return False
+    try:
+        dt = datetime.fromisoformat(str(quote_ts).strip())
+        dt_ist = (
+            dt.astimezone(market_calendar.IST)
+            if dt.tzinfo is not None
+            else dt.replace(tzinfo=market_calendar.IST)
+        )
+        return dt_ist.time() < market_calendar.CLOSE_TIME
+    except ValueError:
+        return False
+
+
+def build_price_info(
+    quote,
+    latest_close,
+    latest_close_date,
+    analysis_price,
+    analysis_as_of,
+    prev_close_from_candle: Optional[float] = None,
+) -> Dict[str, Any]:
     """
     Best-known price for a stock: live quote -> newest stored daily close -> price at analysis time.
-    A quote older than the newest stored candle is ignored. Also reports how far the analysis price (which the
-    entry/target/stop levels were computed from) has drifted from the current price.
+    - Quotes older than newest stored candle are ignored.
+    - Finalized EOD close beats an earlier same-day intraday quote (quote_day == latest_close_date and time < 15:30 IST).
     """
-    price, kind, as_of, change_pct = None, None, None, None
+    price, kind, as_of, change_pct, source, age_min = None, None, None, None, None, None
     quote_day = str((quote or {}).get("quote_ts") or "")[:10]
-    if quote and quote.get("ltp") and (not latest_close_date or quote_day >= latest_close_date):
+    quote_is_current = bool(
+        quote
+        and quote.get("ltp")
+        and (
+            not latest_close_date
+            or quote_day > latest_close_date
+            or (quote_day == latest_close_date and not _is_intraday_before_close(quote.get("quote_ts")))
+        )
+    )
+    if quote_is_current:
         price, kind, as_of = float(quote["ltp"]), "quote", quote.get("quote_ts")
-        prev = quote.get("prev_close")
+        source = quote.get("source")
+        age = quote_age_minutes(quote.get("quote_ts"))
+        age_min = round(age, 1) if age is not None else None
+        prev = quote.get("prev_close") or prev_close_from_candle
         if prev:
             change_pct = round((price - prev) / prev * 100, 2)
     elif latest_close:
         price, kind, as_of = float(latest_close), "close", latest_close_date
+        source = "eod_candle"
+        if prev_close_from_candle:
+            change_pct = round((price - prev_close_from_candle) / prev_close_from_candle * 100, 2)
     elif analysis_price:
         price, kind = float(analysis_price), "analysis"
     drift_pct = None
     if price and analysis_price:
         drift_pct = round((price - analysis_price) / analysis_price * 100, 2)
     return {
-        "price": price, "kind": kind, "as_of": as_of, "change_pct": change_pct,
-        "analysis_price": analysis_price, "analysis_as_of": analysis_as_of, "drift_pct": drift_pct,
+        "price": price,
+        "kind": kind,
+        "as_of": as_of,
+        "change_pct": change_pct,
+        "analysis_price": analysis_price,
+        "analysis_as_of": analysis_as_of,
+        "drift_pct": drift_pct,
+        "source": source,
+        "age_min": age_min,
     }

@@ -43,8 +43,8 @@ export class AppComponent implements OnInit, OnDestroy {
 
     ws.on('analysis_done', (data) => {
       console.log('[App] Analysis done:', data);
-      // Refresh stocks for current active universe to get updated analysis
-      stocksStore.loadUniverse(stocksStore.activeUniverse());
+      // Refresh stocks for current active universe without resetting filters/modal
+      stocksStore.refreshCurrentUniverse();
     });
 
     ws.onStateChange((state) => {

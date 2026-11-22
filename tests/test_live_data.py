@@ -35,6 +35,18 @@ MON, TUE, FRI, SAT = (2026, 11, 9), (2026, 11, 10), (2026, 11, 6), (2026, 11, 7)
 
 
 class MarketCalendarTests(unittest.TestCase):
+    def setUp(self):
+        self._no_holidays_tmp = tempfile.TemporaryDirectory()
+        self._empty_holidays = os.path.join(self._no_holidays_tmp.name, "empty_holidays.json")
+        with open(self._empty_holidays, "w", encoding="utf-8") as f:
+            f.write('{"holidays": []}')
+        self._holidays_patch = unittest.mock.patch.object(mc, "HOLIDAYS_PATH", self._empty_holidays)
+        self._holidays_patch.start()
+
+    def tearDown(self):
+        self._holidays_patch.stop()
+        self._no_holidays_tmp.cleanup()
+
     def test_session_states(self):
         self.assertEqual(mc.session_state(at(*MON, 8, 0)), "pre_open")
         self.assertEqual(mc.session_state(at(*MON, 9, 14)), "pre_open")
@@ -52,8 +64,8 @@ class MarketCalendarTests(unittest.TestCase):
 
     def test_last_completed_session_waits_for_vendor_buffer(self):
         self.assertEqual(mc.last_completed_session(at(*MON, 11, 0)), date(*FRI))        # mid-session -> Friday
-        self.assertEqual(mc.last_completed_session(at(*MON, 15, 40)), date(*FRI))       # bell rang, candle not final
-        self.assertEqual(mc.last_completed_session(at(*MON, 15, 46)), date(*MON))       # buffer elapsed
+        self.assertEqual(mc.last_completed_session(at(*MON, 16, 14)), date(*FRI))       # bell rang, EOD buffer (<16:15) not elapsed
+        self.assertEqual(mc.last_completed_session(at(*MON, 16, 16)), date(*MON))       # 16:15 EOD buffer elapsed
         self.assertEqual(mc.last_completed_session(at(*SAT, 12, 0)), date(*FRI))
         self.assertEqual(mc.last_completed_session(at(2026, 11, 8, 12, 0)), date(*FRI))  # Sunday
 
@@ -85,6 +97,19 @@ class MarketCalendarTests(unittest.TestCase):
         self.assertEqual(mc.trading_days_after(date(*FRI), date(*MON)), 1)
         self.assertEqual(mc.trading_days_after(date(*MON), date(*MON)), 0)
         self.assertEqual(mc.trading_days_after(date(*MON), date(2026, 11, 13)), 4)
+
+    def test_official_2026_nse_holidays_loaded(self):
+        self._holidays_patch.stop()
+        try:
+            holidays = mc.load_holidays()
+            self.assertEqual(len(holidays), 15)
+            self.assertIn("2026-01-26", holidays)
+            self.assertIn("2026-11-10", holidays)
+            self.assertIn("2026-12-25", holidays)
+            self.assertFalse(mc.is_trading_day(date(2026, 11, 10)))
+            self.assertEqual(mc.session_state(at(2026, 11, 10, 11, 0)), "holiday")
+        finally:
+            self._holidays_patch.start()
 
 
 # ----------------------------------------------------------------------------------------------- quotes
@@ -307,6 +332,11 @@ class QuotePollerTests(unittest.TestCase):
 class SchedulerTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
+        self._empty_holidays = os.path.join(self.tmp.name, "empty_holidays.json")
+        with open(self._empty_holidays, "w", encoding="utf-8") as f:
+            f.write('{"holidays": []}')
+        self._holidays_patch = unittest.mock.patch.object(mc, "HOLIDAYS_PATH", self._empty_holidays)
+        self._holidays_patch.start()
         self.cm = CacheManager(db_path=os.path.join(self.tmp.name, "c.db"))
         self.sched = Scheduler(self.cm, workflow_getter=lambda: None, symbols_loader=lambda: [])
         self.ran = []
@@ -314,6 +344,7 @@ class SchedulerTests(unittest.TestCase):
         self.sched.run_postclose = lambda: self.ran.append("postclose")
 
     def tearDown(self):
+        self._holidays_patch.stop()
         self.tmp.cleanup()
 
     def test_premarket_due_from_0845_on_trading_days_only(self):
@@ -326,10 +357,10 @@ class SchedulerTests(unittest.TestCase):
     def test_postclose_waits_for_1600_then_runs_once(self):
         self.cm.set_state("sched.premarket.2026-11-09", "x")
         self.cm.set_state("sched.postclose.2026-11-06", "x")
-        self.assertEqual(self.sched.due_jobs(at(*MON, 15, 50)), [])        # complete but before 16:00
-        self.assertEqual(self.sched.due_jobs(at(*MON, 16, 0)), ["postclose"])
-        self.assertEqual(self.sched.tick(at(*MON, 16, 1)), ["postclose"])
-        self.assertEqual(self.sched.due_jobs(at(*MON, 16, 2)), [])         # recorded -> never repeated
+        self.assertEqual(self.sched.due_jobs(at(*MON, 16, 10)), [])        # EOD vendor buffer (<16:15) not complete
+        self.assertEqual(self.sched.due_jobs(at(*MON, 16, 15)), ["postclose"])
+        self.assertEqual(self.sched.tick(at(*MON, 16, 16)), ["postclose"])
+        self.assertEqual(self.sched.due_jobs(at(*MON, 16, 20)), [])         # recorded -> never repeated
         self.assertEqual(self.ran, ["postclose"])
 
     def test_missed_session_is_caught_up_next_day(self):
@@ -369,9 +400,12 @@ class OutcomeTrackerTests(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def predict(self, price=100.0, target=110.0, stop=95.0, as_of="2026-11-02", verdict="BUY", conf=80):
-        self.cm.log_prediction({"symbol": "AAA", "as_of_date": as_of, "verdict": verdict, "confidence_pct": conf,
-                                "price_at_signal": price, "target": target, "stop": stop, "horizon_days": 3})
+    def predict(self, price=100.0, target=110.0, stop=95.0, as_of="2026-11-02", verdict="BUY", conf=80, made_at=None):
+        self.cm.log_prediction({
+            "symbol": "AAA", "as_of_date": as_of, "made_at": made_at or f"{as_of}T16:30:00+05:30",
+            "verdict": verdict, "confidence_pct": conf,
+            "price_at_signal": price, "target": target, "stop": stop, "horizon_days": 3,
+        })
 
     def resolve(self, candles):
         self.cm.save_historical_candles(candles)
@@ -566,12 +600,12 @@ class ProvisionalBarTests(unittest.TestCase):
 
     def test_todays_bar_dropped_while_session_is_not_final(self):
         df = self.frame(["2026-11-05", "2026-11-06", "2026-11-09"])
-        for t in (at(*MON, 10, 0), at(*MON, 15, 35), at(*MON, 15, 44)):
+        for t in (at(*MON, 10, 0), at(*MON, 15, 35), at(*MON, 16, 14)):
             self.assertEqual(len(self.drop(df, t)), 2, t)
 
     def test_todays_bar_kept_once_final(self):
         df = self.frame(["2026-11-05", "2026-11-06", "2026-11-09"])
-        self.assertEqual(len(self.drop(df, at(*MON, 15, 46))), 3)
+        self.assertEqual(len(self.drop(df, at(*MON, 16, 16))), 3)
         self.assertEqual(len(self.drop(df, at(*MON, 20, 0))), 3)
 
     def test_earlier_days_never_dropped(self):
