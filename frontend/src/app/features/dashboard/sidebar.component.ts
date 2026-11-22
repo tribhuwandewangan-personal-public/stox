@@ -24,7 +24,7 @@ type SidebarFilter = 'ALL' | 'BUY' | 'HOLD' | 'SELL' | 'ACTIVE';
       <div class="sidebar-header">
         <div class="sidebar-title-row">
           <div class="sidebar-title">
-            <span>📋</span> Stocks Watchlist
+            <span>📋</span> {{ stocksStore.activeUniverse() === 'midcap250' ? 'Midcap 250' : 'Stocks Watchlist' }}
             <span class="sidebar-badge">{{ stocksStore.availableCount() }}/{{ stocksStore.stocks().length }}</span>
           </div>
         </div>
@@ -34,26 +34,27 @@ type SidebarFilter = 'ALL' | 'BUY' | 'HOLD' | 'SELL' | 'ACTIVE';
           <input
             type="text"
             placeholder="🔍 Search symbol, sector..."
-            [(ngModel)]="searchQuery"
+            [ngModel]="searchQuery()"
+            (ngModelChange)="searchQuery.set($event)"
             class="sidebar-search-input">
-          <button *ngIf="searchQuery" class="sidebar-search-clear" (click)="searchQuery = ''">✕</button>
+          <button *ngIf="searchQuery()" class="sidebar-search-clear" (click)="searchQuery.set('')">✕</button>
         </div>
 
         <!-- Filter Count Chips -->
         <div class="sidebar-filters">
-          <button class="sidebar-filter-chip" [class.active]="filterMode === 'ALL'" (click)="setFilter('ALL')">
+          <button class="sidebar-filter-chip" [class.active]="filterMode() === 'ALL'" (click)="setFilter('ALL')">
             All <span>{{ counts().all }}</span>
           </button>
-          <button class="sidebar-filter-chip" [class.active]="filterMode === 'BUY'" (click)="setFilter('BUY')">
+          <button class="sidebar-filter-chip" [class.active]="filterMode() === 'BUY'" (click)="setFilter('BUY')">
             Buy <span>{{ counts().buy }}</span>
           </button>
-          <button class="sidebar-filter-chip" [class.active]="filterMode === 'HOLD'" (click)="setFilter('HOLD')">
+          <button class="sidebar-filter-chip" [class.active]="filterMode() === 'HOLD'" (click)="setFilter('HOLD')">
             Hold <span>{{ counts().hold }}</span>
           </button>
-          <button class="sidebar-filter-chip" [class.active]="filterMode === 'SELL'" (click)="setFilter('SELL')">
+          <button class="sidebar-filter-chip" [class.active]="filterMode() === 'SELL'" (click)="setFilter('SELL')">
             Sell <span>{{ counts().sell }}</span>
           </button>
-          <button class="sidebar-filter-chip" [class.active]="filterMode === 'ACTIVE'" (click)="setFilter('ACTIVE')">
+          <button class="sidebar-filter-chip" [class.active]="filterMode() === 'ACTIVE'" (click)="setFilter('ACTIVE')">
             Active <span>{{ counts().active }}</span>
           </button>
         </div>
@@ -61,10 +62,10 @@ type SidebarFilter = 'ALL' | 'BUY' | 'HOLD' | 'SELL' | 'ACTIVE';
 
       <!-- View Toggle -->
       <div class="sidebar-view-toggle">
-        <button class="sidebar-view-btn" [class.active]="viewMode === 'flat'" (click)="viewMode = 'flat'">
+        <button class="sidebar-view-btn" [class.active]="viewMode() === 'flat'" (click)="viewMode.set('flat')">
           📋 Flat
         </button>
-        <button class="sidebar-view-btn" [class.active]="viewMode === 'sector'" (click)="viewMode = 'sector'">
+        <button class="sidebar-view-btn" [class.active]="viewMode() === 'sector'" (click)="viewMode.set('sector')">
           🏭 By Sector
         </button>
       </div>
@@ -76,30 +77,75 @@ type SidebarFilter = 'ALL' | 'BUY' | 'HOLD' | 'SELL' | 'ACTIVE';
 
       <!-- Scrollable Stocks List -->
       <div class="sidebar-list">
-        @for (stock of displayedStocks(); track stock.symbol) {
-          <div class="sidebar-stock-item" [class.selected]="stock.symbol === selectedSymbol()" (click)="onSelect(stock.symbol)">
-            <div class="stock-item-top">
-              <span class="stock-sym">{{ stock.symbol }}</span>
-              <span class="verdict-mini" [ngClass]="verdictClass(stock)">
-                {{ getVerdict(stock) }}
-              </span>
+        <!-- Flat View -->
+        <ng-container *ngIf="viewMode() === 'flat'">
+          @for (stock of displayedStocks(); track stock.symbol) {
+            <div class="sidebar-stock-item" [class.selected]="stock.symbol === selectedSymbol()" (click)="onSelect(stock.symbol)">
+              <div class="stock-item-top">
+                <div class="stock-names-wrap">
+                  <span class="stock-sym">{{ stock.symbol }}</span>
+                  <span class="stock-full-name" [title]="stock.name || stock.symbol">{{ stock.name || stock.symbol }}</span>
+                </div>
+                <span class="verdict-mini" [ngClass]="verdictClass(stock)">
+                  {{ getVerdict(stock) }}
+                </span>
+              </div>
+              <div class="stock-item-bottom">
+                <span class="stock-price">₹{{ getPrice(stock) }}</span>
+                <span class="stock-chg" *ngIf="stock.price_info.change_pct != null" [class.up]="(stock.price_info.change_pct || 0) >= 0" [class.down]="(stock.price_info.change_pct || 0) < 0">
+                  {{ (stock.price_info.change_pct || 0) >= 0 ? '+' : '' }}{{ stock.price_info.change_pct | number:'1.2-2' }}%
+                </span>
+                <span class="stock-sec" [title]="stock.sector">{{ stock.sector }}</span>
+              </div>
             </div>
-            <div class="stock-item-bottom">
-              <span class="stock-price">₹{{ getPrice(stock) }}</span>
-              <span class="stock-chg" [class.up]="(stock.price_info.change_pct || 0) >= 0" [class.down]="(stock.price_info.change_pct || 0) < 0">
-                {{ (stock.price_info.change_pct || 0) >= 0 ? '+' : '' }}{{ stock.price_info.change_pct | number:'1.2-2' }}%
-              </span>
-              <span class="stock-sec">{{ stock.sector }}</span>
+          }
+          @empty {
+            <div class="sidebar-empty">No stocks match search</div>
+          }
+        </ng-container>
+
+        <!-- Sector Grouped View -->
+        <ng-container *ngIf="viewMode() === 'sector'">
+          @for (grp of sectorGroups(); track grp.sector) {
+            <div class="sector-group-header">
+              <span>{{ grp.sector }}</span>
+              <span class="sector-count-pill">{{ grp.stocks.length }}</span>
             </div>
-          </div>
-        }
-        @empty {
-          <div class="sidebar-empty">No stocks match search</div>
-        }
+            @for (stock of grp.stocks; track stock.symbol) {
+              <div class="sidebar-stock-item" [class.selected]="stock.symbol === selectedSymbol()" (click)="onSelect(stock.symbol)">
+                <div class="stock-item-top">
+                  <div class="stock-names-wrap">
+                    <span class="stock-sym">{{ stock.symbol }}</span>
+                    <span class="stock-full-name" [title]="stock.name || stock.symbol">{{ stock.name || stock.symbol }}</span>
+                  </div>
+                  <span class="verdict-mini" [ngClass]="verdictClass(stock)">
+                    {{ getVerdict(stock) }}
+                  </span>
+                </div>
+                <div class="stock-item-bottom">
+                  <span class="stock-price">₹{{ getPrice(stock) }}</span>
+                  <span class="stock-chg" *ngIf="stock.price_info.change_pct != null" [class.up]="(stock.price_info.change_pct || 0) >= 0" [class.down]="(stock.price_info.change_pct || 0) < 0">
+                    {{ (stock.price_info.change_pct || 0) >= 0 ? '+' : '' }}{{ stock.price_info.change_pct | number:'1.2-2' }}%
+                  </span>
+                  <span class="stock-sec" [title]="stock.name">{{ stock.name }}</span>
+                </div>
+              </div>
+            }
+          }
+          @empty {
+            <div class="sidebar-empty">No stocks match search</div>
+          }
+        </ng-container>
       </div>
     </aside>
   `,
   styles: [`
+    :host {
+      display: flex;
+      height: 100%;
+      min-height: 0;
+    }
+
     .sidebar-watchlist-panel {
       width: 250px;
       flex-shrink: 0;
@@ -108,6 +154,7 @@ type SidebarFilter = 'ALL' | 'BUY' | 'HOLD' | 'SELL' | 'ACTIVE';
       display: flex;
       flex-direction: column;
       height: 100%;
+      min-height: 0;
       overflow: hidden;
     }
 
@@ -249,11 +296,34 @@ type SidebarFilter = 'ALL' | 'BUY' | 'HOLD' | 'SELL' | 'ACTIVE';
 
     .sidebar-list {
       flex: 1;
+      min-height: 0;
       overflow-y: auto;
       padding: 0 8px 14px 8px;
       display: flex;
       flex-direction: column;
       gap: 4px;
+    }
+
+    .sector-group-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 8px 2px 8px;
+      margin-top: 6px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .sector-count-pill {
+      background: rgba(255, 255, 255, 0.08);
+      color: #38bdf8;
+      font-size: 0.62rem;
+      padding: 1px 6px;
+      border-radius: 10px;
     }
 
     .sidebar-stock-item {
@@ -279,7 +349,16 @@ type SidebarFilter = 'ALL' | 'BUY' | 'HOLD' | 'SELL' | 'ACTIVE';
     .stock-item-top {
       display: flex;
       justify-content: space-between;
-      align-items: center;
+      align-items: flex-start;
+      gap: 6px;
+    }
+
+    .stock-names-wrap {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 0;
+      flex: 1;
     }
 
     .stock-sym {
@@ -287,6 +366,16 @@ type SidebarFilter = 'ALL' | 'BUY' | 'HOLD' | 'SELL' | 'ACTIVE';
       font-weight: 700;
       font-size: 0.8rem;
       color: #fff;
+    }
+
+    .stock-full-name {
+      font-size: 0.68rem;
+      color: #94a3b8;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.2;
+      margin-top: 1px;
     }
 
     .verdict-mini {
@@ -364,9 +453,9 @@ type SidebarFilter = 'ALL' | 'BUY' | 'HOLD' | 'SELL' | 'ACTIVE';
 })
 export class SidebarComponent {
   stocksStore = stocksStore;
-  searchQuery = '';
-  viewMode: SidebarViewMode = 'flat';
-  filterMode: SidebarFilter = 'ALL';
+  searchQuery = signal('');
+  viewMode = signal<SidebarViewMode>('flat');
+  filterMode = signal<SidebarFilter>('ALL');
 
   selectedSymbol = stocksStore.selectedSymbol;
 
@@ -384,20 +473,21 @@ export class SidebarComponent {
   });
 
   displayedStocks = computed<Stock[]>(() => {
-    const q = this.searchQuery.toLowerCase().trim();
+    const q = this.searchQuery().toLowerCase().trim();
+    const mode = this.filterMode();
     let list = this.stocksStore.stocks();
 
     // Filter by mode
-    if (this.filterMode === 'BUY') {
+    if (mode === 'BUY') {
       list = list.filter(s => {
         const v = (s.synth_output?.structured_signal?.action_verdict || '').toUpperCase();
         return v.includes('BUY') || v.includes('ACCUMULATE');
       });
-    } else if (this.filterMode === 'HOLD') {
+    } else if (mode === 'HOLD') {
       list = list.filter(s => (s.synth_output?.structured_signal?.action_verdict || '').toUpperCase().includes('HOLD'));
-    } else if (this.filterMode === 'SELL') {
+    } else if (mode === 'SELL') {
       list = list.filter(s => (s.synth_output?.structured_signal?.action_verdict || '').toUpperCase().includes('SELL'));
-    } else if (this.filterMode === 'ACTIVE') {
+    } else if (mode === 'ACTIVE') {
       list = list.filter(s => s.queue_status === 'in_progress' || s.queue_status === 'pending');
     }
 
@@ -406,11 +496,34 @@ export class SidebarComponent {
       list = list.filter(s => s.symbol.toLowerCase().includes(q) || s.name.toLowerCase().includes(q) || (s.sector || '').toLowerCase().includes(q));
     }
 
-    return list;
+    // Sort alphabetically by company name (or symbol if name matches)
+    return [...list].sort((a, b) => {
+      const nameA = (a.name || a.symbol || '').toLowerCase();
+      const nameB = (b.name || b.symbol || '').toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
+  });
+
+  sectorGroups = computed<{ sector: string; stocks: Stock[] }[]>(() => {
+    const list = this.displayedStocks();
+    const map = new Map<string, Stock[]>();
+    for (const s of list) {
+      const sec = s.sector || 'General / Unclassified';
+      if (!map.has(sec)) {
+        map.set(sec, []);
+      }
+      map.get(sec)!.push(s);
+    }
+    const groups: { sector: string; stocks: Stock[] }[] = [];
+    const sortedSectors = Array.from(map.keys()).sort();
+    for (const sec of sortedSectors) {
+      groups.push({ sector: sec, stocks: map.get(sec)! });
+    }
+    return groups;
   });
 
   setFilter(f: SidebarFilter): void {
-    this.filterMode = f;
+    this.filterMode.set(f);
   }
 
   @Output() stockSelect = new EventEmitter<string>();

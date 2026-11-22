@@ -10,3 +10,5 @@ This project interfaces with Zerodha Kite Connect in **STRICTLY READ-ONLY ADVISO
    - Credentials, access tokens, API secrets, and personal holdings must never be committed to Git.
 3. **Deterministic Scoring**:
    - Quantitative signals, risk metrics, and valuation scores are strictly rule-based.
+4. **Project Context**:
+   - Read [CONTEXT.md](CONTEXT.md) in the repo root first for architecture, ports, file map, and dev/restart commands before broad file searches.

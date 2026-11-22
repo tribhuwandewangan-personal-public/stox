@@ -257,6 +257,7 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
         if cors:
             self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
@@ -310,7 +311,11 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
 
         elif path == "/api/stocks":
             try:
-                self._send_json(200, get_stocks_response_body(cache_mgr, queue_mgr, hist_engine, tech_engine, events_engine))
+                query = urllib.parse.parse_qs(parsed_path.query)
+                universe = query.get("universe", ["curated"])[0].lower().strip()
+                if universe not in ("curated", "midcap250", "all_nse"):
+                    universe = "curated"
+                self._send_json(200, get_stocks_response_body(cache_mgr, queue_mgr, hist_engine, tech_engine, events_engine, universe=universe))
             except Exception as e:
                 self._send_json(500, {"error": str(e), "stocks": []}, cors=False)
             return

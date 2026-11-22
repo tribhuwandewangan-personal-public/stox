@@ -3,7 +3,7 @@
  * Shows symbol, price, verdict, confidence, patterns, entry/target/stop, long-term, sparkline, and rationale.
  */
 
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, Input, Output, EventEmitter, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Stock, PatternResult } from '../../core/models/stock.model';
 import { fmtPrice } from '../../core/utils/price';
@@ -14,6 +14,7 @@ import { SparklineComponent } from './sparkline.component';
   selector: 'app-stock-card',
   standalone: true,
   imports: [CommonModule, SparklineComponent],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="stock-card" [class.stale]="stock.is_stale" (click)="onCardClick()" [attr.data-symbol]="stock.symbol">
 

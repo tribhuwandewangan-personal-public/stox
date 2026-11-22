@@ -77,16 +77,20 @@ class ForensicFinancialEngine:
         # 6b. Governance & Promoter Pledging Telemetry
         gov = self._audit_governance_telemetry(symbol_clean, fund_data)
 
+        # 6c. Piotroski F-Score & Working Capital Efficiency
+        f_score = self._calculate_piotroski_f_score(stmts, fund_data, eq, cf, solv)
+        wc = self._calculate_working_capital_metrics(stmts)
+
         # 7b. Automated Peer Valuation Comparison
         sector_name = stmts.get("sector") or fund_data.get("sector", "")
         peer_engine = PeerBenchmarkEngine()
         peer_benchmarks = peer_engine.compute_peer_benchmarks(symbol_clean, sector_name, self.fund_engine)
 
         # 8. Forensic Red Flags & Positive Catalysts
-        red_flags, catalysts = self._compile_forensic_signals(eq, cf, sub, solv, val, gov, peer_benchmarks)
+        red_flags, catalysts = self._compile_forensic_signals(eq, cf, sub, solv, val, gov, peer_benchmarks, f_score, wc)
 
         # 9. Deterministic Investment Recommendation Verdict
-        rec = self._synthesize_recommendation(eq, cf, solv, val, red_flags, catalysts, market_price, gov)
+        rec = self._synthesize_recommendation(eq, cf, solv, val, red_flags, catalysts, market_price, gov, f_score)
 
         return {
             "symbol": symbol_clean,
@@ -98,6 +102,10 @@ class ForensicFinancialEngine:
             "confidence_score": rec["confidence_score"],
             "fair_value": val["intrinsic_fair_value"],
             "margin_of_safety_pct": val["margin_of_safety_pct"],
+            "piotroski_f_score": f_score["score"],
+            "piotroski_rating": f_score["rating"],
+            "piotroski_f_score_details": f_score,
+            "debtor_days": wc["debtor_days"],
             "earnings_quality": eq,
             "cash_conversion": cf,
             "subsidiary_attribution": sub,
@@ -444,6 +452,114 @@ class ForensicFinancialEngine:
             "valuation_verdict": "UNDERVALUED" if margin_of_safety_pct > 15.0 else ("OVERVALUED" if margin_of_safety_pct < -15.0 else "FAIRLY_VALUED")
         }
 
+    def _calculate_piotroski_f_score(
+        self,
+        stmts: Dict[str, Any],
+        fund_data: Dict[str, Any],
+        eq: Dict[str, Any],
+        cf: Dict[str, Any],
+        solv: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Calculates the 9-point Piotroski F-Score to evaluate financial strength:
+        Profitability:
+          1. Positive Net Income (ROA > 0)
+          2. Positive Operating Cash Flow (CFO > 0)
+          3. Higher ROA in current year vs prior (or positive sustainable PAT)
+          4. Quality of earnings (CFO > Net Income / Accrual test)
+        Leverage, Liquidity and Source of Funds:
+          5. Lower Long-Term Debt / Leverage ratio
+          6. Higher Current Ratio (liquidity)
+          7. No Dilution (no substantial share count expansion)
+        Operating Efficiency:
+          8. Higher Gross / Operating Margin
+          9. Higher Asset Turnover / Revenue Growth
+        Returns score (0-9) and qualitative category (STRONG: 7-9, MODERATE: 4-6, WEAK: 0-3).
+        """
+        score = 0
+        points = []
+
+        reported_pat = _num(stmts.get("reported_pat"), 0.0)
+        cfo = _num(cf.get("cfo"), 0.0)
+        rev_now = _num(stmts.get("revenue"), 0.0)
+        rev_prev = _num(stmts.get("revenue_prior"), 0.0)
+        total_debt = _num(solv.get("total_debt"), 0.0)
+        current_ratio = _num(solv.get("current_ratio"))
+
+        # 1. Net Income > 0
+        if reported_pat > 0:
+            score += 1
+            points.append("Positive Net Income (+1)")
+        # 2. CFO > 0
+        if cfo > 0:
+            score += 1
+            points.append("Positive Operating Cash Flow (+1)")
+        # 3. Sustainable Core Profitability
+        if eq.get("sustainable_pat", 0) > 0 and reported_pat > 0:
+            score += 1
+            points.append("Sound Core Recurring Earnings (+1)")
+        # 4. Accruals: CFO > Net Income (Clean cash backed earnings)
+        if cfo > reported_pat and reported_pat > 0:
+            score += 1
+            points.append("Superior Cash Accrual Quality CFO > PAT (+1)")
+
+        # 5. Leverage: Net cash or virtually zero leverage
+        if solv.get("net_cash_positive") or (total_debt == 0.0):
+            score += 1
+            points.append("Debt-Free / Net Cash Balance Sheet (+1)")
+        elif solv.get("solvency_rating") == "PRISTINE_OR_NET_CASH":
+            score += 1
+            points.append("Manageable Low Debt Profile (+1)")
+
+        # 6. Liquidity: Current Ratio >= 1.25
+        if current_ratio is not None and isinstance(current_ratio, (int, float)) and current_ratio >= 1.25:
+            score += 1
+            points.append(f"Comfortable Liquidity (CR {current_ratio:.2f}) (+1)")
+
+        # 7. Quality of Balance Sheet: Working capital not bloated
+        if not cf.get("working_capital_divergence", False):
+            score += 1
+            points.append("No Debtor / Working Capital Bloat (+1)")
+
+        # 8. Revenue Growth: Current > Prior
+        if rev_now > rev_prev and rev_prev > 0:
+            score += 1
+            points.append("Top-Line Revenue Expansion (+1)")
+
+        # 9. Operating Margin & Capital Efficiency: ROE >= 12%
+        roe = _num(fund_data.get("roe_pct"))
+        if roe is not None and roe >= 12.0:
+            score += 1
+            points.append(f"High Capital Efficiency (ROE {roe:.1f}%) (+1)")
+
+        rating = "STRONG" if score >= 7 else ("MODERATE" if score >= 4 else "WEAK")
+        return {
+            "score": score,
+            "rating": rating,
+            "points": points
+        }
+
+    def _calculate_working_capital_metrics(self, stmts: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Calculates working capital efficiency and Debtor Days (DSO):
+          - Debtor Days = (Trade Receivables / Revenue) * 365
+        """
+        rev = _num(stmts.get("revenue"), 0.0)
+        rec = _num(stmts.get("trade_receivables"), 0.0)
+        debtor_days = round((rec / rev) * 365.0, 1) if (rev > 0 and rec > 0) else None
+
+        status = "HEALTHY"
+        if debtor_days is not None:
+            if debtor_days > 120:
+                status = "STRETCHED_COLLECTIONS"
+            elif debtor_days < 60:
+                status = "LEAN_CASH_COLLECTIONS"
+
+        return {
+            "debtor_days": debtor_days,
+            "collection_status": status
+        }
+
     def _audit_governance_telemetry(
         self,
         symbol: str,
@@ -599,7 +715,9 @@ class ForensicFinancialEngine:
         solv: Dict[str, Any],
         val: Dict[str, Any],
         gov: Optional[Dict[str, Any]] = None,
-        peer_benchmarks: Optional[Dict[str, Any]] = None
+        peer_benchmarks: Optional[Dict[str, Any]] = None,
+        f_score: Optional[Dict[str, Any]] = None,
+        wc: Optional[Dict[str, Any]] = None
     ) -> tuple[List[str], List[str]]:
         """Compiles rule-based red flags and positive fundamental catalysts."""
         red_flags: List[str] = []
@@ -684,6 +802,21 @@ class ForensicFinancialEngine:
             elif pe_vs == "CHEAPER" and roe_vs == "SUPERIOR":
                 catalysts.append(f"[Peer Valuation] Favorable relative value: {peer_benchmarks.get('peer_verdict')}")
 
+        # 8. Piotroski F-Score & Working Capital Signals
+        if f_score:
+            f_pts = f_score.get("score", 0)
+            if f_pts >= 8:
+                catalysts.append(f"Outstanding Piotroski F-Score: {f_pts}/9 indicates top-tier financial strength & profitability.")
+            elif f_pts <= 3:
+                red_flags.append(f"Weak Piotroski F-Score: {f_pts}/9 flags multi-dimensional balance sheet or operational vulnerability.")
+
+        if wc:
+            dso = wc.get("debtor_days")
+            if dso is not None and dso > 120:
+                red_flags.append(f"Extended Debtor Days: {dso:.0f} days required to collect cash receivables (working capital drag).")
+            elif dso is not None and dso < 45:
+                catalysts.append(f"Lean working capital: Rapid cash realization with Debtor Days at {dso:.0f} days.")
+
         return red_flags, catalysts
 
     def _synthesize_recommendation(
@@ -695,7 +828,8 @@ class ForensicFinancialEngine:
         red_flags: List[str],
         catalysts: List[str],
         market_price: float,
-        gov: Optional[Dict[str, Any]] = None
+        gov: Optional[Dict[str, Any]] = None,
+        f_score: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Synthesizes all findings into a deterministic decision:
@@ -727,28 +861,31 @@ class ForensicFinancialEngine:
             }
 
         # Deterministic Rules
-        if is_leveraged and cfo_ratio < 0.50:
+        # Piotroski F-score and leverage distress check
+        f_score_val = f_score.get("score") if f_score else None
+        if (is_leveraged and cfo_ratio < 0.50) or (f_score_val is not None and f_score_val <= 2 and is_leveraged):
             verdict = "HIGH_RISK_DISTRESSED"
             badge = "🔴 HIGH RISK / DISTRESSED"
             confidence = 88
             thesis = (
-                f"High leverage combined with weak cash flow ({cfo_ratio*100:.0f}% CFO/PAT) poses balance sheet distress. "
-                "Capital preservation demands avoidance."
+                f"High leverage combined with weak cash flow ({cfo_ratio*100:.0f}% CFO/PAT) and distressed F-Score ({f_score_val or 'N/A'}/9) "
+                "poses acute balance sheet vulnerability. Capital preservation demands avoidance."
             )
-        elif distortion >= 30.0 or cfo_ratio <= 0.40 or num_flags >= 3:
+        elif distortion >= 30.0 or cfo_ratio <= 0.40 or num_flags >= 3 or (f_score_val is not None and f_score_val <= 2):
             verdict = "AVOID_OR_VALUE_TRAP"
             badge = "🔴 AVOID / VALUE TRAP"
             confidence = 85
             thesis = (
-                f"Severe forensic discrepancies detected: {distortion}% earnings distortion and weak cash conversion "
-                f"({cfo_ratio*100:.0f}% of PAT). Reported profitability masks underlying operational weakness."
+                f"Severe forensic discrepancies detected: {distortion}% earnings distortion, weak cash conversion "
+                f"({cfo_ratio*100:.0f}% of PAT) or weak Piotroski score ({f_score_val or 'N/A'}/9). "
+                "Reported profitability masks underlying operational weakness."
             )
-        elif mos >= 20.0 and cfo_ratio >= 0.80 and distortion < 15.0 and num_flags == 0:
+        elif mos >= 20.0 and cfo_ratio >= 0.80 and distortion < 15.0 and num_flags == 0 and (f_score_val is None or f_score_val >= 7):
             verdict = "STRONG_BUY"
             badge = "🟢 STRONG BUY"
             confidence = 90
             thesis = (
-                f"Exceptional quality compounder with {mos}% margin of safety. "
+                f"Exceptional quality compounder with {mos}% margin of safety and robust Piotroski F-score ({f_score_val or 'Strong'}/9). "
                 "Clean reported earnings backed by strong Free Cash Flow and a resilient balance sheet."
             )
         elif mos >= 10.0 and cfo_ratio >= 0.70 and distortion < 25.0 and num_flags <= 1:

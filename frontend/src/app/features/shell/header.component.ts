@@ -6,6 +6,7 @@
 import { Component, OnInit, Output, EventEmitter, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AppStore } from '../../core/stores/app.store';
+import { stocksStore, StockUniverse } from '../../core/stores/stocks.store';
 
 export type AppView = 'watchlist' | 'screener';
 
@@ -24,8 +25,12 @@ export type AppView = 'watchlist' | 'screener';
 
         <!-- Nav Tabs -->
         <nav class="nav-tabs">
-          <button class="nav-tab" [class.active]="activeView === 'watchlist'" (click)="switchView('watchlist')">
+          <button class="nav-tab" [class.active]="activeView === 'watchlist' && currentUniverse() === 'curated'" (click)="selectUniverse('curated')">
             📋 Watchlist
+          </button>
+          <button class="nav-tab" [class.active]="activeView === 'watchlist' && currentUniverse() === 'midcap250'" (click)="selectUniverse('midcap250')">
+            🏢 Midcap 250
+            <span class="nav-badge midcap-badge">250 STOCKS</span>
           </button>
           <button class="nav-tab" [class.active]="activeView === 'screener'" (click)="switchView('screener')">
             🔍 Pattern Screener
@@ -188,6 +193,12 @@ export type AppView = 'watchlist' | 'screener';
       font-weight: 700;
     }
 
+    .midcap-badge {
+      background: rgba(245, 158, 11, 0.15);
+      color: #f59e0b;
+      border-color: rgba(245, 158, 11, 0.35);
+    }
+
     /* ---- Right Action Group ---- */
     .bar-right {
       display: flex;
@@ -312,11 +323,26 @@ export class HeaderComponent implements OnInit {
 
   constructor(public appStore: AppStore) {}
 
+  currentUniverse = stocksStore.activeUniverse;
+
   get status() { return this.appStore.status(); }
   get engineLabel() { return this.appStore.status()?.model ?? ''; }
 
   switchView(view: AppView): void {
     this.viewChange.emit(view);
+  }
+
+  selectUniverse(universe: StockUniverse): void {
+    if (this.activeView !== 'watchlist') {
+      this.switchView('watchlist');
+    }
+    if (
+      stocksStore.activeUniverse() !== universe ||
+      stocksStore.error() !== null ||
+      stocksStore.stocks().length === 0
+    ) {
+      stocksStore.loadUniverse(universe);
+    }
   }
 
   marketState(): string {

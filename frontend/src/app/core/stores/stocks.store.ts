@@ -6,9 +6,11 @@
 import { Stock } from '../models/stock.model';
 import { Company } from '../models/company.model';
 import { signal, computed } from '@angular/core';
+import { ApiService } from '../services/api.service';
 import { verdictToBucket, VerdictBucket, getStockBucket } from '../utils/verdict';
 
 export type HorizonStrategy = 'ALL' | 'SHORT' | 'LONG';
+export type StockUniverse = 'curated' | 'midcap250' | 'all_nse';
 
 interface StocksStoreState {
   stocks: Stock[];
@@ -17,6 +19,7 @@ interface StocksStoreState {
   lastUpdated: Date | null;
   selectedSymbol: string | null;
   horizonStrategy: HorizonStrategy;
+  activeUniverse: StockUniverse;
   filter: {
     sector: string | null;
     verdict: VerdictBucket | null;
@@ -31,6 +34,7 @@ const initialState: StocksStoreState = {
   lastUpdated: null,
   selectedSymbol: null,
   horizonStrategy: 'ALL',
+  activeUniverse: 'curated',
   filter: {
     sector: null,
     verdict: null,
@@ -40,6 +44,7 @@ const initialState: StocksStoreState = {
 
 class StocksStore {
   private state = signal<StocksStoreState>(initialState);
+  private loadSeq = 0;
 
   // Expose individual signals for fine-grained reactivity
   stocks = computed(() => this.state().stocks);
@@ -47,6 +52,7 @@ class StocksStore {
   error = computed(() => this.state().error);
   selectedSymbol = computed(() => this.state().selectedSymbol);
   horizonStrategy = computed(() => this.state().horizonStrategy);
+  activeUniverse = computed(() => this.state().activeUniverse);
   filter = computed(() => this.state().filter);
 
   // Derived count of stocks with live price (available)
@@ -172,7 +178,7 @@ class StocksStore {
   setStocks(stocks: Stock[]): void {
     this.updateState(s => ({
       ...s,
-      stocks,
+      stocks: [...stocks],
       loading: false,
       lastUpdated: new Date(),
       error: null
@@ -202,6 +208,39 @@ class StocksStore {
 
   setHorizonStrategy(horizonStrategy: HorizonStrategy): void {
     this.updateState(s => ({ ...s, horizonStrategy }));
+  }
+
+  setActiveUniverse(activeUniverse: StockUniverse): void {
+    this.updateState(s => ({ ...s, activeUniverse, filter: { sector: null, verdict: null, search: '' }, selectedSymbol: null }));
+  }
+
+  async loadUniverse(universe: StockUniverse): Promise<void> {
+    const seq = ++this.loadSeq;
+    this.updateState(s => ({
+      ...s,
+      activeUniverse: universe,
+      horizonStrategy: 'ALL',
+      filter: { sector: null, verdict: null, search: '' },
+      selectedSymbol: null,
+      loading: true,
+      error: null
+    }));
+    try {
+      const stocks = await ApiService.getStocks(universe);
+      if (seq !== this.loadSeq) return;
+      this.setStocks(Array.isArray(stocks) ? stocks : []);
+    } catch (err: any) {
+      if (seq !== this.loadSeq) return;
+      this.updateState(s => ({
+        ...s,
+        error: err?.message || 'Failed to load stock universe',
+        loading: false
+      }));
+    } finally {
+      if (seq === this.loadSeq) {
+        this.setLoading(false);
+      }
+    }
   }
 
   setSectorFilter(sector: string | null): void {

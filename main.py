@@ -271,6 +271,7 @@ def parse_args():
     parser.add_argument("--reset", action="store_true", help="Reset persistent queue status to pending and exit")
     parser.add_argument("--symbol", "-s", type=str, default="", help="Comma-separated stock symbol(s) to analyze (e.g. RELIANCE,TCS)")
     parser.add_argument("--all-nse", action="store_true", help="Analyze all NSE stocks using symbols_nse_all.json (creates/updates if missing)")
+    parser.add_argument("--midcap-250", action="store_true", help="Analyze Top 250 Mid Cap stocks using symbols_midcap_250.json")
     parser.add_argument("--symbols-file", type=str, default="", help="Path to custom symbols JSON file")
     parser.add_argument("--limit", type=int, default=0, help="Limit number of symbols to analyze from the list")
     parser.add_argument("--fast", action="store_true", help=argparse.SUPPRESS)  # legacy no-op: the engine is always rule-based
@@ -287,7 +288,11 @@ def main():
     print("=" * 80)
 
     # Determine which symbols file to use
-    if args.all_nse:
+    if args.midcap_250:
+        print("🏛️ Mode: Top 250 Mid Cap Stocks Analysis")
+        symbols_file = os.path.join(PROJECT_ROOT, "symbols_midcap_250.json")
+        is_all_nse_run = False
+    elif args.all_nse:
         print("🌐 Mode: All NSE Stock Universe Analysis")
         symbols_file = ALL_NSE_SYMBOLS_FILE_PATH
         if not os.path.exists(symbols_file):

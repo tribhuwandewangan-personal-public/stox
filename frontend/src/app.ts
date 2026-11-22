@@ -3,9 +3,8 @@
  * Delegates layout to ShellComponent.
  */
 
-import { Component, OnInit, OnDestroy, effect } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ApiService } from './app/core/services/api.service';
 import { ws } from './app/core/services/ws.service';
 import { stocksStore } from './app/core/stores/stocks.store';
 import { ShellComponent } from './app/features/shell/shell.component';
@@ -19,21 +18,33 @@ import { ShellComponent } from './app/features/shell/shell.component';
 })
 export class AppComponent implements OnInit, OnDestroy {
   constructor() {
+    ws.setUniverseProvider(() => stocksStore.activeUniverse());
+
     // Set up WebSocket event handlers
     ws.on('snapshot', (data) => {
       console.log('[App] Received snapshot:', data);
-      stocksStore.setStocks(data);
+      // Only overwrite if active universe is curated and no load is currently in flight
+      if (!stocksStore.loading() && stocksStore.activeUniverse() === 'curated' && Array.isArray(data)) {
+        stocksStore.setStocks(data);
+      }
     });
 
     ws.on('stocks', (data) => {
       console.log('[App] Received stocks:', data);
-      stocksStore.setStocks(Array.isArray(data) ? data : []);
+      if (stocksStore.loading()) return;
+      if (data && !Array.isArray(data) && Array.isArray(data.stocks)) {
+        if (data.universe === stocksStore.activeUniverse()) {
+          stocksStore.setStocks(data.stocks);
+        }
+      } else if (Array.isArray(data) && stocksStore.activeUniverse() === 'curated') {
+        stocksStore.setStocks(data);
+      }
     });
 
     ws.on('analysis_done', (data) => {
       console.log('[App] Analysis done:', data);
-      // Refresh stocks to get updated analysis
-      this.loadStocks();
+      // Refresh stocks for current active universe to get updated analysis
+      stocksStore.loadUniverse(stocksStore.activeUniverse());
     });
 
     ws.onStateChange((state) => {
@@ -45,25 +56,11 @@ export class AppComponent implements OnInit, OnDestroy {
     console.log('[App] Initializing...');
     // Start WebSocket
     ws.connect();
-    // Load initial stocks
-    this.loadStocks();
+    // Load initial stocks through sequence-guarded store action
+    stocksStore.loadUniverse(stocksStore.activeUniverse());
   }
 
   ngOnDestroy(): void {
     ws.disconnect();
-  }
-
-  private async loadStocks(): Promise<void> {
-    stocksStore.setLoading(true);
-    try {
-      const stocks = await ApiService.getStocks();
-      stocksStore.setStocks(stocks);
-      console.log('[App] Loaded', stocks.length, 'stocks');
-    } catch (error) {
-      stocksStore.setError(String(error));
-      console.error('[App] Error loading stocks:', error);
-    } finally {
-      stocksStore.setLoading(false);
-    }
   }
 }

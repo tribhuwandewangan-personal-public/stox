@@ -69,10 +69,11 @@ export class ApiService {
   }
 
   /**
-   * GET /api/stocks: All stocks with analysis and quotes.
+   * GET /api/stocks: All stocks with analysis and quotes. Supports ?universe=curated|midcap250|all_nse
    */
-  static getStocks(): Promise<Stock[]> {
-    const resp = fetchJson<any>('/stocks');
+  static getStocks(universe: string = 'curated'): Promise<Stock[]> {
+    const params = universe && universe !== 'curated' ? `?universe=${encodeURIComponent(universe)}` : '';
+    const resp = fetchJson<any>(`/stocks${params}`);
     return resp.then((r: any) => r || []);
   }
 

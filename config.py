@@ -34,6 +34,7 @@ AUTO_SCHEDULE = os.getenv("AUTO_SCHEDULE", "1").lower() in ("1", "true", "yes") 
 # Target Symbols Config Files
 SYMBOLS_FILE_PATH = os.path.join(os.path.dirname(__file__), "symbols.json")
 ALL_NSE_SYMBOLS_FILE_PATH = os.path.join(os.path.dirname(__file__), "symbols_nse_all.json")
+MIDCAP_250_SYMBOLS_FILE_PATH = os.path.join(os.path.dirname(__file__), "symbols_midcap_250.json")
 CACHE_DB_PATH = os.path.join(os.path.dirname(__file__), "storage", "cache.db")
 REPORTS_DIR = os.path.join(os.path.dirname(__file__), "reports")
 HISTORICAL_EXCEL_PATH = os.path.join(REPORTS_DIR, "NSE_Historical_Data.xlsx")

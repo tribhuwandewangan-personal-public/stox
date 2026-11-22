@@ -192,6 +192,41 @@ class TestForensicFinancialEngine(unittest.TestCase):
         self.assertIn("AVOID", result["verdict"])
         self.assertIn("🔴", result["verdict_badge"])
 
+    def test_piotroski_f_score_and_working_capital(self):
+        """Test Piotroski F-Score (0-9) and working capital DSO metrics."""
+        strong_stmts = {
+            "company_name": "Titanium Financials Ltd",
+            "sector": "Industrial Goods",
+            "revenue": 1000.0,
+            "revenue_prior": 850.0,
+            "reported_pat": 120.0,
+            "exceptional_items": 0.0,
+            "other_income": 5.0,
+            "minority_interest": 0.0,
+            "cfo": 140.0,  # CFO > PAT
+            "capex": 30.0,
+            "trade_receivables": 100.0,  # DSO = (100 / 1000) * 365 = 36.5 days
+            "receivables_prior": 90.0,
+            "total_debt": 0.0,
+            "total_cash": 150.0,
+        }
+
+        result = self.engine.analyze_company(
+            symbol="TITANIUM",
+            price_override=500.0,
+            financial_statement_override=strong_stmts,
+        )
+
+        f_score = result.get("piotroski_f_score")
+        f_score_rating = result.get("piotroski_rating")
+        self.assertIsNotNone(f_score)
+        self.assertGreaterEqual(f_score, 7)
+        self.assertEqual(f_score_rating, "STRONG")
+
+        dso = result.get("debtor_days")
+        self.assertIsNotNone(dso)
+        self.assertAlmostEqual(dso, 36.5, places=1)
+
 
 if __name__ == "__main__":
     unittest.main()

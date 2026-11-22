@@ -70,7 +70,7 @@ async def status(request: Request) -> JSONResponse:
 
 
 async def stocks(request: Request) -> Response:
-    """GET /api/stocks: All stocks with latest analysis and live quotes."""
+    """GET /api/stocks: All stocks with latest analysis and live quotes. Supports ?universe=curated|midcap250|all_nse"""
     try:
         cache_mgr = _managers["cache_mgr"]
         queue_mgr = _managers["queue_mgr"]
@@ -78,7 +78,11 @@ async def stocks(request: Request) -> Response:
         tech_engine = _managers["tech_engine"]
         events_engine = _managers["events_engine"]
 
-        body = get_stocks_response_body(cache_mgr, queue_mgr, hist_engine, tech_engine, events_engine)
+        universe = request.query_params.get("universe", "curated").lower().strip()
+        if universe not in ("curated", "midcap250", "all_nse"):
+            universe = "curated"
+
+        body = get_stocks_response_body(cache_mgr, queue_mgr, hist_engine, tech_engine, events_engine, universe=universe)
         return Response(content=body, media_type="application/json")
     except Exception as e:
         return JSONResponse({"error": str(e), "stocks": []}, status_code=500)

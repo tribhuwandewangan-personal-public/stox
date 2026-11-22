@@ -26,3 +26,18 @@
 ### 4. Deterministic Engine Invariant
 - All calculations, scores, stop losses, price targets, risk levels, and verdicts must be deterministic and rule-based (no LLM hallucinations for quantitative numbers).
 - Automated regression tests must verify that order placement methods remain absent across the entire codebase.
+
+## Project Quick-Reference
+- **Context File**: Read `CONTEXT.md` in the repo root first before exploring or grepping broadly across the codebase.
+- **Runtime Ports**:
+  - Backend HTTP API (`dashboard_server.py`): `http://127.0.0.1:8765` (no hot-reload; run `.\cleanup_server.ps1 -Restart` after Python edits)
+  - Angular 22 dev server (`frontend/` `npm start`): `http://localhost:4200` (proxies `/api`, `/ws`, `/news_reports`, `/reports` -> `:8765`)
+- **Key Paths**:
+  - Universes & Config: `config.py`, `symbols.json` (curated), `symbols_midcap_250.json` (250 midcap), `symbols_nse_all.json` (all NSE)
+  - Backend API: `dashboard_server.py`, `api/routes.py`, `api/services.py` (`get_stocks_response_body`, `get_all_stock_data`)
+  - Frontend Root & State: `frontend/src/app.ts`, `frontend/src/app/core/stores/stocks.store.ts`, `frontend/src/app/core/services/api.service.ts`
+  - Frontend Dashboard UI: `frontend/src/app/features/shell/header.component.ts`, `frontend/src/app/features/dashboard/`
+- **Commands**:
+  - Restart backend: `.\cleanup_server.ps1 -Restart`
+  - Backend tests: `.\.venv\Scripts\python.exe -m unittest discover tests`
+  - Frontend build: `cd frontend; npm run build`

@@ -11,6 +11,7 @@ import { BulletinComponent } from './bulletin.component';
 import { DashboardComponent } from '../dashboard/dashboard.component';
 import { PatternScreenerComponent } from '../screener/pattern-screener.component';
 import { PortfolioModalComponent } from '../dashboard/portfolio-modal.component';
+import { stocksStore } from '../../core/stores/stocks.store';
 
 @Component({
   selector: 'app-shell',
@@ -62,10 +63,18 @@ import { PortfolioModalComponent } from '../dashboard/portfolio-modal.component'
     </div>
   `,
   styles: [`
+:host {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
     .app-container {
       display: flex;
       flex-direction: column;
-      min-height: 100vh;
+      height: 100%;
+      overflow: hidden;
       background-color: var(--bg-dark, #0a0f1a);
       background-image:
         radial-gradient(at 10% 10%, rgba(56, 189, 248, 0.05) 0px, transparent 50%),
@@ -76,7 +85,17 @@ import { PortfolioModalComponent } from '../dashboard/portfolio-modal.component'
       flex: 1;
       display: flex;
       flex-direction: column;
-      overflow: auto;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .main-content > app-dashboard,
+    .main-content > app-pattern-screener {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+      height: 100%;
+      overflow: hidden;
     }
 
     .app-footer {
@@ -104,6 +123,7 @@ import { PortfolioModalComponent } from '../dashboard/portfolio-modal.component'
   `]
 })
 export class ShellComponent {
+  stocksStore = stocksStore;
   activeView = signal<AppView>('watchlist');
   showPortfolioModal = signal<boolean>(false);
 

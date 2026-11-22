@@ -30,6 +30,7 @@ export class WebSocketService {
   private pollTimer: number | null = null;
   private state: 'connected' | 'connecting' | 'disconnected' = 'disconnected';
   private pollInterval = 30000; // 30s fallback polling (was 20s)
+  private universeProvider: () => string = () => 'curated';
 
   constructor() {
     // Determine WebSocket URL (http → ws, https → wss)
@@ -151,6 +152,13 @@ export class WebSocketService {
   }
 
   /**
+   * Provide the active stock universe name so fallback polling fetches the right list.
+   */
+  setUniverseProvider(fn: () => string): void {
+    this.universeProvider = fn;
+  }
+
+  /**
    * Check if connected.
    */
   isConnected(): boolean {
@@ -215,11 +223,15 @@ export class WebSocketService {
       }
 
       try {
-        // Poll for fresh stock data
-        const resp = await fetch('/api/stocks');
+        // Poll for fresh stock data in the active universe
+        const universe = this.universeProvider();
+        const url = universe && universe !== 'curated'
+          ? `/api/stocks?universe=${encodeURIComponent(universe)}`
+          : '/api/stocks';
+        const resp = await fetch(url);
         if (resp.ok) {
           const stocks = await resp.json();
-          this.handleMessage({ type: 'stocks', payload: stocks });
+          this.handleMessage({ type: 'stocks', payload: { universe, stocks } });
         }
       } catch (error) {
         // Polling failure is silent

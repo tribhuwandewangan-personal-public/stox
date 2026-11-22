@@ -13,7 +13,7 @@
  *  - Full Master Synthesizer AI Report (Markdown formatted tables, key rationale, trade plan)
  */
 
-import { Component, OnInit, OnDestroy, HostListener, signal, computed, ViewChild, ElementRef, AfterViewInit } from '@angular/core';
+import { Component, OnInit, OnDestroy, HostListener, signal, computed, ViewChild, ElementRef, AfterViewInit, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { stocksStore } from '../../core/stores/stocks.store';
 import { apiService } from '../../core/services/api.service';
@@ -125,7 +125,7 @@ import { parseMarkdown } from '../../core/utils/markdown';
                 <span><b>📢 Corporate Action:</b> {{ s.events.corporate_action || 'Board review & standard quarterly disclosure' }}</span>
               </div>
               <div class="stat-line">
-                <span><b>⚡ Catalyst Impact:</b> <strong class="text-amber">{{ s.events?.impact || 'Normal' }}</strong></span>
+                <span><b>⚡ Catalyst Impact:</b> <strong class="text-amber">{{ s.events.impact || 'Normal' }}</strong></span>
               </div>
             </div>
           </div>
@@ -160,6 +160,10 @@ import { parseMarkdown } from '../../core/utils/markdown';
                 <div class="stat-row-split" *ngIf="fd.fair_value">
                   <span><b>🎯 Sustainable Value:</b> Rs. {{ fd.fair_value }}</span>
                   <span><b>Margin of Safety:</b> <b [style.color]="fd.margin_of_safety_pct > 0 ? '#34d399' : '#f87171'">{{ fd.margin_of_safety_pct > 0 ? '+' : '' }}{{ fd.margin_of_safety_pct }}%</b></span>
+                </div>
+                <div class="stat-row-split" *ngIf="fd.piotroski_f_score !== undefined || fd.debtor_days">
+                  <span *ngIf="fd.piotroski_f_score !== undefined"><b>📐 Piotroski F-Score:</b> <b [style.color]="fd.piotroski_f_score >= 7 ? '#34d399' : (fd.piotroski_f_score <= 3 ? '#f87171' : '#f59e0b')">{{ fd.piotroski_f_score }}/9 <span *ngIf="fd.piotroski_rating">({{ fd.piotroski_rating }})</span></b></span>
+                  <span *ngIf="fd.debtor_days"><b>⏱️ Debtor Days:</b> <b [style.color]="fd.debtor_days > 120 ? '#f87171' : '#38bdf8'">{{ fd.debtor_days }}d</b></span>
                 </div>
                 <div class="stat-row-split" *ngIf="fd.cash_conversion">
                   <span><b>💰 CFO / PAT:</b> {{ (fd.cash_conversion.cfo_to_pat_ratio * 100).toFixed(0) }}%</span>
@@ -775,14 +779,15 @@ import { parseMarkdown } from '../../core/utils/markdown';
   `]
 })
 export class StockDetailModalComponent implements OnInit, AfterViewInit, OnDestroy {
-  // Handle window resize to keep chart responsive
+  @ViewChild('chartCanvas', { static: false }) canvasRef!: ElementRef<HTMLCanvasElement>;
+
+  @HostListener('window:resize')
   onResize(): void {
     // Redraw chart if canvas is ready
     if (this.canvasRef) {
       this.drawChart();
     }
   }
-  @ViewChild('chartCanvas', { static: false }) canvasRef!: ElementRef<HTMLCanvasElement>;
 
   stocksStore = stocksStore;
   chartDays = signal<number>(90);
@@ -791,6 +796,18 @@ export class StockDetailModalComponent implements OnInit, AfterViewInit, OnDestr
   isAnalyzing = signal<boolean>(false);
   chartTooltip = signal<string>('');
   activeFinTab = signal<'income' | 'balance' | 'cashflow'>('income');
+
+  constructor() {
+    // Whenever selectedStock changes or modal opens, trigger chart load
+    effect(() => {
+      const stock = this.stocksStore.selectedStock();
+      if (stock) {
+        setTimeout(() => {
+          this.loadCandles();
+        }, 10);
+      }
+    });
+  }
 
   get selectedStock(): Stock | null {
     return this.stocksStore.selectedStock();
@@ -931,8 +948,11 @@ export class StockDetailModalComponent implements OnInit, AfterViewInit, OnDestr
       await apiService.reAnalyzeStock(s.symbol);
       alert(`Triggered multi-agent analysis for ${s.symbol}. Refreshing...`);
       setTimeout(async () => {
-        const stocks = await apiService.getStocks();
-        this.stocksStore.setStocks(stocks);
+        const activeUniverse = this.stocksStore.activeUniverse();
+        const stocks = await apiService.getStocks(activeUniverse);
+        if (this.stocksStore.activeUniverse() === activeUniverse) {
+          this.stocksStore.setStocks(stocks);
+        }
         this.isAnalyzing.set(false);
         this.loadCandles();
       }, 1500);

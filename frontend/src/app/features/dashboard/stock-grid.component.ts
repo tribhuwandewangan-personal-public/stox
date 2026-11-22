@@ -19,7 +19,7 @@ import { StockCardComponent } from './stock-card.component';
         class="filter-tab"
         [class.active]="stocksStore.horizonStrategy() === 'ALL'"
         (click)="setStrategy('ALL')">
-        🌐 All Watchlist
+        🌐 {{ stocksStore.activeUniverse() === 'midcap250' ? 'All Midcap 250' : 'All Watchlist' }}
         <span class="count-pill">{{ stocksStore.horizonCounts().all }}</span>
       </button>
 
@@ -38,6 +38,16 @@ import { StockCardComponent } from './stock-card.component';
         🏛 Long-Term Wealth
         <span class="count-pill count-wealth">{{ stocksStore.horizonCounts().long }}</span>
       </button>
+    </div>
+
+    <div class="grid-loading-banner" *ngIf="stocksStore.loading()">
+      <span class="spinner">⏳</span>
+      <span>Loading {{ stocksStore.activeUniverse() === 'midcap250' ? 'Midcap 250 (250 stocks)' : 'Curated Watchlist' }}...</span>
+    </div>
+
+    <div class="grid-error-banner" *ngIf="stocksStore.error() as err">
+      <span>⚠️ {{ err }}</span>
+      <button class="retry-btn" (click)="stocksStore.loadUniverse(stocksStore.activeUniverse())">Retry</button>
     </div>
 
     <div class="stock-grid">
@@ -109,6 +119,50 @@ import { StockCardComponent } from './stock-card.component';
       padding: 16px;
       box-sizing: border-box;
       align-content: start;
+    }
+
+    .grid-loading-banner {
+      margin: 14px 16px 0 16px;
+      padding: 12px 16px;
+      border-radius: 10px;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      color: #38bdf8;
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .grid-error-banner {
+      margin: 14px 16px 0 16px;
+      padding: 12px 16px;
+      border-radius: 10px;
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      color: #f87171;
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .retry-btn {
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid rgba(239, 68, 68, 0.45);
+      color: #fecaca;
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .retry-btn:hover {
+      background: rgba(239, 68, 68, 0.35);
     }
 
     @media (max-width: 1024px) {

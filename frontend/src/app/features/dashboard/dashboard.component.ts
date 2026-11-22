@@ -43,8 +43,16 @@ import { stocksStore } from '../../core/stores/stocks.store';
 
         <!-- Grid Header Bar -->
         <div class="grid-header">
-          <div class="grid-title">Equities Decision Dashboard (symbols.json)</div>
+          <div class="grid-title">
+            Equities Decision Dashboard
+            <span class="universe-tag" [class.midcap]="activeUniverse() === 'midcap250'">
+              {{ activeUniverse() === 'midcap250' ? 'Midcap 250 (symbols_midcap_250.json)' : 'Curated Watchlist (symbols.json)' }}
+            </span>
+          </div>
           <div class="grid-actions">
+            <button class="btn-universe-toggle" (click)="toggleUniverse()">
+              {{ activeUniverse() === 'midcap250' ? '📋 Switch to Curated Watchlist' : '🏢 Switch to Midcap 250' }}
+            </button>
             <a href="/news_reports/latest_market_news.md" target="_blank" rel="noopener noreferrer" class="btn-grid-link">
               <span>📰</span> Market News (.md) ↗
             </a>
@@ -62,12 +70,21 @@ import { stocksStore } from '../../core/stores/stocks.store';
     <app-stock-detail-modal></app-stock-detail-modal>
   `,
   styles: [`
+    :host {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+      height: 100%;
+      overflow: hidden;
+    }
+
     .dashboard-container {
       display: flex;
       flex: 1;
       gap: 0;
       overflow: hidden;
       height: 100%;
+      min-height: 0;
     }
 
     .dashboard-main-flow {
@@ -75,6 +92,7 @@ import { stocksStore } from '../../core/stores/stocks.store';
       display: flex;
       flex-direction: column;
       overflow-y: auto;
+      min-height: 0;
       padding: 16px 20px 40px 20px;
       gap: 16px;
     }
@@ -95,6 +113,46 @@ import { stocksStore } from '../../core/stores/stocks.store';
       font-family: 'Outfit', sans-serif;
       font-size: 1.15rem;
       font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .universe-tag {
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+
+    .universe-tag.midcap {
+      background: rgba(245, 158, 11, 0.15);
+      color: #f59e0b;
+      border-color: rgba(245, 158, 11, 0.35);
+    }
+
+    .btn-universe-toggle {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      color: #cbd5e1;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    .btn-universe-toggle:hover {
+      background: rgba(255, 255, 255, 0.15);
       color: #fff;
     }
 
@@ -177,12 +235,19 @@ import { stocksStore } from '../../core/stores/stocks.store';
   `]
 })
 export class DashboardComponent {
+  activeUniverse = stocksStore.activeUniverse;
+
   onStockSelect(stock: Stock): void {
     stocksStore.selectSymbol(stock.symbol);
   }
 
+  toggleUniverse(): void {
+    const next = this.activeUniverse() === 'curated' ? 'midcap250' : 'curated';
+    stocksStore.loadUniverse(next);
+  }
+
   refreshData(): void {
-    window.location.reload();
+    stocksStore.loadUniverse(this.activeUniverse());
   }
 
   onSidebarSelect(symbol: string): void {

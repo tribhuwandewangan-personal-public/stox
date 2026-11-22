@@ -73,7 +73,15 @@ class FundamentalAgent:
 
         forensic_flags = forensic_res.get("red_flags", [])
         peer_benchmarks = forensic_res.get("peer_benchmarks", {})
+        f_score_val = forensic_res.get("piotroski_f_score")
+        if isinstance(f_score_val, dict):
+            f_score_val = f_score_val.get("score")
+        debtor_days = forensic_res.get("debtor_days")
         forensic_summary = f" | Forensic Due-Diligence: {forensic_res.get('verdict_badge', 'N/A')}"
+        if f_score_val is not None:
+            forensic_summary += f" [Piotroski F-Score: {f_score_val}/9]"
+        if debtor_days is not None:
+            forensic_summary += f" [Debtor Days: {debtor_days}d]"
         if forensic_flags:
             forensic_summary += f" [⚠️ Red Flags: {'; '.join(forensic_flags[:2])}]"
         if peer_benchmarks.get("peer_verdict"):

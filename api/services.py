@@ -23,7 +23,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from config import ENGINE_LABEL, SYMBOLS_FILE_PATH
+from config import ENGINE_LABEL, SYMBOLS_FILE_PATH, ALL_NSE_SYMBOLS_FILE_PATH, MIDCAP_250_SYMBOLS_FILE_PATH
 from tools.quote_tools import build_price_info
 from tools.long_term_strategy import long_term_engine
 
@@ -40,7 +40,7 @@ FUND_AGENT = "Fundamental Analyst Agent"
 STALE_SYNTH_HOURS = 72          # older synthesizer output is still shown, flagged as "previous run"
 STOCKS_CACHE_SECONDS = 30       # /api/stocks response is rebuilt at least this often (prices, sparklines)
 _stocks_lock = threading.Lock()
-_stocks_cache = {"key": None, "body": b"[]"}
+_stocks_cache = {}
 _pattern_memo = {}              # (symbol, newest candle date) -> detected patterns
 
 
@@ -85,15 +85,22 @@ def safe_json_dumps(obj) -> bytes:
     return json.dumps(obj, cls=NaNSafeEncoder).encode("utf-8")
 
 
-def _load_symbols_list():
-    """Load the list of symbols from symbols.json."""
-    if not os.path.exists(SYMBOLS_FILE_PATH):
-        return []
+def _load_symbols_list(universe: str = "curated"):
+    """Load the list of symbols from curated symbols.json, midcap 250, or all NSE."""
+    target_path = SYMBOLS_FILE_PATH
+    if universe == "midcap250":
+        target_path = MIDCAP_250_SYMBOLS_FILE_PATH
+    elif universe == "all_nse":
+        target_path = ALL_NSE_SYMBOLS_FILE_PATH
+
+    if not os.path.exists(target_path):
+        target_path = SYMBOLS_FILE_PATH
+
     try:
-        with open(SYMBOLS_FILE_PATH, "r", encoding="utf-8") as f:
+        with open(target_path, "r", encoding="utf-8") as f:
             return json.load(f).get("symbols", [])
     except Exception as e:
-        print(f"⚠️ [Services] Could not parse {SYMBOLS_FILE_PATH}: {e}", flush=True)
+        print(f"⚠️ [Services] Could not parse {target_path}: {e}", flush=True)
         return []
 
 
@@ -121,12 +128,12 @@ def _patterns_from_cached_candles(sym, cache_mgr, tech_engine):
     return patterns
 
 
-def get_all_stock_data(cache_mgr, queue_mgr, hist_engine, tech_engine, events_engine):
+def get_all_stock_data(cache_mgr, queue_mgr, hist_engine, tech_engine, events_engine, universe: str = "curated"):
     """
     Assemble the complete stock data for all symbols: latest analysis, queue status, patterns, events, sparklines.
     Called by GET /api/stocks and via WebSocket snapshot.
     """
-    symbols_list = _load_symbols_list()
+    symbols_list = _load_symbols_list(universe=universe)
 
     # Live queue statuses from SQLite queue; every agent's latest output for every symbol in ONE query
     queue_statuses = queue_mgr.get_symbol_statuses()
@@ -270,26 +277,34 @@ def get_all_stock_data(cache_mgr, queue_mgr, hist_engine, tech_engine, events_en
     return results
 
 
-def get_stocks_response_body(cache_mgr, queue_mgr, hist_engine, tech_engine, events_engine) -> bytes:
+def get_stocks_response_body(cache_mgr, queue_mgr, hist_engine, tech_engine, events_engine, universe: str = "curated") -> bytes:
     """
     JSON body for /api/stocks. Rebuilt only when something changed (new analysis written, queue status or
-    symbols.json changed) or after STOCKS_CACHE_SECONDS, so repeated polling is nearly free.
+    symbols file changed) or after STOCKS_CACHE_SECONDS, so repeated polling is nearly free.
     """
+    target_path = SYMBOLS_FILE_PATH
+    if universe == "midcap250":
+        target_path = MIDCAP_250_SYMBOLS_FILE_PATH
+    elif universe == "all_nse":
+        target_path = ALL_NSE_SYMBOLS_FILE_PATH
+
     try:
-        symbols_mtime = os.path.getmtime(SYMBOLS_FILE_PATH)
+        symbols_mtime = os.path.getmtime(target_path)
     except OSError:
         symbols_mtime = 0
     key = (
+        universe,
         cache_mgr.get_agent_runs_marker(),
         tuple(sorted(queue_mgr.get_symbol_statuses().items())),
         symbols_mtime,
         int(time.time() // STOCKS_CACHE_SECONDS),
     )
     with _stocks_lock:   # concurrent requests wait for one build instead of each doing the work
-        if _stocks_cache["key"] != key:
-            _stocks_cache["body"] = safe_json_dumps(get_all_stock_data(cache_mgr, queue_mgr, hist_engine, tech_engine, events_engine))
-            _stocks_cache["key"] = key
-        return _stocks_cache["body"]
+        cached_entry = _stocks_cache.get(universe)
+        if not cached_entry or cached_entry.get("key") != key:
+            body = safe_json_dumps(get_all_stock_data(cache_mgr, queue_mgr, hist_engine, tech_engine, events_engine, universe=universe))
+            _stocks_cache[universe] = {"key": key, "body": body}
+        return _stocks_cache[universe]["body"]
 
 
 # /api/history: computed indicators + patterns memoized per (symbol, days, newest candle date)

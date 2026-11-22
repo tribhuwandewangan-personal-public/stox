@@ -24,6 +24,7 @@ param(
     [string]$Symbol = "",
     [switch]$Portfolio,
     [switch]$AllNse,
+    [switch]$Midcap250,
     [string]$SymbolsFile = "",
     [int]$Limit = 0,
     [switch]$NonInteractive
@@ -58,7 +59,7 @@ Write-Host "====================================================================
 
 # Determine if we should run in interactive wizard mode
 # Default to interactive if no specific execution flags were passed
-$isInteractive = (-not $NonInteractive) -and (-not $Force) -and ($Symbol -eq "") -and (-not $Portfolio) -and (-not $AllNse) -and ($SymbolsFile -eq "")
+$isInteractive = (-not $NonInteractive) -and (-not $Force) -and ($Symbol -eq "") -and (-not $Portfolio) -and (-not $AllNse) -and (-not $Midcap250) -and ($SymbolsFile -eq "")
 
 # -----------------------------------------------------------------------------
 # STEP 1: Python Environment & Dependencies
@@ -231,9 +232,10 @@ if ($isInteractive) {
     Write-Host "   [2] My Curated List (symbols.json) - Complete Fresh Analysis (--force: Re-evaluates from scratch)" -ForegroundColor White
     Write-Host "   [3] Specific Target Symbol(s) (e.g. RELIANCE,TCS,BEL)" -ForegroundColor White
     Write-Host "   [4] Portfolio Holdings Only (diagnostics for your current holdings)" -ForegroundColor White
-    Write-Host "   [5] All NSE Stocks Analysis (Scans entire NSE market, saves/uses symbols_nse_all.json)" -ForegroundColor Cyan
+    Write-Host "   [5] Top 250 Mid Cap Stocks Analysis (symbols_midcap_250.json)" -ForegroundColor Green
+    Write-Host "   [6] All NSE Stocks Analysis (Scans entire NSE market, saves/uses symbols_nse_all.json)" -ForegroundColor Cyan
 
-    $modeSelect = Read-Host "`n   Enter mode [1-5] (Default: 1)"
+    $modeSelect = Read-Host "`n   Enter mode [1-6] (Default: 1)"
 
     switch ($modeSelect.Trim()) {
         "2" {
@@ -252,6 +254,16 @@ if ($isInteractive) {
             Write-Host "   Portfolio-Only mode selected." -ForegroundColor Yellow
         }
         "5" {
+            $Midcap250 = $true
+            Write-Host "   [!] Top 250 Mid Cap Stocks Analysis selected." -ForegroundColor Green
+            Write-Host "   Will use symbols_midcap_250.json (your symbols.json is kept untouched)." -ForegroundColor DarkGray
+            $limInput = Read-Host "   Optional: Enter limit on number of midcap stocks to scan (e.g. 50, 100, or Enter for ALL 250)"
+            if ($limInput.Trim() -match "^\d+$") {
+                $Limit = [int]$limInput.Trim()
+                Write-Host "   Scan limit set to first $Limit stocks." -ForegroundColor Yellow
+            }
+        }
+        "6" {
             $AllNse = $true
             Write-Host "   [!] All NSE Stocks Analysis selected." -ForegroundColor Cyan
             Write-Host "   Will use symbols_nse_all.json (your symbols.json is kept untouched)." -ForegroundColor DarkGray
@@ -361,7 +373,8 @@ if ($runSync -and (-not $portfolioOnly)) {
     Write-Host "[4/5] Syncing split-adjusted historical data and updating Excel dataset..." -ForegroundColor Yellow
     try {
         $syncArgs = @("--sync", "--excel")
-        if ($AllNse) { $syncArgs += "--all-nse" }
+        if ($Midcap250) { $syncArgs += @("--symbols-file", "$ScriptDir\symbols_midcap_250.json") }
+        elseif ($AllNse) { $syncArgs += "--all-nse" }
         elseif ($SymbolsFile) { $syncArgs += @("--symbols-file", $SymbolsFile) }
         & $pyExe "$ScriptDir\tools\historical_data_tools.py" @syncArgs
     }
@@ -376,7 +389,10 @@ if ($runSync -and (-not $portfolioOnly)) {
 if (-not $portfolioOnly) {
     Write-Host ""
     Write-Host "[5/5] Triggering Multi-Agent Analysis Pipeline (rule-based, no LLM)..." -ForegroundColor Green
-    if ($AllNse) {
+    if ($Midcap250) {
+        Write-Host "   Scope: Top 250 Mid Cap Universe ($ScriptDir\symbols_midcap_250.json)" -ForegroundColor Green
+    }
+    elseif ($AllNse) {
         Write-Host "   Scope: Complete NSE Market Universe (symbols_nse_all.json)" -ForegroundColor Cyan
     }
     elseif ($SymbolsFile) {
@@ -391,7 +407,8 @@ if (-not $portfolioOnly) {
     $mainArgs = @()
     if ($Force) { $mainArgs += "--force" }
     if ($Symbol -and $Symbol.Trim() -ne "") { $mainArgs += @("--symbol", $Symbol.Trim()) }
-    if ($AllNse) { $mainArgs += "--all-nse" }
+    if ($Midcap250) { $mainArgs += "--midcap-250" }
+    elseif ($AllNse) { $mainArgs += "--all-nse" }
     elseif ($SymbolsFile) { $mainArgs += @("--symbols-file", $SymbolsFile) }
     if ($Limit -gt 0) { $mainArgs += @("--limit", "$Limit") }
 
