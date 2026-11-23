@@ -331,7 +331,7 @@ else {
     catch {}
 
     Write-Host "`n   Launching Realtime Dashboard Server on $DashUrl..." -ForegroundColor Yellow
-    Start-Process -FilePath $pyExe -ArgumentList @("$ScriptDir\dashboard_server.py", "--port", "$DashPort") -WorkingDirectory $ScriptDir -WindowStyle Hidden
+    Start-Process -FilePath $pyExe -ArgumentList @("$ScriptDir\dashboard_server.py", "--port", "$DashPort", "--no-browser") -WorkingDirectory $ScriptDir -WindowStyle Hidden
 
     $retries = 20
     while ($retries -gt 0) {
@@ -358,11 +358,19 @@ else {
 
 $FrontendUrl = "http://localhost:4200"
 
-# Launch Angular frontend workstation in browser if interactive
+# Ensure Angular dev server is active on port 4200 and launch Angular URL in browser
 if (-not $NonInteractive) {
     try {
+        $ngRunning = [bool](Get-NetTCPConnection -LocalPort 4200 -State Listen -ErrorAction SilentlyContinue)
+        if (-not $ngRunning) {
+            $frontendDir = Join-Path $ScriptDir "frontend"
+            if (Test-Path $frontendDir) {
+                Write-Host "   Starting Angular dev server on $FrontendUrl..." -ForegroundColor Yellow
+                Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", "npm start") -WorkingDirectory $frontendDir -WindowStyle Minimized
+            }
+        }
         Start-Process $FrontendUrl
-        Write-Host "   Workstation opened in browser: $FrontendUrl (ensure 'npm start' is running in frontend/)" -ForegroundColor Cyan
+        Write-Host "   Angular Workstation opened in browser: $FrontendUrl" -ForegroundColor Cyan
     }
     catch {}
 }

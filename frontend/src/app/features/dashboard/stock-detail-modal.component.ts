@@ -231,7 +231,7 @@ import { parseMarkdown } from '../../core/utils/markdown';
               </div>
               <div class="lt-target-pill">
                 <b>3Y Target:</b> <strong class="text-white">{{ lt.long_term_target || 'N/A' }}</strong>
-                <span class="text-green bold" *ngIf="lt.long_term_upside_pct">({{ lt.long_term_upside_pct }})</span>
+                <span class="bold" *ngIf="lt.long_term_upside_pct" [class.text-green]="!lt.long_term_upside_pct.startsWith('-')" [class.text-red]="lt.long_term_upside_pct.startsWith('-')">({{ lt.long_term_upside_pct }})</span>
               </div>
             </div>
 

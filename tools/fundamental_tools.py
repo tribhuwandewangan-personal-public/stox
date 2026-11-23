@@ -113,20 +113,21 @@ class FundamentalAnalysisEngine:
                 # Ensure negative PEG from data feed is flagged rather than misconstrued as a bargain multiple
                 if isinstance(peg_val, (int, float)) and peg_val <= 0:
                     peg_val = "N/A (Negative Growth)"
+                elif isinstance(eg_val, (int, float)) and eg_val <= 0:
+                    peg_val = "N/A (Negative Growth)"
 
-                # Fallback: calculate PEG from P/E and earningsGrowth if pegRatio is not provided directly
-                if (peg_val == "N/A" or not isinstance(peg_val, (int, float))) and isinstance(pe_val, (int, float)) and pe_val > 0:
+                # Normalize PEG against sustainable long-term earnings growth cap (30% max) so 1-year base spikes don't produce fake 0.08x-0.25x PEGs
+                if isinstance(pe_val, (int, float)) and pe_val > 0:
                     if isinstance(eg_val, (int, float)):
                         if eg_val > 2.0:
-                            # Normalize extreme base-effect surge (e.g. >100%) so PEG does not artificially collapse to 0.00
-                            denom_g = min(eg_val, 100.0)
-                            peg_val = round(pe_val / denom_g, 2)
+                            sust_g = min(eg_val, 24.0 if "financial" in str(info.get("sector") or "").lower() else 32.0)
+                            norm_peg = round(pe_val / sust_g, 2)
+                            if peg_val == "N/A" or not isinstance(peg_val, (int, float)) or peg_val < norm_peg * 0.75 or peg_val < 0.35:
+                                peg_val = norm_peg
                         elif eg_val <= 0:
-                            # Earnings contraction: never mask declining profit with a revenue-growth PEG proxy
                             peg_val = "N/A (Negative Growth)"
-                    elif isinstance(rg_val, (int, float)) and rg_val > 5.0:
-                        # Earnings growth unavailable; use top-line revenue expansion proxy
-                        peg_val = round(pe_val / min(rg_val, 100.0), 2)
+                    elif (peg_val == "N/A" or not isinstance(peg_val, (int, float))) and isinstance(rg_val, (int, float)) and rg_val > 5.0:
+                        peg_val = round(pe_val / min(rg_val, 30.0), 2)
 
                 # Balance Sheet & Solvency metrics (freely available via market feed)
                 total_debt = _num(info.get("totalDebt"))

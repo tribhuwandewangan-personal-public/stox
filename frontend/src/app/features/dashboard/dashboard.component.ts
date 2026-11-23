@@ -2,11 +2,12 @@
  * Dashboard component: Main content area with sidebar, macro catalysts, quick picks, fundamental picks, and stock grid.
  */
 
-import { Component, AfterViewInit, ViewChild, ElementRef } from '@angular/core';
+import { Component, AfterViewInit, ViewChild, ElementRef, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { StockGridComponent } from './stock-grid.component';
 import { SidebarComponent } from './sidebar.component';
 import { StockDetailModalComponent } from './stock-detail-modal.component';
+import { AddSymbolModalComponent } from './add-symbol-modal.component';
 import { MacroCatalystsBannerComponent } from './macro-catalysts-banner.component';
 import { QuickPicksTableComponent } from './quick-picks-table.component';
 import { FundamentalPicksTableComponent } from './fundamental-picks-table.component';
@@ -23,12 +24,16 @@ import { stocksStore } from '../../core/stores/stocks.store';
     QuickPicksTableComponent,
     FundamentalPicksTableComponent,
     StockGridComponent,
-    StockDetailModalComponent
+    StockDetailModalComponent,
+    AddSymbolModalComponent
   ],
   template: `
     <div class="dashboard-container">
       <!-- Left Watchlist Sidebar -->
-      <app-sidebar (stockSelect)="onSidebarSelect($event)"></app-sidebar>
+      <app-sidebar
+        (stockSelect)="onSidebarSelect($event)"
+        (addSymbol)="showAddSymbolModal.set(true)">
+      </app-sidebar>
 
       <!-- Main Dashboard Stream -->
       <div class="dashboard-main-flow">
@@ -57,7 +62,7 @@ import { stocksStore } from '../../core/stores/stocks.store';
               <span>📰</span> Market News (.md) ↗
             </a>
             <button class="btn-grid-refresh" (click)="refreshData()">🔄 Refresh Data</button>
-            <button class="btn-grid-add">🌐 ➕ Add Symbol</button>
+            <button class="btn-grid-add" (click)="showAddSymbolModal.set(true)">🌐 ➕ Add Symbol</button>
           </div>
         </div>
 
@@ -68,6 +73,12 @@ import { stocksStore } from '../../core/stores/stocks.store';
 
     <!-- Stock detail modal (Level 3) -->
     <app-stock-detail-modal></app-stock-detail-modal>
+
+    <!-- Add Symbol Modal (Partial Search & Watchlist Manager) -->
+    <app-add-symbol-modal
+      *ngIf="showAddSymbolModal()"
+      (close)="showAddSymbolModal.set(false)">
+    </app-add-symbol-modal>
   `,
   styles: [`
     :host {
@@ -236,6 +247,7 @@ import { stocksStore } from '../../core/stores/stocks.store';
 })
 export class DashboardComponent {
   activeUniverse = stocksStore.activeUniverse;
+  showAddSymbolModal = signal<boolean>(false);
 
   onStockSelect(stock: Stock): void {
     stocksStore.selectSymbol(stock.symbol);

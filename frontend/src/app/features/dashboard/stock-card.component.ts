@@ -117,7 +117,7 @@ import { SparklineComponent } from './sparkline.component';
         <div class="lt-header-row">
           <span class="section-title accent-gold">🏛 LONG-TERM WEALTH (1–3 YEARS)</span>
           <span class="lt-target-pill" *ngIf="ltTargetDisplay">
-            {{ ltTargetDisplay }} <strong class="accent-green" *ngIf="ltGainPctDisplay">{{ ltGainPctDisplay }}</strong>
+            {{ ltTargetDisplay }} <strong *ngIf="ltGainPctDisplay" [class.accent-green]="!ltGainPctDisplay.startsWith('-')" [class.accent-red]="ltGainPctDisplay.startsWith('-')">{{ ltGainPctDisplay }}</strong>
           </span>
         </div>
         <div class="lt-verdict" *ngIf="ltVerdictText">

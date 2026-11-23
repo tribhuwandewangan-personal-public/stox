@@ -527,16 +527,14 @@ export class SidebarComponent {
   }
 
   @Output() stockSelect = new EventEmitter<string>();
+  @Output() addSymbol = new EventEmitter<void>();
 
   onSelect(symbol: string): void {
     this.stockSelect.emit(symbol);
   }
 
   onAddSymbolClick(): void {
-    const sym = prompt('Enter Stock Symbol to add (e.g. TATAPOWER):');
-    if (sym && sym.trim()) {
-      alert(`Symbol ${sym.toUpperCase()} queued for addition.`);
-    }
+    this.addSymbol.emit();
   }
 
   getVerdict(s: Stock): string {

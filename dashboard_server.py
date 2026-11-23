@@ -383,7 +383,7 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
         elif path.startswith("/api/search-symbol"):
             query = urllib.parse.parse_qs(parsed_path.query)
             q_str = query.get("q", [""])[0].strip()
-            matches = search_internet_symbols(q_str) if q_str else []
+            matches = search_internet_symbols(q_str)
             body = safe_json_dumps({"query": q_str, "results": matches})
             self.send_response(200)
             self.send_header("Content-type", "application/json")
@@ -825,9 +825,10 @@ def start_dashboard_server(port=None, open_browser=True):
         try:
             with ThreadedTCPServer((DASHBOARD_HOST, p), DashboardHandler) as httpd:
                 server_url = f"http://localhost:{p}"
-                print(f"🌐 [Realtime Dashboard Server] Running live at {server_url} (bound to {DASHBOARD_HOST})", flush=True)
+                frontend_url = os.getenv("FRONTEND_URL", "http://localhost:4200")
+                print(f"🌐 [Realtime Dashboard Server] API running live at {server_url} | Angular UI: {frontend_url}", flush=True)
                 if open_browser:
-                    open_browser_delayed(server_url, delay=0.5)
+                    open_browser_delayed(frontend_url, delay=0.5)
                 httpd.serve_forever()
                 break
         except OSError:

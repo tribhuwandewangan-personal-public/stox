@@ -1,6 +1,6 @@
 {
   "description": "List of NSE stock symbols for multi-agent RAG analysis and prediction",
-  "updated_at": "2026-11-19",
+  "updated_at": "2026-11-23",
   "default_timeframe_days": 1825,
   "symbols": [
     {
@@ -417,6 +417,18 @@
       "symbol": "WABAG",
       "name": "VA TECH WABAG LTD",
       "sector": "Industrials",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "BHARTFO",
+      "name": "BHARTFO Limited",
+      "sector": "Indian Equities",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "SOLARINDU",
+      "name": "SOLARINDU Limited",
+      "sector": "Indian Equities",
       "exchange": "NSE"
     }
   ]

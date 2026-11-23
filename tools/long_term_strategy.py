@@ -11,8 +11,121 @@ import re
 import threading
 from typing import Dict, Any, Optional, List
 
+_PRICE_PERF_LOCK = threading.Lock()
+_PRICE_PERF_CACHE: Dict[str, Any] = {"ts": 0, "data": {}}
 _SYMBOLS_CACHE_LOCK = threading.Lock()
 _SYMBOLS_CACHE = {"path": None, "mtime": None, "data": []}
+
+
+def _get_cached_multi_year_perf(symbol: str, current_price: float = 0.0, sector: str = "") -> Dict[str, Optional[float]]:
+    """
+    Computes 1Y return %, 3Y return %, 3Y peak drawdown %, and Sector-Relative 1Y/3Y Alpha %
+    by comparing each stock against its canonical sector peers' median 1Y and 3Y price performance.
+    Cached in memory for 5 minutes across all symbols to avoid repeated DB queries.
+    """
+    import time
+    import statistics
+    from tools.peer_benchmark_engine import _resolve_sector, SECTOR_PEER_MAP
+
+    now_bucket = int(time.time() // 300)
+    with _PRICE_PERF_LOCK:
+        if _PRICE_PERF_CACHE["ts"] != now_bucket:
+            try:
+                from config import CACHE_DB_PATH, SYMBOLS_FILE_PATH, MIDCAP_250_SYMBOLS_FILE_PATH
+                from storage.cache_manager import open_db
+                perf_map: Dict[str, Dict[str, Optional[float]]] = {}
+                sym_sec_map: Dict[str, str] = {}
+                for spath in (MIDCAP_250_SYMBOLS_FILE_PATH, SYMBOLS_FILE_PATH):
+                    if spath and os.path.exists(spath):
+                        try:
+                            with open(spath, "r", encoding="utf-8") as f:
+                                sdata = json.load(f)
+                            for s_it in (sdata.get("symbols", []) if isinstance(sdata, dict) else []):
+                                k = str(s_it.get("symbol") or "").upper().strip()
+                                sc = _resolve_sector(str(s_it.get("sector") or ""))
+                                if k and sc:
+                                    sym_sec_map[k] = sc
+                        except Exception:
+                            pass
+                for canon_sec, peer_list in SECTOR_PEER_MAP.items():
+                    for p_sym in peer_list:
+                        sym_sec_map.setdefault(p_sym.upper(), canon_sec)
+
+                if os.path.exists(CACHE_DB_PATH):
+                    with open_db(CACHE_DB_PATH) as conn:
+                        rows = conn.execute(
+                            "SELECT symbol, high, close FROM historical_candles ORDER BY symbol, date DESC"
+                        ).fetchall()
+                    grouped: Dict[str, List[tuple]] = {}
+                    for sym, h, c in rows:
+                        b = grouped.setdefault(sym, [])
+                        if len(b) < 760:
+                            b.append((float(h or c or 0.0), float(c or 0.0)))
+                    sec_1y_buckets: Dict[str, List[float]] = {}
+                    sec_3y_buckets: Dict[str, List[float]] = {}
+                    for sym, desc in grouped.items():
+                        if len(desc) < 200:
+                            continue
+                        p0 = desc[0][1]
+                        if p0 <= 0:
+                            continue
+                        c_1y = desc[min(251, len(desc) - 1)][1]
+                        ret_1y = round(((p0 - c_1y) / c_1y) * 100.0, 2) if c_1y > 0 else None
+                        ret_3y = None
+                        if len(desc) >= 480:
+                            c_3y = desc[min(755, len(desc) - 1)][1]
+                            if c_3y > 0:
+                                ret_3y = round(((p0 - c_3y) / c_3y) * 100.0, 2)
+                        h_3y = max(r[0] for r in desc)
+                        dd_3y = round(((p0 - h_3y) / h_3y) * 100.0, 2) if h_3y > 0 else None
+                        c_sec = sym_sec_map.get(sym)
+                        if c_sec:
+                            if ret_1y is not None:
+                                sec_1y_buckets.setdefault(c_sec, []).append(ret_1y)
+                            if ret_3y is not None:
+                                sec_3y_buckets.setdefault(c_sec, []).append(ret_3y)
+                        perf_map[sym] = {
+                            "ret_1y_pct": ret_1y,
+                            "ret_3y_pct": ret_3y,
+                            "drawdown_3y_pct": dd_3y,
+                            "high_3y": h_3y,
+                            "canon_sector": c_sec,
+                        }
+                    sec_med_1y = {k: round(statistics.median(v), 2) for k, v in sec_1y_buckets.items() if v}
+                    sec_med_3y = {k: round(statistics.median(v), 2) for k, v in sec_3y_buckets.items() if v}
+                    for sym, p_entry in perf_map.items():
+                        cs = p_entry.get("canon_sector")
+                        m1 = sec_med_1y.get(cs) if cs else None
+                        m3 = sec_med_3y.get(cs) if cs else None
+                        p_entry["sector_median_1y_pct"] = m1
+                        p_entry["sector_median_3y_pct"] = m3
+                        p_entry["alpha_1y_vs_sector_pct"] = round(p_entry["ret_1y_pct"] - m1, 2) if (p_entry.get("ret_1y_pct") is not None and m1 is not None) else None
+                        p_entry["alpha_3y_vs_sector_pct"] = round(p_entry["ret_3y_pct"] - m3, 2) if (p_entry.get("ret_3y_pct") is not None and m3 is not None) else None
+                _PRICE_PERF_CACHE["ts"] = now_bucket
+                _PRICE_PERF_CACHE["data"] = perf_map
+                _PRICE_PERF_CACHE["sec_med_1y"] = sec_med_1y if os.path.exists(CACHE_DB_PATH) else {}
+                _PRICE_PERF_CACHE["sec_med_3y"] = sec_med_3y if os.path.exists(CACHE_DB_PATH) else {}
+            except Exception:
+                _PRICE_PERF_CACHE["ts"] = now_bucket
+                _PRICE_PERF_CACHE["data"] = {}
+                _PRICE_PERF_CACHE["sec_med_1y"] = {}
+                _PRICE_PERF_CACHE["sec_med_3y"] = {}
+        hit = dict(_PRICE_PERF_CACHE["data"].get(symbol.upper().strip()) or {})
+        if hit and not hit.get("canon_sector") and sector:
+            cs = _resolve_sector(sector)
+            if cs:
+                m1 = (_PRICE_PERF_CACHE.get("sec_med_1y") or {}).get(cs)
+                m3 = (_PRICE_PERF_CACHE.get("sec_med_3y") or {}).get(cs)
+                hit["sector_median_1y_pct"] = m1
+                hit["sector_median_3y_pct"] = m3
+                if hit.get("ret_1y_pct") is not None and m1 is not None:
+                    hit["alpha_1y_vs_sector_pct"] = round(hit["ret_1y_pct"] - m1, 2)
+                if hit.get("ret_3y_pct") is not None and m3 is not None:
+                    hit["alpha_3y_vs_sector_pct"] = round(hit["ret_3y_pct"] - m3, 2)
+    if hit and current_price and current_price > 0 and hit.get("high_3y"):
+        h3 = max(float(hit["high_3y"]), float(current_price))
+        hit["drawdown_3y_pct"] = round(((current_price - h3) / h3) * 100.0, 2)
+    return hit
 
 
 def _load_curated_symbols_cached() -> List[Dict[str, Any]]:
@@ -34,10 +147,31 @@ def _load_curated_symbols_cached() -> List[Dict[str, Any]]:
         _SYMBOLS_CACHE.update({"path": path, "mtime": mtime, "data": sym_list})
         return sym_list
 
-_BFSI_RE = re.compile(
-    r"\b(bank|banking|nbfc|financial services|insurance|housing finance|microfinance|capital markets|fintech)\b",
+_CAPITAL_MARKETS_RE = re.compile(
+    r"\b(capital markets|fintech|exchange|exchanges|depository|broking|brokerage|wealth|asset management|amc|credit rating)\b",
     re.I,
 )
+_CAPITAL_MARKETS_SYMBOLS = {
+    "BSE", "NSE", "CDSL", "MCX", "IEX", "ANGELONE", "GROWW", "360ONE", "5PAISA",
+    "CAMS", "KFINTECH", "MOTILALOFS", "NUVAMA", "ANANDRATHI", "PRUDENT",
+    "HDFCAMC", "NAM-INDIA", "UTIAMC", "ABSLAMC", "CRISIL", "ICRA", "CAREERP",
+}
+_BFSI_RE = re.compile(
+    r"\b(bank|banking|nbfc|financial services|insurance|housing finance|microfinance)\b",
+    re.I,
+)
+
+
+def _is_capital_markets(sector: str, symbol: str = "") -> bool:
+    if symbol and symbol.upper().strip() in _CAPITAL_MARKETS_SYMBOLS:
+        return True
+    return bool(sector and _CAPITAL_MARKETS_RE.search(sector))
+
+
+def _is_bfsi_sector(sector: str, symbol: str = "") -> bool:
+    if _is_capital_markets(sector, symbol):
+        return False
+    return bool(sector and _BFSI_RE.search(sector))
 
 
 def _num(val: Any) -> Optional[float]:
@@ -227,10 +361,12 @@ class LongTermStrategyEngine:
 
         fund = dict((fund_data or {}).get("raw_fundamentals") or (fund_data or {}))
         forensic = dict(forensic_data or {})
-        eff_sector = sector or str(fund.get("sector") or forensic.get("sector") or "")
+        eff_sector = sector or str(forensic.get("sector") or fund.get("sector") or "")
+        if _is_capital_markets(eff_sector, sym) and "capital market" not in eff_sector.lower():
+            eff_sector = "Capital Markets"
         matched_sec = self._match_sector_profile(sym, eff_sector)
         peers = self._discover_peers(sym, eff_sector, matched_sec.get("top_long_term_peers", []))
-        is_bfsi = bool(_BFSI_RE.search(eff_sector))
+        is_bfsi = _is_bfsi_sector(eff_sector, sym)
 
         # Extract quantitative signals
         eg = _num(fund.get("earnings_growth_pct"))
@@ -409,12 +545,51 @@ class LongTermStrategyEngine:
             ):
                 compounder_score = min(compounder_score, 35)
 
+            # Sector-Relative Multi-Year Price Wealth Creation Audit:
+            # Compares 1Y/3Y price performance against the stock's own sector median (Sector Alpha)
+            perf = _get_cached_multi_year_perf(sym, lp, eff_sector)
+            ret_1y = _num(fund.get("ret_1y_pct")) if _num(fund.get("ret_1y_pct")) is not None else perf.get("ret_1y_pct")
+            ret_3y = _num(fund.get("ret_3y_pct")) if _num(fund.get("ret_3y_pct")) is not None else perf.get("ret_3y_pct")
+            dd_3y = _num(fund.get("drawdown_3y_pct")) if _num(fund.get("drawdown_3y_pct")) is not None else perf.get("drawdown_3y_pct")
+            sec_med_3y = perf.get("sector_median_3y_pct")
+            alpha_3y = perf.get("alpha_3y_vs_sector_pct")
+            alpha_1y = perf.get("alpha_1y_vs_sector_pct")
+
+            is_multi_year_laggard = False
+            laggard_note = ""
+            # Flag as laggard only when the stock underperformed both absolutely AND relative to its sector peers
+            if ret_3y is not None and ret_3y < 0.0 and (alpha_3y is None or alpha_3y < -10.0):
+                is_multi_year_laggard = True
+                sec_cmp = f" vs Sector 3Y median {sec_med_3y:+.1f}% (Sector Alpha {alpha_3y:+.1f}%)" if (sec_med_3y is not None and alpha_3y is not None) else ""
+                dd_clause = f", {dd_3y:.1f}% off 3Y peak" if (dd_3y is not None and dd_3y <= -25.0) else ""
+                laggard_note = f" Sectorial multi-year laggard (3Y return {ret_3y:+.1f}%{sec_cmp}{dd_clause}) — requires sustained sector-relative turnaround."
+                penalty = 20 if (ret_3y <= -20.0 or (alpha_3y is not None and alpha_3y <= -35.0)) else 14
+                compounder_score = max(25, min(58, compounder_score - penalty))
+            elif dd_3y is not None and dd_3y <= -42.0 and (ret_1y is None or ret_1y < 15.0) and (alpha_1y is None or alpha_1y < -10.0):
+                is_multi_year_laggard = True
+                sec_cmp = f", 1Y Sector Alpha {alpha_1y:+.1f}%" if alpha_1y is not None else ""
+                laggard_note = f" Deep sector-relative drawdown ({dd_3y:.1f}% off 3Y peak, 1Y return {ret_1y or 0.0:+.1f}%{sec_cmp}) — structural de-rating caution."
+                compounder_score = max(25, min(58, compounder_score - 15))
+            elif ret_1y is not None and ret_1y <= -20.0 and (alpha_1y is None or alpha_1y <= -20.0):
+                # Steep 1-year sector-relative pullback (e.g. -31% over 1Y while sector peers are positive): cap below STRONG BUY
+                sec_cmp = f" vs Sector 1Y median {perf.get('sector_median_1y_pct'):+.1f}% (1Y Sector Alpha {alpha_1y:+.1f}%)" if (perf.get("sector_median_1y_pct") is not None and alpha_1y is not None) else ""
+                laggard_note = f" Steep 1-year cyclical correction (1Y return {ret_1y:+.1f}%{sec_cmp}) — await trend stabilization."
+                compounder_score = max(35, min(68, compounder_score - 12))
+
             cagr_raw = 8.0 + (compounder_score - 50) * 0.22
             if rg is not None:
                 cagr_raw = (cagr_raw * 0.7) + (max(2.0, min(25.0, rg)) * 0.3)
+            if is_multi_year_laggard:
+                cagr_raw = min(cagr_raw, 10.5)
             projected_cagr_pct = round(max(4.0, min(24.0, cagr_raw)), 1)
 
-            if compounder_score >= 78:
+            if is_multi_year_laggard:
+                if compounder_score >= 46:
+                    verdict = "HOLD / TURNAROUND WATCH (Multi-Year Laggard)"
+                else:
+                    verdict = "AVOID / UNDERWEIGHT (Structural Underperformer)"
+                is_pick = False
+            elif compounder_score >= 78:
                 verdict = "STRONG BUY (High-Quality Compounder)"
                 is_pick = True
             elif compounder_score >= 64:
@@ -433,7 +608,17 @@ class LongTermStrategyEngine:
                 lt_target_str = "N/A"
                 target_basis = "indicative_scenario"
             elif fair_val is not None and fair_val > 0 and val_method in ("MULTI_METHOD_INTRINSIC", "BFSI_JUSTIFIED_PB"):
-                lt_target_num = round(fair_val * ((1.0 + projected_cagr_pct / 100.0) ** 3), 2)
+                # 3-Year forward wealth target combines fundamental earnings/BV compounding with partial valuation convergence
+                val_gap_pct = ((fair_val - lp) / lp) * 100.0
+                if val_gap_pct >= 0:
+                    # Undervalued: business CAGR + partial re-rating upside towards intrinsic value
+                    rerating_pa = min(6.5, (val_gap_pct / 100.0) * 12.0)
+                    effective_cagr_pct = min(28.0, projected_cagr_pct + rerating_pa)
+                else:
+                    # Trading above static intrinsic value: business CAGR tempered by modest multiple compression
+                    compression_pa = min(projected_cagr_pct * 0.55, (abs(val_gap_pct) / 100.0) * 9.0)
+                    effective_cagr_pct = max(4.5, projected_cagr_pct - compression_pa)
+                lt_target_num = round(lp * ((1.0 + effective_cagr_pct / 100.0) ** 3), 2)
                 lt_target_str = f"Rs. {lt_target_num:,.2f}"
                 target_basis = "quantitative_fundamental_model"
             else:
@@ -445,7 +630,7 @@ class LongTermStrategyEngine:
                 f"4-Pillar Compounder Score {compounder_score}/100 (G:{pillar_scores['growth']}/25, "
                 f"Q:{pillar_scores['quality']}/30, M:{pillar_scores['moat']}/20, V:{pillar_scores['valuation']}/25). "
                 f"{matched_sec['catalyst_theme'].capitalize()} (Projected CAGR ~{projected_cagr_pct:.1f}% p.a., "
-                f"basis: {target_basis.replace('_', ' ')})."
+                f"basis: {target_basis.replace('_', ' ')}).{laggard_note}"
             )
 
         if has_price and lt_target_num is not None:

@@ -492,6 +492,8 @@ export interface SearchResult {
   sector: string;
   exchange: string;
   is_added: boolean;
+  source?: string;
+  yahoo_ticker?: string;
 }
 
 export interface QueueStatus {

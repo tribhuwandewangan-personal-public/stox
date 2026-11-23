@@ -69,6 +69,30 @@ def score_fundamental_pick(
     if verdict == "SELL":
         return None                               # hard gate
 
+    # Disqualify chronic sector-relative multi-year laggards & deep 1Y falling knives (>32% off 52W high) from Top 10 Picks
+    pct52w = _safe_float(tech_out.get("pct_from_52w_high"))
+    lt_verdict_check = str(sig.get("long_term_verdict") or "").upper()
+    if any(k in lt_verdict_check for k in ("LAGGARD", "TURNAROUND", "AVOID", "UNDERWEIGHT")):
+        return None
+    if pct52w is not None and pct52w < -32.0:
+        return None                               # falling knife (>32% below 52W high) is not a right-time-to-buy leader
+    try:
+        from tools.long_term_strategy import _get_cached_multi_year_perf
+        perf = _get_cached_multi_year_perf(sym, sector=sector)
+        ret_3y = perf.get("ret_3y_pct")
+        alpha_3y = perf.get("alpha_3y_vs_sector_pct")
+        dd_3y = perf.get("drawdown_3y_pct")
+        ret_1y = perf.get("ret_1y_pct")
+        alpha_1y = perf.get("alpha_1y_vs_sector_pct")
+        if ret_3y is not None and ret_3y < 0.0 and (alpha_3y is None or alpha_3y < -10.0):
+            return None
+        if dd_3y is not None and dd_3y <= -42.0 and (ret_1y or 0.0) < 15.0 and (alpha_1y is None or alpha_1y < -10.0):
+            return None
+        if ret_1y is not None and ret_1y <= -20.0 and (alpha_1y is None or alpha_1y <= -20.0):
+            return None
+    except Exception:
+        pass
+
     peg_raw       = _safe_float(synth_res.get("peg_ratio") or fund_out.get("peg_ratio") or fund_raw.get("peg_ratio"))
     pe_raw        = _safe_float(synth_res.get("pe_ratio")  or fund_out.get("pe_ratio") or fund_raw.get("pe_ratio"))
     de_raw        = _safe_float(synth_res.get("debt_to_equity") or fund_out.get("debt_to_equity") or fund_raw.get("debt_to_equity"))
@@ -76,8 +100,6 @@ def score_fundamental_pick(
     net_cash_flag = str(synth_res.get("net_cash_status") or fund_out.get("net_cash_status") or fund_raw.get("net_cash_status") or "").lower()
     val_text      = str(synth_res.get("valuation_assessment") or fund_out.get("valuation_assessment") or fund_raw.get("valuation_assessment") or "").lower()
     lt_verdict    = str(sig.get("long_term_verdict") or "").upper()
-    # pct from 52W high (negative = below high)
-    pct52w        = _safe_float(tech_out.get("pct_from_52w_high"))
     ud_ratio      = _safe_float(tech_out.get("up_down_vol_ratio"))
     swing_low20   = _safe_float(tech_out.get("swing_low_20"))
     last_price    = _safe_float(synth_res.get("last_price") or tech_out.get("last_price"))
@@ -332,7 +354,7 @@ def build_fundamental_picks_section(symbols_list: list, results_dict: dict, cach
             fund_res = cache_mgr.get_latest_agent_output(sym, "Fundamental Analyst Agent", max_age_hours=None)
 
         pick = score_fundamental_pick(sym, synth_res, tech_res, fund_res=fund_res, sector=sec)
-        if pick is None:
+        if pick is None or (pick.get("score") or 0) <= 20:
             continue
 
         pick["cname"] = cname

@@ -30,6 +30,48 @@ The system uses 8 specialized rule-based agents working together to evaluate equ
 
 ---
 
+## 🛠️ Setup & Installation (Valkey Docker, Backend & Frontend)
+
+### 1. Start Valkey Queue Server via Docker (Recommended)
+The background analysis queue ([`storage/queue_manager.py`](file:///c:/Users/tdewa/Documents/LearnPython/stox-main/storage/queue_manager.py)) connects to **Valkey** on `localhost:6379` by default (configurable via `VALKEY_HOST` and `VALKEY_PORT` environment variables), and automatically falls back to SQLite (`storage/cache.db`) if Valkey is offline.
+
+Run the following command to create and start a persistent **Valkey** Docker container:
+
+```powershell
+docker run -d --name stox-valkey --restart unless-stopped -p 127.0.0.1:6379:6379 -v stox-valkey-data:/data valkey/valkey:8-alpine valkey-server --appendonly yes
+```
+
+**Useful Docker management commands:**
+```powershell
+# Verify Valkey container is running and responding
+docker exec -it stox-valkey valkey-cli ping
+
+# Stop / start existing container
+docker stop stox-valkey
+docker start stox-valkey
+
+# View Valkey logs
+docker logs -f stox-valkey
+```
+
+### 2. Start the Backend API Server (`http://127.0.0.1:8765`)
+```powershell
+# Start or restart the backend HTTP server
+powershell -ExecutionPolicy Bypass -File .\cleanup_server.ps1 -Restart
+
+# Or run directly using the virtual environment
+.\.venv\Scripts\python.exe dashboard_server.py --no-browser
+```
+
+### 3. Start the Angular Frontend (`http://localhost:4200`)
+```powershell
+cd frontend
+npm install
+npm start
+```
+
+---
+
 ## 🚀 One-Click Run & Automated Report Generation
 
 To pull the latest repo updates, sync dependencies via `uv`, analyze target stocks in `symbols.json`, and generate Markdown reports in `reports/`:

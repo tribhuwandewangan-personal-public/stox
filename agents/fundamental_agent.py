@@ -42,7 +42,10 @@ class FundamentalAgent:
 
     def run(self, symbol: str, sector: str = "") -> Dict[str, Any]:
         fund_data = self.fund_engine.get_fundamental_metrics(symbol)
-        if sector and not fund_data.get("sector"):
+        # Prefer curated specific sector (e.g. "Capital Markets", "Aerospace & Defence") over generic GICS labels
+        generic_gics = {"financial services", "industrials", "technology", "consumer cyclical", "basic materials", "consumer defensive", "communication services"}
+        cur_fd_sec = str(fund_data.get("sector") or "").strip()
+        if sector and (not cur_fd_sec or cur_fd_sec.lower() in generic_gics):
             fund_data["sector"] = sector
         events_data = self.events_engine.fetch_stock_events(symbol)
         

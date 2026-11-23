@@ -40,8 +40,18 @@ def post_guard_error(headers) -> Optional[Tuple[int, str]]:
     if headers.get("X-Stox-Request") != "1":
         return 403, "Missing X-Stox-Request header"
     origin = headers.get("Origin")
-    if origin and urllib.parse.urlsplit(origin).netloc.lower() != (headers.get("Host") or "").lower():
-        return 403, "Cross-origin request blocked"
+    if origin:
+        origin_split = urllib.parse.urlsplit(origin)
+        host_raw = (headers.get("Host") or "").lower()
+        host_split = urllib.parse.urlsplit("//" + host_raw)
+        same_netloc = origin_split.netloc.lower() == host_raw
+        local_dev_proxy = (
+            (origin_split.hostname or "").lower() in LOOPBACK_NAMES
+            and (host_split.hostname or "").lower() in LOOPBACK_NAMES
+            and origin_split.port in (4200, 8765, 8766, 8767)
+        )
+        if not (same_netloc or local_dev_proxy):
+            return 403, "Cross-origin request blocked"
     return None
 
 

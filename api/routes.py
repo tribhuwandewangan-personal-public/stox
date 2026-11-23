@@ -174,11 +174,11 @@ async def events(request: Request) -> Response:
 
 
 async def search_symbol(request: Request) -> Response:
-    """GET /api/search-symbol?q=ABC: Search for symbols on the internet."""
+    """GET /api/search-symbol?q=ABC: Search for symbols by partial ticker, company name, or sector."""
     try:
         query_params = request.query_params
         q_str = query_params.get("q", "").strip()
-        matches = search_internet_symbols(q_str) if q_str else []
+        matches = search_internet_symbols(q_str)
         return _json_response({"query": q_str, "results": matches})
     except Exception as e:
         return _json_response({"error": str(e), "results": []}, status_code=500)

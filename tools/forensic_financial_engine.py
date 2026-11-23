@@ -19,14 +19,83 @@ from tools.fundamental_tools import FundamentalAnalysisEngine
 from tools.peer_benchmark_engine import PeerBenchmarkEngine
 from tools.local_financials_parser import LocalFinancialsParser, compute_filing_freshness
 
+_CAPITAL_MARKETS_RE = re.compile(
+    r"\b(capital markets|fintech|exchange|exchanges|depository|broking|brokerage|wealth|asset management|amc|credit rating)\b",
+    re.I,
+)
+_CAPITAL_MARKETS_SYMBOLS = {
+    "BSE", "NSE", "CDSL", "MCX", "IEX", "ANGELONE", "GROWW", "360ONE", "5PAISA",
+    "CAMS", "KFINTECH", "MOTILALOFS", "NUVAMA", "ANANDRATHI", "PRUDENT",
+    "HDFCAMC", "NAM-INDIA", "UTIAMC", "ABSLAMC", "CRISIL", "ICRA", "CAREERP",
+}
 _BFSI_RE = re.compile(
-    r"\b(bank|banking|nbfc|financial services|insurance|housing finance|microfinance|capital markets|fintech)\b",
+    r"\b(bank|banking|nbfc|financial services|insurance|housing finance|microfinance)\b",
     re.I,
 )
 
 
-def _is_bfsi_sector(sector: str) -> bool:
+def _is_capital_markets(sector: str, symbol: str = "") -> bool:
+    if symbol and symbol.upper().strip() in _CAPITAL_MARKETS_SYMBOLS:
+        return True
+    return bool(sector and _CAPITAL_MARKETS_RE.search(sector))
+
+
+def _is_bfsi_sector(sector: str, symbol: str = "") -> bool:
+    if _is_capital_markets(sector, symbol):
+        return False
     return bool(sector and _BFSI_RE.search(sector))
+
+
+_SECTOR_VALUATION_BENCHMARKS: Dict[str, Dict[str, float]] = {
+    "CAPITAL_MARKETS": {"norm_pe": 38.0, "norm_ev_ebitda": 24.0, "norm_margin_pct": 30.0},
+    "DEFENCE": {"norm_pe": 35.0, "norm_ev_ebitda": 22.0, "norm_margin_pct": 14.0},
+    "EMS": {"norm_pe": 40.0, "norm_ev_ebitda": 23.0, "norm_margin_pct": 3.5},
+    "FMCG": {"norm_pe": 36.0, "norm_ev_ebitda": 22.0, "norm_margin_pct": 11.0},
+    "CONSUMER": {"norm_pe": 35.0, "norm_ev_ebitda": 21.0, "norm_margin_pct": 10.0},
+    "CAPITAL_GOODS": {"norm_pe": 33.0, "norm_ev_ebitda": 20.0, "norm_margin_pct": 9.0},
+    "IT": {"norm_pe": 26.0, "norm_ev_ebitda": 16.5, "norm_margin_pct": 14.5},
+    "PHARMA": {"norm_pe": 27.0, "norm_ev_ebitda": 17.0, "norm_margin_pct": 14.0},
+    "CHEMICALS": {"norm_pe": 30.0, "norm_ev_ebitda": 18.0, "norm_margin_pct": 11.5},
+    "AUTO": {"norm_pe": 24.0, "norm_ev_ebitda": 14.5, "norm_margin_pct": 7.0},
+    "TELECOM": {"norm_pe": 28.0, "norm_ev_ebitda": 13.0, "norm_margin_pct": 10.0},
+    "INFRA": {"norm_pe": 24.0, "norm_ev_ebitda": 13.5, "norm_margin_pct": 9.0},
+    "ENERGY": {"norm_pe": 18.0, "norm_ev_ebitda": 10.0, "norm_margin_pct": 8.0},
+    "METALS": {"norm_pe": 15.0, "norm_ev_ebitda": 8.5, "norm_margin_pct": 7.5},
+    "DEFAULT": {"norm_pe": 24.0, "norm_ev_ebitda": 14.5, "norm_margin_pct": 10.0},
+}
+
+
+def _get_sector_valuation_benchmark(sector: str, symbol: str = "") -> Dict[str, float]:
+    if _is_capital_markets(sector, symbol):
+        return _SECTOR_VALUATION_BENCHMARKS["CAPITAL_MARKETS"]
+    sec_l = str(sector or "").lower()
+    if any(k in sec_l for k in ("electronics manufacturing", "ems", "semiconductor")):
+        return _SECTOR_VALUATION_BENCHMARKS["EMS"]
+    if any(k in sec_l for k in ("defence", "aerospace", "shipbuilding")):
+        return _SECTOR_VALUATION_BENCHMARKS["DEFENCE"]
+    if any(k in sec_l for k in ("fmcg", "staples", "food", "beverage", "agri")):
+        return _SECTOR_VALUATION_BENCHMARKS["FMCG"]
+    if any(k in sec_l for k in ("consumer", "retail", "jewel", "paint")):
+        return _SECTOR_VALUATION_BENCHMARKS["CONSUMER"]
+    if any(k in sec_l for k in ("capital goods", "electrical", "engineering", "industrial", "machinery")):
+        return _SECTOR_VALUATION_BENCHMARKS["CAPITAL_GOODS"]
+    if any(k in sec_l for k in ("information technology", "technology", "software", "it services")):
+        return _SECTOR_VALUATION_BENCHMARKS["IT"]
+    if any(k in sec_l for k in ("pharma", "healthcare", "hospital", "drug")):
+        return _SECTOR_VALUATION_BENCHMARKS["PHARMA"]
+    if any(k in sec_l for k in ("chemical", "fertilizer", "agrochem")):
+        return _SECTOR_VALUATION_BENCHMARKS["CHEMICALS"]
+    if any(k in sec_l for k in ("auto", "vehicle", "tyre", "ancillar")):
+        return _SECTOR_VALUATION_BENCHMARKS["AUTO"]
+    if any(k in sec_l for k in ("telecom", "communication", "media")):
+        return _SECTOR_VALUATION_BENCHMARKS["TELECOM"]
+    if any(k in sec_l for k in ("infra", "construction", "logistics", "port", "cement", "realty", "real estate", "packaging")):
+        return _SECTOR_VALUATION_BENCHMARKS["INFRA"]
+    if any(k in sec_l for k in ("energy", "oil", "gas", "petrol", "power")):
+        return _SECTOR_VALUATION_BENCHMARKS["ENERGY"]
+    if any(k in sec_l for k in ("metal", "mining", "steel", "aluminium")):
+        return _SECTOR_VALUATION_BENCHMARKS["METALS"]
+    return _SECTOR_VALUATION_BENCHMARKS["DEFAULT"]
 
 
 def _num(val: Any, default: Optional[float] = None) -> Optional[float]:
@@ -72,7 +141,7 @@ class ForensicFinancialEngine:
             or (_num(stmts.get("revenue"), 0.0) != 0.0)
         )
         sector_name = sector_override or stmts.get("sector") or fund_data.get("sector", "")
-        is_bfsi = _is_bfsi_sector(sector_name)
+        is_bfsi = _is_bfsi_sector(sector_name, symbol_clean)
 
         market_price = _num(price_override)
         if market_price is None or market_price <= 0:
@@ -353,7 +422,13 @@ class ForensicFinancialEngine:
                 data["current_liabilities"] = get_bs_cr(["Current Liabilities", "Total Current Liabilities"])
                 data["total_debt"] = get_bs_cr(["Total Debt"]) if get_bs_cr(["Total Debt"]) is not None else data.get("total_debt", 0.0)
                 data["long_term_debt"] = get_bs_cr(["Long Term Debt"])
-                data["total_cash"] = get_bs_cr(["Cash And Cash Equivalents", "Cash Cash Equivalents And Short Term Investments"]) if get_bs_cr(["Cash And Cash Equivalents"]) is not None else data.get("total_cash", 0.0)
+                bs_cash = get_bs_cr(["Cash Cash Equivalents And Short Term Investments", "Cash And Cash Equivalents"])
+                fd_cash_raw = _num(data.get("total_cash"), 0.0) or 0.0
+                fd_cash_cr = round(fd_cash_raw / 1e7, 2) if fd_cash_raw > 1e6 else fd_cash_raw
+                if bs_cash is not None:
+                    data["total_cash"] = max(bs_cash, fd_cash_cr)
+                else:
+                    data["total_cash"] = fd_cash_cr
                 data["ppe"] = get_bs_cr(["Net PPE", "Properties"])
                 data["shares_outstanding_cr"] = get_bs_cr(["Ordinary Shares Number", "Share Issued"])
                 if data["current_assets"] and data["current_liabilities"] and data["current_liabilities"] > 0:
@@ -538,7 +613,7 @@ class ForensicFinancialEngine:
         else:
             solvency_rating = "PRISTINE"
             de_norm = (de_ratio / 100.0) if (de_ratio is not None and de_ratio > 5.0) else de_ratio
-            if total_debt > 0 and de_norm is not None and de_norm > 1.5:
+            if total_debt > 0 and de_norm is not None and de_norm > 1.5 and interest_coverage < 4.0:
                 solvency_rating = "OVER_LEVERAGED"
             elif interest_coverage < 2.5 and not is_debt_free:
                 solvency_rating = "DEBT_SERVICE_STRESS"
@@ -667,7 +742,8 @@ class ForensicFinancialEngine:
         reported_pat = _num(eq.get("reported_pat"), 0.0)
         sustainable_pat = _num(eq.get("sustainable_pat"), 0.0)
         sustainable_ratio = round((sustainable_pat / reported_pat), 2) if reported_pat > 0 else 1.0
-        is_bfsi = _is_bfsi_sector(sector) or (bfsi_health is not None)
+        sym_for_bfsi = str(stmts.get("symbol") or fund_data.get("symbol") or "")
+        is_bfsi = _is_bfsi_sector(sector, sym_for_bfsi) or (bfsi_health is not None)
 
         # Quality haircut factor (non-price operational discipline)
         haircut = 1.0
@@ -688,15 +764,29 @@ class ForensicFinancialEngine:
         valuation_method = "EARNINGS_QUALITY_PROXY"
         intrinsic_fair_value: Optional[float] = None
 
-        # --- Case A: BFSI Justified P/B ---
+        # --- Case A: BFSI Justified P/B (2-Stage Excess Return & Earnings Power Blend) ---
         if is_bfsi:
             bvps = (bfsi_health or {}).get("book_value_per_share") or _num(stmts.get("book_value_per_share")) or _num(fund_data.get("book_value"))
             if bvps is not None and bvps > 0:
                 roe_pct = (bfsi_health or {}).get("roe_pct") or _num(stmts.get("roe_pct")) or _num(fund_data.get("roe_pct"))
                 roe = (roe_pct if roe_pct is not None else 14.0) / 100.0
-                coe = 0.125
-                g = min(0.08, max(0.04, roe * 0.45))
-                justified_pb = max(0.5, min(4.5, (roe - g) / max(0.03, coe - g)))
+                eg_pct = _num(fund_data.get("earnings_growth_pct"))
+                rg_pct = _num(fund_data.get("revenue_growth_pct")) or _num(cf.get("revenue_growth_pct"))
+                fd_pe_bfsi = _num(fund_data.get("pe_ratio"))
+                fd_pb_bfsi = _num(fund_data.get("pb_ratio")) or (bfsi_health or {}).get("pb_ratio")
+
+                # Mean-revert cyclical peak ROE (>18%) over a full credit cycle so temporary commodity/gold windfalls don't double P/B
+                sust_roe = min(0.22, roe if roe <= 0.18 else (0.18 + (roe - 0.18) * 0.35))
+                eff_roe = max(sust_roe, 0.145 if (eg_pct is not None and eg_pct >= 18.0 and roe >= 0.10) else sust_roe)
+
+                coe = 0.118
+                g_term = min(0.072, max(0.045, eff_roe * 0.45))
+                terminal_pb = max(0.5, min(3.4, (eff_roe - g_term) / max(0.03, coe - g_term)))
+
+                # 5-year franchise compounding before terminal stage
+                g_5y = min(0.18, max(eff_roe * 0.70, ((eg_pct or rg_pct or 12.0) / 100.0) * 0.55))
+                compound_mult = max(1.0, min(1.32, ((1.0 + g_5y) / (1.0 + coe)) ** 5)) if eff_roe >= 0.11 else 1.0
+                justified_pb = terminal_pb * compound_mult
 
                 gnpa = (bfsi_health or {}).get("gnpa_pct")
                 roa = (bfsi_health or {}).get("roa_pct")
@@ -706,13 +796,27 @@ class ForensicFinancialEngine:
                 elif gnpa is not None and gnpa > 3.5:
                     justified_pb *= 0.85
                 if roa is not None and roa >= 1.7:
-                    justified_pb *= 1.10
+                    justified_pb *= 1.08
                 elif roa is not None and roa < 0.8:
                     justified_pb *= 0.75
                 if casa is not None and casa >= 45.0:
                     justified_pb *= 1.05
 
-                justified_pb = round(max(0.4, min(5.0, justified_pb)), 2)
+                # Blend with BFSI Earnings Power when TTM EPS is available and asset quality is healthy
+                eps_bfsi = _num(fund_data.get("eps"))
+                if eps_bfsi and eps_bfsi > 0 and (gnpa is None or gnpa <= 3.5):
+                    fair_bank_pe = 14.0 + min(6.5, max(0.0, (eff_roe * 100.0 - 11.0) * 0.42 + max(0.0, min(25.0, eg_pct or 0.0)) * 0.12))
+                    if fd_pe_bfsi is not None and 0 < fd_pe_bfsi < 15.0 and fair_bank_pe > fd_pe_bfsi * 1.22:
+                        fair_bank_pe = min(fd_pe_bfsi * 1.22, (fd_pe_bfsi * 1.15) * 0.65 + fair_bank_pe * 0.35)
+                    implied_pb = (eps_bfsi * fair_bank_pe) / bvps
+                    if 0.5 <= implied_pb <= 4.5:
+                        justified_pb = (justified_pb * 0.55) + (implied_pb * 0.45)
+
+                # Structural P/B discipline: prevent NBFCs/banks priced at low multiples from assuming a +80-100% P/B jump
+                if fd_pb_bfsi is not None and fd_pb_bfsi > 0 and justified_pb > fd_pb_bfsi * 1.25:
+                    justified_pb = min(fd_pb_bfsi * 1.24, (fd_pb_bfsi * 1.15) * 0.65 + justified_pb * 0.35)
+
+                justified_pb = round(max(0.4, min(4.2, justified_pb)), 2)
                 intrinsic_fair_value = round(bvps * justified_pb, 2)
                 valuation_method = "BFSI_JUSTIFIED_PB"
                 method_breakdown = {"bvps": round(bvps, 2), "justified_pb": justified_pb, "roe_pct": round(roe * 100.0, 2)}
@@ -734,72 +838,189 @@ class ForensicFinancialEngine:
                     shares_cr = round(reported_pat / eps_v, 4)
 
             if shares_cr and shares_cr > 0:
-                total_cash = _num(solv.get("total_cash"), 0.0)
-                total_debt = _num(solv.get("total_debt"), 0.0)
-                net_cash_cr = total_cash - total_debt
-                net_cash_ps = net_cash_cr / shares_cr
+                rep_eps = (reported_pat / shares_cr) if reported_pat > 0 else 0.0
+                stmt_sust_eps = (sustainable_pat / shares_cr) if sustainable_pat > 0 else 0.0
+                fd_eps = _num(fund_data.get("eps"))
+
+                # Reconcile annual statement basis with TTM per-share basis (handles demergers/splits and TTM growth)
+                scale_factor = 1.0
+                if fd_eps is not None and fd_eps <= 0:
+                    # Negative TTM earnings (e.g. post-demerger operating loss): do not project stale positive annual PAT
+                    scale_factor = 0.0
+                elif fd_eps and fd_eps > 0 and rep_eps > fd_eps * 2.0:
+                    scale_factor = fd_eps / rep_eps
+                elif fd_eps and fd_eps > 0 and rep_eps > 0 and fd_eps > rep_eps:
+                    scale_factor = min(1.25, fd_eps / rep_eps)
+
+                sust_eps = stmt_sust_eps * scale_factor
+                if sust_eps <= 0 and fd_eps and fd_eps > 0:
+                    sust_eps = fd_eps * min(1.1, max(0.6, sustainable_ratio))
+
+                stmt_ebitda = _num(stmts.get("ebitda"))
+                fd_ebitda = _num(fund_data.get("ebitda"))
+                if fd_ebitda and fd_ebitda > 1e6:
+                    fd_ebitda = round(fd_ebitda / 1e7, 2)
+                if 0 < scale_factor < 1.0:
+                    eff_ebitda = (stmt_ebitda or fd_ebitda or 0.0) * scale_factor
+                elif scale_factor == 0.0:
+                    eff_ebitda = fd_ebitda or ((stmt_ebitda or 0.0) * 0.25)
+                else:
+                    eff_ebitda = max(stmt_ebitda or 0.0, fd_ebitda or 0.0)
+
+                total_cash = _num(solv.get("total_cash"), 0.0) or 0.0
+                total_debt = _num(solv.get("total_debt"), 0.0) or 0.0
+                net_cash_cr = (total_cash - total_debt) * (scale_factor if 0 < scale_factor < 1.0 else 1.0)
+                if net_cash_cr < 0 and eff_ebitda > 0:
+                    adj_net_cash_cr = max(net_cash_cr, -1.5 * eff_ebitda)
+                else:
+                    adj_net_cash_cr = net_cash_cr
+                adj_net_cash_ps = adj_net_cash_cr / shares_cr
 
                 rev_g = _num(cf.get("revenue_growth_pct"))
-                if not rev_g:
-                    rev_g = _num(fund_data.get("revenue_growth_pct"))
+                fd_rg = _num(fund_data.get("revenue_growth_pct"))
+                fd_eg = _num(fund_data.get("earnings_growth_pct"))
+                pm_pct = _num(fund_data.get("profit_margin_pct"))
+                fd_pe = _num(fund_data.get("pe_ratio"))
+                fd_ev_ebitda = _num(fund_data.get("ev_to_ebitda"))
+
+                if rev_g is not None and fd_rg is not None and rev_g > 0 and fd_rg > 0:
+                    # Blend audited annual revenue growth with TTM/quarterly growth so a single quarter spike doesn't over-inflate
+                    top_g = min(45.0, (rev_g * 0.55) + (fd_rg * 0.45))
+                else:
+                    pos_rgs = [g for g in (rev_g, fd_rg) if g is not None and g > 0]
+                    top_g = min(45.0, max(pos_rgs)) if pos_rgs else (rev_g if rev_g is not None else fd_rg)
+                if fd_eg is not None:
+                    if fd_eg < -15.0:
+                        g_pct = max(0.0, (top_g if (top_g is not None and top_g > 0) else 6.0) * 0.35)
+                    elif fd_eg > 120.0:
+                        # Extreme low-base earnings jump: anchor on top-line revenue growth
+                        g_pct = top_g if (top_g is not None and top_g > 0) else 15.0
+                    elif fd_eg > 0:
+                        cap_eg = min(45.0, fd_eg)
+                        base_rg = top_g if (top_g is not None and top_g > 0) else cap_eg
+                        g_pct = (base_rg * 0.60) + (cap_eg * 0.40)
+                    else:
+                        g_pct = top_g if top_g is not None else 10.0
+                else:
+                    g_pct = top_g if top_g is not None else 10.0
+                g_pct = max(0.0, min(45.0, g_pct))
+
                 roe_v = _num(stmts.get("roe_pct")) or _num(fund_data.get("roe_pct")) or 15.0
+                sec_l = str(sector or "").lower()
+                is_cap_mkt = _is_capital_markets(sector, sym_for_bfsi)
+                sec_bench = _get_sector_valuation_benchmark(sector, sym_for_bfsi)
+                sec_norm_pe = sec_bench["norm_pe"]
+                sec_norm_ev = sec_bench["norm_ev_ebitda"]
+                sec_norm_margin = sec_bench["norm_margin_pct"]
 
                 methods: Dict[str, float] = {}
                 weights = {"dcf": 0.40, "epv": 0.35, "ev_ebitda": 0.25}
 
-                # 1. Earnings Power Value (EPV)
-                if sustainable_pat > 0:
-                    sust_eps = sustainable_pat / shares_cr
-                    fair_pe = 14.0
-                    if rev_g is not None:
-                        if rev_g >= 15.0:
-                            fair_pe += 4.0
-                        elif rev_g >= 10.0:
-                            fair_pe += 2.0
-                        elif rev_g < 4.0:
-                            fair_pe -= 2.0
-                    if roe_v >= 22.0:
+                # 1. Sector-Anchored Growth-Adjusted Earnings Power Value (GARP EPV)
+                if sust_eps > 0:
+                    # Anchor base P/E on the sector's structural norm, then adjust for growth, ROE, and sector-relative margin
+                    fair_pe = (sec_norm_pe * 0.62) + min(20.0, g_pct * 0.50)
+                    if roe_v >= 30.0:
+                        fair_pe += 6.0
+                    elif roe_v >= 22.0:
                         fair_pe += 4.0
                     elif roe_v >= 15.0:
                         fair_pe += 2.0
-                    elif roe_v < 10.0:
-                        fair_pe -= 2.0
-                    fair_pe = max(10.0, min(26.0, fair_pe))
-                    epv_ps = max(0.0, sust_eps * fair_pe + net_cash_ps)
+                    elif roe_v < 9.0:
+                        fair_pe -= 3.5
+
+                    # Sector-relative profit margin comparison (e.g. 4% is normal in EMS, while 11% is below norm in IT)
+                    if pm_pct is not None and sec_norm_margin > 0:
+                        if pm_pct < sec_norm_margin * 0.82:
+                            fair_pe -= 3.5
+                        elif pm_pct >= sec_norm_margin * 1.25:
+                            fair_pe += 2.0
+
+                    if net_cash_cr > 0:
+                        fair_pe += 1.5
+                    if fd_eg is not None and fd_eg < -20.0:
+                        fair_pe = min(fair_pe, sec_norm_pe * 0.72)
+
+                    # Sectorial multiple discipline: when a stock trades at a deep structural discount to its own sector norm P/E,
+                    # bound how far theoretical fair_pe can re-rate above its actual market multiple
+                    if fd_pe is not None and 0 < fd_pe < sec_norm_pe * 0.85 and fair_pe > fd_pe * 1.22:
+                        fair_pe = min(fd_pe * 1.22, (fd_pe * 1.15) * 0.65 + fair_pe * 0.35)
+
+                    fair_pe = max(10.0, min(45.0, fair_pe))
+                    epv_ps = max(0.0, sust_eps * fair_pe + adj_net_cash_ps)
                     if epv_ps > 0:
                         methods["epv"] = round(epv_ps, 2)
 
-                # 2. 2-Stage Free Cash Flow DCF (Cr)
-                fcf = _num(cf.get("fcf"))
-                if fcf is not None and fcf > 0:
-                    g_5y = min(0.18, max(0.04, (rev_g if rev_g is not None else 10.0) / 100.0))
-                    r_wacc = 0.12
-                    g_term = 0.05
-                    pv_cf = sum((fcf * ((1.0 + g_5y) ** t)) / ((1.0 + r_wacc) ** t) for t in range(1, 6))
-                    fcf_5 = fcf * ((1.0 + g_5y) ** 5)
-                    tv = (fcf_5 * (1.0 + g_term)) / (r_wacc - g_term)
-                    pv_tv = tv / ((1.0 + r_wacc) ** 5)
-                    dcf_ps = max(0.0, (pv_cf + pv_tv + net_cash_cr) / shares_cr)
+                # 2. 10-Year 2-Stage Owner-Earnings / Free Cash Flow DCF (Cr)
+                raw_fcf = _num(cf.get("fcf"))
+                fd_fcf = _num(fund_data.get("free_cashflow"))
+                if fd_fcf and abs(fd_fcf) > 1e6:
+                    fd_fcf = round(fd_fcf / 1e7, 2)
+                if 0 < scale_factor < 1.0:
+                    eff_fcf = (raw_fcf or fd_fcf or 0.0) * scale_factor
+                elif scale_factor == 0.0:
+                    eff_fcf = min(raw_fcf or 0.0, fd_fcf or 0.0)
+                else:
+                    eff_fcf = max(raw_fcf or 0.0, fd_fcf or 0.0)
+
+                norm_sust_pat = sust_eps * shares_cr
+                cfo_now = _num(cf.get("cfo"), 0.0) or 0.0
+                if eff_fcf > 0 and norm_sust_pat > 0 and cfo_now > 0:
+                    if eff_fcf < norm_sust_pat * 0.75:
+                        eff_fcf = round((eff_fcf * 0.35) + ((norm_sust_pat * 0.80) * 0.65), 2)
+                    elif eff_fcf > norm_sust_pat * 1.05:
+                        # Prevent single-year working-capital inventory release from inflating 10Y perpetuity
+                        eff_fcf = round((eff_fcf * 0.35) + (norm_sust_pat * 0.65), 2)
+
+                if eff_fcf is not None and eff_fcf > 0:
+                    g_stage1 = min(0.24, max(0.04, (g_pct / 100.0) * 0.78))
+                    g_term = 0.055
+                    r_wacc = 0.115 if (net_cash_cr >= 0 and roe_v >= 18.0) else (0.12 if net_cash_cr >= 0 else 0.125)
+                    if fd_pe is not None and 0 < fd_pe < sec_norm_pe * 0.75:
+                        r_wacc = max(r_wacc, 0.132)
+                        g_stage1 = min(g_stage1, 0.12)
+
+                    pv_cf = 0.0
+                    cf_t = eff_fcf
+                    for t in range(1, 6):
+                        cf_t = cf_t * (1.0 + g_stage1)
+                        pv_cf += cf_t / ((1.0 + r_wacc) ** t)
+                    for t in range(6, 11):
+                        fade = (t - 5) / 5.0
+                        g_t = g_stage1 * (1.0 - fade) + g_term * fade
+                        cf_t = cf_t * (1.0 + g_t)
+                        pv_cf += cf_t / ((1.0 + r_wacc) ** t)
+
+                    tv = (cf_t * (1.0 + g_term)) / max(0.03, r_wacc - g_term)
+                    pv_tv = tv / ((1.0 + r_wacc) ** 10)
+                    dcf_ps = max(0.0, (pv_cf + pv_tv + adj_net_cash_cr) / shares_cr)
+                    if fd_pe is not None and 0 < fd_pe < sec_norm_pe * 0.80 and "epv" in methods:
+                        dcf_ps = min(dcf_ps, methods["epv"] * 1.12)
                     if dcf_ps > 0:
                         methods["dcf"] = round(dcf_ps, 2)
 
-                # 3. EV / EBITDA
-                ebitda = _num(stmts.get("ebitda"))
-                if ebitda is None:
-                    fd_ebitda = _num(fund_data.get("ebitda"))
-                    if fd_ebitda and fd_ebitda > 0:
-                        ebitda = round(fd_ebitda / 1e7, 2) if fd_ebitda > 1e6 else fd_ebitda
-                if ebitda is not None and ebitda > 0:
-                    sec_l = str(sector or "").lower()
-                    if any(k in sec_l for k in ("fmcg", "consumer", "staples", "jewel", "retail")):
-                        ev_mult = 18.0
-                    elif any(k in sec_l for k in ("information technology", "it", "software", "pharma", "healthcare")):
-                        ev_mult = 14.0
-                    elif any(k in sec_l for k in ("energy", "oil", "metals", "mining", "steel", "power")):
-                        ev_mult = 7.5
-                    else:
-                        ev_mult = 11.5
-                    ev_ps = max(0.0, (ebitda * ev_mult + net_cash_cr) / shares_cr)
+                # 3. Sector-Anchored EV / EBITDA
+                if eff_ebitda is not None and eff_ebitda > 0:
+                    ev_mult = (sec_norm_ev * 0.78) + min(10.0, max(-3.0, g_pct * 0.30))
+                    if roe_v >= 25.0:
+                        ev_mult += 3.5
+                    elif roe_v >= 16.0:
+                        ev_mult += 1.8
+                    elif roe_v < 9.0:
+                        ev_mult -= 2.0
+
+                    if pm_pct is not None and sec_norm_margin > 0:
+                        if pm_pct < sec_norm_margin * 0.82:
+                            ev_mult -= 2.5
+                        elif pm_pct >= sec_norm_margin * 1.25:
+                            ev_mult += 1.5
+                    if fd_eg is not None and fd_eg < -20.0:
+                        ev_mult = min(ev_mult, sec_norm_ev * 0.70)
+                    if fd_ev_ebitda is not None and 0 < fd_ev_ebitda < sec_norm_ev * 0.80 and ev_mult > fd_ev_ebitda * 1.22:
+                        ev_mult = min(fd_ev_ebitda * 1.22, (fd_ev_ebitda * 1.15) * 0.65 + ev_mult * 0.35)
+                    ev_mult = max(6.5, min(30.0, ev_mult))
+
+                    ev_ps = max(0.0, (eff_ebitda * ev_mult + adj_net_cash_cr) / shares_cr)
                     if ev_ps > 0:
                         methods["ev_ebitda"] = round(ev_ps, 2)
 
@@ -809,7 +1030,7 @@ class ForensicFinancialEngine:
                     q_disc = 1.0
                     if (eq.get("distortion_pct") or 0.0) > 30.0:
                         q_disc *= 0.85
-                    if (_num(cf.get("cfo_to_pat_ratio"), 1.0)) < 0.60:
+                    if (_num(cf.get("cfo_to_pat_ratio"), 1.0)) < 0.60 and not (norm_sust_pat > 0 and (eq.get("distortion_pct") or 0.0) < 10.0 and net_cash_cr >= 0):
                         q_disc *= 0.85
                     intrinsic_fair_value = round(blended * q_disc, 2)
                     valuation_method = "MULTI_METHOD_INTRINSIC"
@@ -1493,7 +1714,7 @@ class ForensicFinancialEngine:
                 f"Attractive risk-reward with {mos}% margin of safety on intrinsic fair value. "
                 "Cash conversion and earnings quality remain healthy."
             )
-        elif mos >= -15.0 and num_flags <= 2:
+        elif mos >= -25.0 and num_flags <= 2:
             verdict = "HOLD"
             badge = "🟡 HOLD / WATCHLIST"
             confidence = 72

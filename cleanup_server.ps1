@@ -119,17 +119,30 @@ Write-Host "  CLEANUP COMPLETE! System is clean." -ForegroundColor Cyan
 Write-Host "========================================================================" -ForegroundColor Cyan
 
 # 4. Optional restart
+$FrontendUrl = "http://localhost:4200"
 if ($Restart) {
     Write-Host ""
     Write-Host "Restarting dashboard server..." -ForegroundColor Cyan
     $venvPy = Join-Path $ScriptDir ".venv\Scripts\python.exe"
     if (Test-Path $venvPy) {
-        Start-Process -FilePath $venvPy -ArgumentList @("$ScriptDir\dashboard_server.py") -WorkingDirectory $ScriptDir
+        Start-Process -FilePath $venvPy -ArgumentList @("$ScriptDir\dashboard_server.py", "--no-browser") -WorkingDirectory $ScriptDir -WindowStyle Hidden
     } else {
-        Start-Process -FilePath "python" -ArgumentList @("$ScriptDir\dashboard_server.py") -WorkingDirectory $ScriptDir
+        Start-Process -FilePath "python" -ArgumentList @("$ScriptDir\dashboard_server.py", "--no-browser") -WorkingDirectory $ScriptDir -WindowStyle Hidden
     }
+
+    # Ensure Angular frontend dev server is running on port 4200, then open Angular URL
+    $ngRunning = [bool](Get-NetTCPConnection -LocalPort 4200 -State Listen -ErrorAction SilentlyContinue)
+    if (-not $ngRunning) {
+        $frontendDir = Join-Path $ScriptDir "frontend"
+        if (Test-Path $frontendDir) {
+            Write-Host "Starting Angular frontend dev server on $FrontendUrl..." -ForegroundColor Cyan
+            Start-Process -FilePath "cmd.exe" -ArgumentList @("/c", "npm start") -WorkingDirectory $frontendDir -WindowStyle Minimized
+        }
+    }
+    Write-Host "Launching Angular Workstation in browser: $FrontendUrl" -ForegroundColor Green
+    Start-Process $FrontendUrl
 } else {
     Write-Host "To start the dashboard now, run:" -ForegroundColor DarkGray
-    Write-Host "  .venv\Scripts\python.exe dashboard_server.py" -ForegroundColor White
-    Write-Host "  or run: .\cleanup_server.ps1 -Restart" -ForegroundColor DarkGray
+    Write-Host "  .\cleanup_server.ps1 -Restart" -ForegroundColor White
+    Write-Host "  Angular UI URL: $FrontendUrl" -ForegroundColor Cyan
 }

@@ -26,6 +26,9 @@ if PROJECT_ROOT not in sys.path:
 from config import ENGINE_LABEL, SYMBOLS_FILE_PATH, ALL_NSE_SYMBOLS_FILE_PATH, MIDCAP_250_SYMBOLS_FILE_PATH
 from tools.quote_tools import build_price_info
 from tools.long_term_strategy import long_term_engine
+from tools.forensic_financial_engine import ForensicFinancialEngine, _is_bfsi_sector
+
+_forensic_recalc_engine = ForensicFinancialEngine()
 
 
 # ===================================================================================== Constants
@@ -182,10 +185,96 @@ def _patterns_from_cached_candles(sym, cache_mgr, tech_engine):
     return patterns
 
 
+def _refresh_peg_and_forensic(
+    sym: str,
+    sector: str,
+    last_price: Optional[float],
+    raw_fund: Dict[str, Any],
+    forensic_d: Optional[Dict[str, Any]],
+    fund_output: Optional[Dict[str, Any]],
+    synth_output: Optional[Dict[str, Any]],
+) -> None:
+    """
+    Normalizes sustainable PEG ratio and recalculates forensic intrinsic valuation & margin of safety
+    against the latest market price in-place.
+    """
+    if isinstance(raw_fund, dict):
+        pe_v = raw_fund.get("pe_ratio")
+        eg_v = raw_fund.get("earnings_growth_pct")
+        sec_l = str(sector or raw_fund.get("sector") or "").lower()
+        if isinstance(eg_v, (int, float)) and eg_v <= 0:
+            raw_fund["peg_ratio"] = "N/A (Negative Growth)"
+        elif isinstance(pe_v, (int, float)) and isinstance(eg_v, (int, float)) and pe_v > 0 and eg_v > 2.0:
+            max_g = 24.0 if any(k in sec_l for k in ("financial", "bank", "nbfc", "insurance")) else 32.0
+            sust_g = min(float(eg_v), max_g)
+            norm_peg = round(float(pe_v) / sust_g, 2)
+            cur_peg = raw_fund.get("peg_ratio")
+            if not isinstance(cur_peg, (int, float)) or cur_peg <= 0 or cur_peg < norm_peg * 0.75 or cur_peg < 0.35:
+                raw_fund["peg_ratio"] = norm_peg
+        if synth_output and "peg_ratio" in synth_output and raw_fund.get("peg_ratio") is not None:
+            synth_output["peg_ratio"] = raw_fund["peg_ratio"]
+        if synth_output and isinstance(synth_output.get("agent_outputs"), dict):
+            f_sub = synth_output["agent_outputs"].get("fundamental")
+            if isinstance(f_sub, dict) and raw_fund.get("peg_ratio") is not None:
+                f_sub["peg_ratio"] = raw_fund["peg_ratio"]
+
+    if isinstance(forensic_d, dict) and forensic_d.get("verdict") not in (None, "UNAUDITED") and last_price and last_price > 0:
+        try:
+            eq = forensic_d.get("earnings_quality") or {}
+            cf = forensic_d.get("cash_conversion") or {}
+            solv = forensic_d.get("solvency_health") or {}
+            sub = forensic_d.get("subsidiary_attribution") or {}
+            gov = forensic_d.get("governance_telemetry") or {}
+            peer_b = forensic_d.get("peer_benchmarks")
+            f_sc = forensic_d.get("piotroski_f_score_details")
+            ben = forensic_d.get("beneish_m_score")
+            fresh = forensic_d.get("filing_freshness")
+            eff_sec = sector or forensic_d.get("sector") or raw_fund.get("sector") or ""
+            is_bfsi = _is_bfsi_sector(eff_sec, sym)
+            bfsi_h = forensic_d.get("bfsi_health") if is_bfsi else None
+            old_mb = (forensic_d.get("valuation_metrics") or {}).get("method_breakdown") or {}
+            stmts_proxy = {
+                "symbol": sym,
+                "shares_outstanding_cr": old_mb.get("shares_cr"),
+                "roe_pct": raw_fund.get("roe_pct") if raw_fund.get("roe_pct") != "N/A" else old_mb.get("roe_pct"),
+                "book_value_per_share": raw_fund.get("book_value") if raw_fund.get("book_value") != "N/A" else old_mb.get("bvps"),
+            }
+            val = _forensic_recalc_engine._calculate_sustainable_valuation(
+                eq, cf, solv, raw_fund, float(last_price), stmts=stmts_proxy, sector=eff_sec, bfsi_health=bfsi_h
+            )
+            wc_proxy = {"debtor_days": forensic_d.get("debtor_days")}
+            r_flags, cats = _forensic_recalc_engine._compile_forensic_signals(
+                eq, cf, sub, solv, val, gov, peer_b, f_sc, wc_proxy,
+                is_bfsi=is_bfsi, bfsi_health=bfsi_h, beneish=ben, filing_freshness=fresh,
+            )
+            rec = _forensic_recalc_engine._synthesize_recommendation(
+                eq, cf, solv, val, r_flags, cats, float(last_price), gov, f_sc,
+                is_bfsi=is_bfsi, bfsi_health=bfsi_h, beneish=ben,
+            )
+            forensic_d["sector"] = eff_sec or forensic_d.get("sector")
+            forensic_d["market_price"] = float(last_price)
+            forensic_d["fair_value"] = val["intrinsic_fair_value"]
+            forensic_d["margin_of_safety_pct"] = val["margin_of_safety_pct"]
+            forensic_d["valuation_metrics"] = val
+            forensic_d["bfsi_health"] = bfsi_h
+            forensic_d["red_flags"] = r_flags
+            forensic_d["positive_catalysts"] = cats
+            forensic_d["verdict"] = rec["verdict"]
+            forensic_d["verdict_badge"] = rec["verdict_badge"]
+            forensic_d["confidence_score"] = rec["confidence_score"]
+            forensic_d["investment_thesis"] = rec["investment_thesis"]
+            if fund_output:
+                fund_output["forensic_verdict"] = rec["verdict"]
+                fund_output["forensic_badge"] = rec["verdict_badge"]
+                fund_output["forensic_red_flags"] = r_flags
+        except Exception:
+            pass
+
+
 def get_all_stock_data(cache_mgr, queue_mgr, hist_engine, tech_engine, events_engine, universe: str = "curated"):
     """
     Assemble the complete stock data for all symbols: latest analysis, queue status, patterns, events, sparklines.
-    Uses bulk SQLite queries (single pass) instead of N+1 per-symbol queries.
+    Uses single-pass bulk Valkey queries (or SQLite fallback when Valkey is offline) instead of N+1 queries.
     """
     symbols_list = _load_symbols_list(universe=universe)
     sym_names = [s.get("symbol", "").upper() for s in symbols_list if s.get("symbol")]
@@ -310,6 +399,8 @@ def get_all_stock_data(cache_mgr, queue_mgr, hist_engine, tech_engine, events_en
 
         raw_fund = (fund_output or {}).get("raw_fundamentals") or {}
         forensic_d = (fund_output or {}).get("forensic_analysis")
+        _refresh_peg_and_forensic(sym, sector, last_price, raw_fund, forensic_d, fund_output, synth_output)
+
         long_term_signal = long_term_engine.evaluate_long_term_stock(
             symbol=sym,
             name=name,
@@ -321,11 +412,53 @@ def get_all_stock_data(cache_mgr, queue_mgr, hist_engine, tech_engine, events_en
         )
 
         if synth_output and "structured_signal" in synth_output:
-            synth_output["structured_signal"]["long_term_signal"] = long_term_signal
-            synth_output["structured_signal"]["long_term_target"] = long_term_signal["long_term_target"]
-            synth_output["structured_signal"]["long_term_verdict"] = long_term_signal["long_term_verdict"]
-            synth_output["structured_signal"]["long_term_horizon"] = long_term_signal["long_term_horizon"]
-            synth_output["structured_signal"]["suggested_long_term_peers"] = long_term_signal["suggested_long_term_peers"]
+            sig_d = synth_output["structured_signal"]
+            sig_d["long_term_signal"] = long_term_signal
+            sig_d["long_term_target"] = long_term_signal["long_term_target"]
+            sig_d["long_term_verdict"] = long_term_signal["long_term_verdict"]
+            sig_d["long_term_horizon"] = long_term_signal["long_term_horizon"]
+            sig_d["suggested_long_term_peers"] = long_term_signal["suggested_long_term_peers"]
+            if isinstance(forensic_d, dict) and forensic_d.get("fair_value") is not None:
+                sig_d["intrinsic_fair_value"] = forensic_d["fair_value"]
+                sig_d["margin_of_safety_pct"] = forensic_d["margin_of_safety_pct"]
+
+            # Ensure non-SELL stocks always expose a valid Rs. Floor - Ceiling entry range and upside target
+            if short_verdict != "SELL" and last_price and last_price > 0:
+                cur_entry = str(sig_d.get("when_to_buy_entry") or "")
+                cur_tgt = _extract_numeric_val(sig_d.get("when_to_sell_target"))
+                cur_sl = _extract_numeric_val(sig_d.get("stop_loss"))
+                if cur_entry.startswith("Hold existing") or not cur_tgt or cur_tgt <= last_price or not cur_sl or cur_sl >= last_price:
+                    from tools.indicators import snap_nse_tick
+                    lp_f = float(last_price)
+                    tick = 0.01 if lp_f < 250.0 else 0.05
+                    fair_v = _extract_numeric_val((forensic_d or {}).get("fair_value"))
+                    swing_l20 = _extract_numeric_val(((tech_output or {}).get("raw_indicators") or {}).get("swing_low_20"))
+                    new_tgt = snap_nse_tick(lp_f * 1.08, direction="up")
+                    if new_tgt <= lp_f:
+                        new_tgt = round(lp_f + tick, 2)
+                    new_sl = snap_nse_tick(lp_f * 0.95, direction="down")
+                    if new_sl >= lp_f:
+                        new_sl = round(max(0.05, lp_f - tick), 2)
+                    if fair_v and fair_v > lp_f:
+                        dip_fl = swing_l20 if (swing_l20 and 0.93 * lp_f <= swing_l20 < lp_f) else (lp_f * 0.965)
+                        raw_ceil = lp_f * 1.005
+                        raw_fl = min(dip_fl, raw_ceil * 0.98)
+                    elif fair_v and fair_v < lp_f:
+                        val_anc = max(lp_f * 0.92, min(fair_v, swing_l20 or (lp_f * 0.95)))
+                        raw_ceil = min(lp_f * 0.99, max(val_anc * 1.025, lp_f * 0.965))
+                        raw_fl = min(val_anc, raw_ceil * 0.975)
+                    else:
+                        dip_fl = swing_l20 if (swing_l20 and 0.94 * lp_f <= swing_l20 < lp_f) else (lp_f * 0.975)
+                        raw_ceil = lp_f * 1.01
+                        raw_fl = min(dip_fl, raw_ceil * 0.985)
+                    e_ceil = snap_nse_tick(min(raw_ceil, new_tgt * 0.96), direction="down")
+                    e_fl = snap_nse_tick(min(raw_fl, e_ceil * 0.985), direction="down")
+                    sig_d["when_to_buy_entry"] = f"Rs. {e_fl:.2f} - {e_ceil:.2f}"
+                    sig_d["when_to_sell_target"] = f"Rs. {new_tgt}"
+                    sig_d["short_term_target"] = f"Rs. {new_tgt}"
+                    sig_d["stop_loss"] = f"Rs. {new_sl}"
+                    rr_v = round((new_tgt - lp_f) / max(0.01, lp_f - new_sl), 2)
+                    sig_d["risk_reward_ratio"] = f"1:{rr_v:.2f}"
 
         results.append({
             "long_term_signal": long_term_signal,
@@ -598,8 +731,8 @@ def _compute_fundamental_picks(cache_mgr, universe: str) -> Dict[str, Any]:
         fund_res = agents.get(FUND_AGENT, {}).get("output")
 
         raw_tech = (tech_res or {}).get("raw_indicators", {})
+        c_sum = candle_summaries.get(sym)
         if raw_tech.get("pct_from_52w_high") is None:
-            c_sum = candle_summaries.get(sym)
             if c_sum and c_sum.get("high_52w") and c_sum.get("latest_close"):
                 h_max = float(c_sum["high_52w"])
                 p_now = float(c_sum["latest_close"])
@@ -610,8 +743,32 @@ def _compute_fundamental_picks(cache_mgr, universe: str) -> Dict[str, Any]:
                     tech_res["raw_indicators"]["high_52w"] = round(h_max, 2)
                     tech_res["raw_indicators"]["last_price"] = p_now
 
+        raw_fund = (fund_res or {}).get("raw_fundamentals") or {}
+        last_price = float(
+            _extract_numeric_val((synth_res or {}).get("last_price"))
+            or _extract_numeric_val(((tech_res or {}).get("raw_indicators") or {}).get("last_price"))
+            or _extract_numeric_val((c_sum or {}).get("latest_close"))
+            or 0.0
+        )
+        forensic_d = (fund_res or {}).get("forensic_analysis")
+        _refresh_peg_and_forensic(sym, sec, last_price, raw_fund, forensic_d, fund_res, synth_res)
+
+        if last_price > 0 and synth_res and isinstance(synth_res.get("structured_signal"), dict):
+            short_verdict = synth_res["structured_signal"].get("action_verdict", "HOLD")
+            lt_sig = long_term_engine.evaluate_long_term_stock(
+                symbol=sym,
+                name=cname,
+                sector=sec,
+                last_price=last_price,
+                short_verdict=short_verdict,
+                fund_data=raw_fund,
+                forensic_data=forensic_d,
+            )
+            synth_res["structured_signal"]["long_term_verdict"] = lt_sig["long_term_verdict"]
+            synth_res["structured_signal"]["long_term_target"] = lt_sig["long_term_target"]
+
         pick = score_fundamental_pick(sym, synth_res, tech_res, fund_res=fund_res, sector=sec)
-        if pick is None:
+        if pick is None or (pick.get("score") or 0) <= 20 or not pick.get("last_price"):
             continue
         pick["company"] = cname
         pick["sector"] = sec

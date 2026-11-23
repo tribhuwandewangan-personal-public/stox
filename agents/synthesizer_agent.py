@@ -22,13 +22,19 @@ from tools.indicators import snap_nse_tick
 from tools.events_tools import evaluate_pre_event_guardrail
 from tools.macro_tools import apply_sector_macro_beta
 
+_CAPITAL_MARKETS_RE = re.compile(
+    r"\b(capital markets|fintech|exchange|exchanges|depository|broking|brokerage|wealth|asset management|amc|credit rating)\b",
+    re.I,
+)
 _BFSI_RE = re.compile(
-    r"\b(bank|banking|nbfc|financial services|insurance|housing finance|microfinance|capital markets|fintech)\b",
+    r"\b(bank|banking|nbfc|financial services|insurance|housing finance|microfinance)\b",
     re.I,
 )
 
 
 def _is_bfsi_sector(sector: str) -> bool:
+    if sector and _CAPITAL_MARKETS_RE.search(sector):
+        return False
     return bool(sector and _BFSI_RE.search(sector))
 
 # --------------------------------------------------------------------------------------------------
@@ -608,6 +614,17 @@ class MasterPredictionSynthesizerAgent:
         suggested_sl = round(risk_sl, 2) if (risk_sl is not None and 0 < risk_sl < lp) else round(lp * 0.95, 2)
 
         top_pattern = detected_patterns[0] if detected_patterns else None
+        if detected_patterns and len(detected_patterns) > 1 and top_pattern:
+            top_dir = str(top_pattern.get("direction", "")).lower()
+            top_q = _to_float(top_pattern.get("quality_score")) or 70.0
+            if "bullish" in top_dir or "bearish" in top_dir:
+                opp_key = "bearish" if "bullish" in top_dir else "bullish"
+                opp_pats = [
+                    p for p in detected_patterns[1:4]
+                    if opp_key in str(p.get("direction", "")).lower() and (_to_float(p.get("quality_score")) or 0) >= 75
+                ]
+                if len(opp_pats) >= 2 and sum(_to_float(p.get("quality_score")) or 0 for p in opp_pats) >= top_q + 40:
+                    top_pattern = max(opp_pats, key=lambda p: _to_float(p.get("quality_score")) or 0)
         p_name = top_pattern.get("name", "Consolidation Range") if top_pattern else "Consolidation Range"
         p_dir = top_pattern.get("direction", "Neutral") if top_pattern else "Neutral"
 
@@ -648,8 +665,11 @@ class MasterPredictionSynthesizerAgent:
         rr_ratio = 1.0
         if verdict in ("BUY", "ACCUMULATE"):
             # Bullish: target MUST be above price, stop MUST be below price
-            if raw_p_target and lp < raw_p_target <= lp * 1.6:
+            # Cap short-term swing target at +20% (multi-month saucer/cup targets > +20% are scaled to swing horizon)
+            if raw_p_target and lp < raw_p_target <= lp * 1.20:
                 target = round(raw_p_target, 2)
+            elif raw_p_target and raw_p_target > lp * 1.20:
+                target = round(min(raw_p_target, max(suggested_tp, lp * 1.15)), 2)
             else:
                 target = suggested_tp
             if raw_p_sl and lp * 0.75 <= raw_p_sl < lp:
@@ -684,7 +704,16 @@ class MasterPredictionSynthesizerAgent:
 
             rr_ratio = round((target - lp) / risk_dist, 2)
 
-            # Tight, realistic entry range near current market price
+            fund_ctx_entry = (context.get("fundamental") or {}) if context else {}
+            forensic_entry = fund_ctx_entry.get("forensic_analysis") or {}
+            fair_val_entry = _to_float(
+                forensic_entry.get("fair_value")
+                or (forensic_entry.get("valuation_metrics") or {}).get("intrinsic_fair_value")
+                or fund_ctx_entry.get("intrinsic_value")
+            )
+            swing_l20_entry = _to_float(raw_tech.get("swing_low_20")) or _to_float(raw_tech.get("support_1"))
+
+            # Tight, realistic entry range anchored to pattern trigger, 20D support, and intrinsic value
             if raw_p_entry and 0.95 * lp <= raw_p_entry <= 1.04 * lp:
                 if raw_p_entry > lp:
                     entry_floor = round(lp * 0.99, 2)
@@ -692,6 +721,9 @@ class MasterPredictionSynthesizerAgent:
                 else:
                     entry_floor = round(max(raw_p_entry * 0.99, lp * 0.98), 2)
                     entry_ceiling = round(lp * 1.015, 2)
+            elif swing_l20_entry and 0.955 * lp <= swing_l20_entry < lp:
+                entry_floor = round(swing_l20_entry, 2)
+                entry_ceiling = round(lp * 1.015, 2)
             else:
                 entry_floor = round(lp * 0.985, 2)
                 entry_ceiling = round(lp * 1.015, 2)
@@ -705,8 +737,11 @@ class MasterPredictionSynthesizerAgent:
                 entry_floor = round(max(0.01, entry_ceiling - tick), 2)
             entry = f"Rs. {entry_floor:.2f} - {entry_ceiling:.2f}"
 
+            val_note = ""
+            if fair_val_entry and fair_val_entry > lp:
+                val_note = f" (Trading below Intrinsic Value Rs. {fair_val_entry:.2f})"
             rationale = f"{verdict} bias for {symbol}. {basis} Upside target near Rs. {target}.{earnings_clause}"
-            action = f"Initiate position in {entry} range targeting Rs. {target} with risk stop at Rs. {sl}."
+            action = f"Initiate position in {entry} range{val_note} targeting Rs. {target} with risk stop at Rs. {sl}."
 
             # Overhead Structural Resistance Check (Prevent buying blindly into resistance ceiling)
             swing_h20 = _to_float(raw_tech.get("swing_high_20")) or _to_float(raw_tech.get("resistance_1"))
@@ -745,35 +780,64 @@ class MasterPredictionSynthesizerAgent:
             )
 
         else:
-            if p_dir == "Bearish" or ev["score"] <= DEFENSIVE_HOLD_THRESHOLD:
-                target = snap_nse_tick(lp * 0.94, direction="down")
-                if target >= lp:
-                    target = round(max(0.05, lp - tick), 2)
-                sl = snap_nse_tick(lp * 1.04, direction="up")
-                if sl <= lp:
-                    sl = round(lp + tick, 2)
-                entry = "Hold existing / No fresh entry"
-                rationale = f"HOLD (defensive) for {symbol}. {basis}{earnings_clause}"
+            fund_ctx_hold = (context.get("fundamental") or {}) if context else {}
+            forensic_hold = fund_ctx_hold.get("forensic_analysis") or {}
+            fair_val_hold = _to_float(
+                forensic_hold.get("fair_value")
+                or (forensic_hold.get("valuation_metrics") or {}).get("intrinsic_fair_value")
+                or fund_ctx_hold.get("intrinsic_value")
+            )
+            swing_l20_hold = _to_float(raw_tech.get("swing_low_20")) or _to_float(raw_tech.get("support_1"))
+
+            target = snap_nse_tick(suggested_tp, direction="nearest")
+            if target <= lp:
+                target = snap_nse_tick(lp * 1.06, direction="up")
+                if target <= lp:
+                    target = round(lp + tick, 2)
+            adj_hold_sl = suggested_sl - (min(div_ps, lp * 0.08) if (div_ps and div_ps > 0) else 0.0)
+            sl = snap_nse_tick(max(0.05, adj_hold_sl), direction="down")
+            if sl >= lp:
+                sl = round(max(0.05, lp - tick), 2)
+
+            risk_dist = max(0.01, lp - sl)
+            rr_ratio = round((target - lp) / risk_dist, 2)
+
+            is_defensive_hold = p_dir == "Bearish" or ev["score"] <= DEFENSIVE_HOLD_THRESHOLD
+            if fair_val_hold and fair_val_hold > lp:
+                # Undervalued vs Intrinsic Value: accumulate between 20D support floor and current price
+                dip_floor = swing_l20_hold if (swing_l20_hold and 0.93 * lp <= swing_l20_hold < lp) else (lp * 0.965)
+                raw_ceiling = lp * (0.995 if is_defensive_hold else 1.01)
+                raw_floor = min(dip_floor, raw_ceiling * 0.98)
+            elif fair_val_hold and fair_val_hold < lp:
+                # Trading above Intrinsic Value: wait for pullback toward support / intrinsic value zone
+                val_anchor = max(lp * 0.92, min(fair_val_hold, swing_l20_hold or (lp * 0.95)))
+                raw_ceiling = min(lp * 0.99, max(val_anchor * 1.025, lp * 0.965))
+                raw_floor = min(val_anchor, raw_ceiling * 0.975)
+            elif is_defensive_hold:
+                dip_floor = swing_l20_hold if (swing_l20_hold and 0.93 * lp <= swing_l20_hold < lp) else (lp * 0.95)
+                raw_ceiling = lp * 0.99
+                raw_floor = min(dip_floor, raw_ceiling * 0.975)
+            else:
+                dip_floor = swing_l20_hold if (swing_l20_hold and 0.95 * lp <= swing_l20_hold < lp) else (lp * 0.98)
+                raw_ceiling = lp * 1.015
+                raw_floor = min(dip_floor, raw_ceiling * 0.985)
+
+            entry_ceiling = snap_nse_tick(min(raw_ceiling, target * 0.96), direction="down")
+            if entry_ceiling >= target:
+                entry_ceiling = round(target - tick, 2)
+            entry_floor = snap_nse_tick(min(raw_floor, entry_ceiling * 0.985), direction="down")
+            if entry_floor >= entry_ceiling:
+                entry_floor = round(max(0.01, entry_ceiling - tick), 2)
+            entry = f"Rs. {entry_floor:.2f} - {entry_ceiling:.2f}"
+
+            if is_defensive_hold:
+                rationale = f"HOLD (wait for pullback) for {symbol}. {basis}{earnings_clause}"
                 action = (
-                    f"Defensive posture: bearish invalidation level at Rs. {sl}. "
-                    "Long holders: avoid fresh allocation until a clear directional breakout above resistance."
+                    f"Wait for pullback into {entry} support/value zone before fresh entry "
+                    f"(protective stop at Rs. {sl}, upside target Rs. {target})."
                 )
             else:
-                target = snap_nse_tick(suggested_tp, direction="nearest")
-                if target <= lp:
-                    target = snap_nse_tick(lp + tick, direction="up")
-                adj_hold_sl = suggested_sl - (min(div_ps, lp * 0.08) if (div_ps and div_ps > 0) else 0.0)
-                sl = snap_nse_tick(max(0.05, adj_hold_sl), direction="down")
-                if sl >= lp:
-                    sl = round(max(0.05, lp - tick), 2)
-                entry_ceiling = snap_nse_tick(min(lp * 1.015, target * 0.96), direction="down")
-                if entry_ceiling >= target:
-                    entry_ceiling = round(target - tick, 2)
-                entry_floor = snap_nse_tick(min(lp * 0.98, entry_ceiling * 0.985), direction="down")
-                if entry_floor >= entry_ceiling:
-                    entry_floor = round(max(0.01, entry_ceiling - tick), 2)
-                entry = f"Rs. {entry_floor:.2f} - {entry_ceiling:.2f}"
-                rationale = f"HOLD (range-bound) for {symbol}. {basis}{earnings_clause}"
+                rationale = f"HOLD (accumulate on dips) for {symbol}. {basis}{earnings_clause}"
                 action = f"Accumulate on dips in {entry} with protective stop loss at Rs. {sl} targeting Rs. {target}."
 
         if surv_flag:
@@ -956,8 +1020,17 @@ class MasterPredictionSynthesizerAgent:
             val_str = f" [{val_assessment}]" if val_assessment and val_assessment != "Unavailable" else ""
             fund_profile_parts.append(f"P/E: {pe_val}{peg_str}{val_str}")
         if fair_val is not None:
-            mos_str = f" ({'+' if mos_val > 0 else ''}{mos_val:.0f}%)" if mos_val is not None else ""
-            fund_profile_parts.append(f"Intrinsic Value: Rs. {fair_val:.2f}{mos_str}")
+            mos_str = f" ({'+' if mos_val and mos_val > 0 else ''}{mos_val:.0f}%)" if mos_val is not None else ""
+            if last_price and fair_val > last_price:
+                val_buy_ceil = round(fair_val * 0.85, 2)
+                zone_tag = (
+                    f" [In Value Buy Zone ≤ Rs. {val_buy_ceil:.2f}]"
+                    if last_price <= val_buy_ceil
+                    else f" [Below Intrinsic Fair Value Rs. {fair_val:.2f}]"
+                )
+            else:
+                zone_tag = f" [Fundamental Value Entry: ≤ Rs. {fair_val:.2f}]"
+            fund_profile_parts.append(f"Intrinsic Value: Rs. {fair_val:.2f}{mos_str}{zone_tag}")
         if de_val and de_val != "N/A":
             fund_profile_parts.append(f"D/E: {de_val}")
         if cr_val and cr_val != "N/A":

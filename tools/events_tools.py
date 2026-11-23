@@ -341,6 +341,8 @@ class EventsEngine:
         self._init_events_table()
 
     def _init_events_table(self):
+        if getattr(self.cache_manager, "use_valkey", False):
+            return
         with self.cache_manager._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -417,13 +419,20 @@ class EventsEngine:
     def get_cached_events(self, symbol: str) -> Dict[str, Any]:
         """Read-only: last stored events for a symbol with expired dates stripped ({} if none)."""
         try:
-            with self.cache_manager._get_connection() as conn:
-                row = conn.execute(
-                    "SELECT events_data FROM events_cache WHERE symbol = ?", (symbol.upper().strip(),)
-                ).fetchone()
-            if not row:
-                return {}
-            data = json.loads(row[0])
+            sym_u = symbol.upper().strip()
+            if getattr(self.cache_manager, "use_valkey", False) and hasattr(self.cache_manager, "get_cached_event_record"):
+                rec = self.cache_manager.get_cached_event_record(sym_u)
+                if not rec:
+                    return {}
+                data = rec.get("events_data") or {}
+            else:
+                with self.cache_manager._get_connection() as conn:
+                    row = conn.execute(
+                        "SELECT events_data FROM events_cache WHERE symbol = ?", (sym_u,)
+                    ).fetchone()
+                if not row:
+                    return {}
+                data = json.loads(row[0])
             today = datetime.now().strftime("%Y-%m-%d")
             if data.get("earnings_date") and data["earnings_date"] < today:
                 data["earnings_date"] = None
@@ -445,20 +454,32 @@ class EventsEngine:
         """
         symbol_clean = symbol.upper().strip()
 
-        # Check SQLite cache first
-        with self.cache_manager._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT updated_at, events_data FROM events_cache WHERE symbol = ?", (symbol_clean,))
-            row = cursor.fetchone()
-            if row:
+        # Check Valkey / SQLite cache first
+        if getattr(self.cache_manager, "use_valkey", False) and hasattr(self.cache_manager, "get_cached_event_record"):
+            rec = self.cache_manager.get_cached_event_record(symbol_clean)
+            if rec:
                 try:
-                    updated_dt = datetime.fromisoformat(row[0])
-                    cached_events = json.loads(row[1])
+                    updated_dt = datetime.fromisoformat(rec["updated_at"])
+                    cached_events = rec["events_data"]
                     ttl = 3600 if cached_events.get("source") == "unavailable" else 48 * 3600
                     if (datetime.now() - updated_dt).total_seconds() < ttl:
                         return cached_events
                 except Exception:
                     pass
+        else:
+            with self.cache_manager._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT updated_at, events_data FROM events_cache WHERE symbol = ?", (symbol_clean,))
+                row = cursor.fetchone()
+                if row:
+                    try:
+                        updated_dt = datetime.fromisoformat(row[0])
+                        cached_events = json.loads(row[1])
+                        ttl = 3600 if cached_events.get("source") == "unavailable" else 48 * 3600
+                        if (datetime.now() - updated_dt).total_seconds() < ttl:
+                            return cached_events
+                    except Exception:
+                        pass
 
         # Try official NSE Reg 29/30 corporate actions & board meetings first
         nse_found = fetch_nse_corporate_actions(symbol_clean)
@@ -604,15 +625,18 @@ class EventsEngine:
         macro_events = self.get_upcoming_macro_events()
         events_found["upcoming_macro_catalysts"] = macro_events[:3]
 
-        # Save to SQLite events_cache
+        # Save to Valkey or SQLite events_cache
         try:
-            with self.cache_manager._get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("""
-                    INSERT OR REPLACE INTO events_cache (symbol, updated_at, events_data)
-                    VALUES (?, ?, ?)
-                """, (symbol_clean, datetime.now().isoformat(), json.dumps(events_found)))
-                conn.commit()
+            if getattr(self.cache_manager, "use_valkey", False) and hasattr(self.cache_manager, "save_cached_event_record"):
+                self.cache_manager.save_cached_event_record(symbol_clean, events_found)
+            else:
+                with self.cache_manager._get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        INSERT OR REPLACE INTO events_cache (symbol, updated_at, events_data)
+                        VALUES (?, ?, ?)
+                    """, (symbol_clean, datetime.now().isoformat(), json.dumps(events_found)))
+                    conn.commit()
         except Exception:
             pass
 
