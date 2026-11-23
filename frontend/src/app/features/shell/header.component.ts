@@ -28,13 +28,13 @@ export type AppView = 'watchlist' | 'screener';
           <button class="nav-tab" [class.active]="activeView === 'watchlist' && currentUniverse() === 'curated'" (click)="selectUniverse('curated')">
             📋 Watchlist
           </button>
-          <button class="nav-tab" [class.active]="activeView === 'watchlist' && currentUniverse() === 'midcap250'" (click)="selectUniverse('midcap250')">
-            🏢 Midcap 250
-            <span class="nav-badge midcap-badge">250 STOCKS</span>
+          <button class="nav-tab" [class.active]="activeView === 'watchlist' && currentUniverse() === 'all_nse'" (click)="selectUniverse('all_nse')">
+            🏛️ Nifty 100
+            <span class="nav-badge">100 STOCKS</span>
           </button>
-          <button class="nav-tab" [class.active]="activeView === 'screener'" (click)="switchView('screener')">
-            🔍 Pattern Screener
-            <span class="nav-badge">ALL NSE</span>
+          <button class="nav-tab" [class.active]="activeView === 'watchlist' && currentUniverse() === 'midcap250'" (click)="selectUniverse('midcap250')">
+            🏢 Midcap 100
+            <span class="nav-badge midcap-badge">100 STOCKS</span>
           </button>
         </nav>
       </div>

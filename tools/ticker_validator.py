@@ -322,7 +322,7 @@ def get_tracker() -> TickerFailureTracker:
 if __name__ == "__main__":
     import argparse
 
-    NSE_ALL_FILE = os.path.join(PROJECT_ROOT, "symbols_nse_all.json")
+    NSE_ALL_FILE = os.path.join(PROJECT_ROOT, "symbols_nse_catalog.json")
 
     parser = argparse.ArgumentParser(description="NSE Ticker Validator & Failure Tracker")
     parser.add_argument("--report",  action="store_true", help="Show failure tracker summary")

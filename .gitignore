@@ -46,6 +46,9 @@ scratch/
 scratch_*.py
 *.tmp
 
+# Downloaded NSE index constituent CSVs (re-fetched on demand)
+storage/index_csv/
+
 # Broker access token & private credentials (never commit)
 storage/kite_token.json
 *kite_token*.json

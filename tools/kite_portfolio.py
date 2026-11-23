@@ -383,7 +383,8 @@ class KitePortfolioEngine:
         sector_map = {}
         name_map = {}
         midcap_symbols = set()
-        for sym_file in (ALL_NSE_SYMBOLS_FILE_PATH, MIDCAP_250_SYMBOLS_FILE_PATH, SYMBOLS_FILE_PATH):
+        from config import NSE_CATALOG_FILE_PATH
+        for sym_file in (NSE_CATALOG_FILE_PATH, ALL_NSE_SYMBOLS_FILE_PATH, MIDCAP_250_SYMBOLS_FILE_PATH, SYMBOLS_FILE_PATH):
             if os.path.exists(sym_file):
                 try:
                     with open(sym_file, "r", encoding="utf-8") as f:

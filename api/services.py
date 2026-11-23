@@ -137,6 +137,12 @@ def load_active_monitored_symbols(
         if sym and sym not in seen:
             seen[sym] = dict(item, symbol=sym)
 
+    if os.path.exists(ALL_NSE_SYMBOLS_FILE_PATH):   # Nifty 100 large caps
+        for item in _load_symbols_list("all_nse"):
+            sym = str(item.get("symbol") or "").upper().strip()
+            if sym and sym not in seen:
+                seen[sym] = dict(item, symbol=sym)
+
     if include_midcap and os.path.exists(MIDCAP_250_SYMBOLS_FILE_PATH):
         for item in _load_symbols_list("midcap250"):
             sym = str(item.get("symbol") or "").upper().strip()
@@ -309,6 +315,8 @@ def get_all_stock_data(cache_mgr, queue_mgr, hist_engine, tech_engine, events_en
                 is_stale = datetime.fromisoformat(agents[SYNTH_AGENT]["timestamp"]) < stale_cutoff
             except Exception:
                 is_stale = False
+        if synth_output is not None and not is_stale and q_status == "pending":
+            q_status = "completed"
 
         tech_output = _out(TECH_AGENT)
         hist_output = _out(HIST_AGENT)

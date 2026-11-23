@@ -16,7 +16,7 @@ from datetime import datetime
 from typing import Dict, Any, List, Tuple
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-from config import SYMBOLS_FILE_PATH, CACHE_DB_PATH, MIDCAP_250_SYMBOLS_FILE_PATH, ALL_NSE_SYMBOLS_FILE_PATH
+from config import SYMBOLS_FILE_PATH, CACHE_DB_PATH, MIDCAP_250_SYMBOLS_FILE_PATH, ALL_NSE_SYMBOLS_FILE_PATH, NSE_CATALOG_FILE_PATH
 
 _CATALOG_LOCK = threading.Lock()
 _CATALOG_CACHE: Dict[str, Any] = {"loaded": False, "items": []}
@@ -33,8 +33,9 @@ def _load_local_nse_catalog() -> List[Dict[str, Any]]:
 
         catalog_map: Dict[str, Dict[str, Any]] = {}
         sources = [
-            (ALL_NSE_SYMBOLS_FILE_PATH, "NSE Master Catalog", 2),
-            (MIDCAP_250_SYMBOLS_FILE_PATH, "NSE Midcap 250", 1),
+            (NSE_CATALOG_FILE_PATH, "NSE Master Catalog", 2),
+            (ALL_NSE_SYMBOLS_FILE_PATH, "Nifty 100", 1),
+            (MIDCAP_250_SYMBOLS_FILE_PATH, "Nifty Midcap 100", 1),
             (SYMBOLS_FILE_PATH, "Curated Watchlist", 0),
         ]
         for path, src_label, priority in sources:

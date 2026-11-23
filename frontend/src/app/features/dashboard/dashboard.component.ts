@@ -51,12 +51,12 @@ import { stocksStore } from '../../core/stores/stocks.store';
           <div class="grid-title">
             Equities Decision Dashboard
             <span class="universe-tag" [class.midcap]="activeUniverse() === 'midcap250'">
-              {{ activeUniverse() === 'midcap250' ? 'Midcap 250 (symbols_midcap_250.json)' : 'Curated Watchlist (symbols.json)' }}
+              {{ universeLabel() }}
             </span>
           </div>
           <div class="grid-actions">
             <button class="btn-universe-toggle" (click)="toggleUniverse()">
-              {{ activeUniverse() === 'midcap250' ? '📋 Switch to Curated Watchlist' : '🏢 Switch to Midcap 250' }}
+              {{ nextUniverseButtonLabel() }}
             </button>
             <a href="/news_reports/latest_market_news.md" target="_blank" rel="noopener noreferrer" class="btn-grid-link">
               <span>📰</span> Market News (.md) ↗
@@ -253,8 +253,23 @@ export class DashboardComponent {
     stocksStore.selectSymbol(stock.symbol);
   }
 
+  universeLabel(): string {
+    const u = this.activeUniverse();
+    if (u === 'all_nse') return 'Nifty 100 (symbols_nse_all.json)';
+    if (u === 'midcap250') return 'Midcap 100 (symbols_midcap_250.json)';
+    return 'Curated Watchlist (symbols.json)';
+  }
+
+  nextUniverseButtonLabel(): string {
+    const u = this.activeUniverse();
+    if (u === 'curated') return '🏛️ Switch to Nifty 100';
+    if (u === 'all_nse') return '🏢 Switch to Midcap 100';
+    return '📋 Switch to Curated Watchlist';
+  }
+
   toggleUniverse(): void {
-    const next = this.activeUniverse() === 'curated' ? 'midcap250' : 'curated';
+    const u = this.activeUniverse();
+    const next = u === 'curated' ? 'all_nse' : (u === 'all_nse' ? 'midcap250' : 'curated');
     stocksStore.loadUniverse(next);
   }
 

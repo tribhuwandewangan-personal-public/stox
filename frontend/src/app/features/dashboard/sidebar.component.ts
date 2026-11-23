@@ -24,7 +24,7 @@ type SidebarFilter = 'ALL' | 'BUY' | 'HOLD' | 'SELL' | 'ACTIVE';
       <div class="sidebar-header">
         <div class="sidebar-title-row">
           <div class="sidebar-title">
-            <span>📋</span> {{ stocksStore.activeUniverse() === 'midcap250' ? 'Midcap 250' : 'Stocks Watchlist' }}
+            <span>📋</span> {{ stocksStore.activeUniverse() === 'all_nse' ? 'Nifty 100' : (stocksStore.activeUniverse() === 'midcap250' ? 'Midcap 100' : 'Stocks Watchlist') }}
             <span class="sidebar-badge">{{ stocksStore.availableCount() }}/{{ stocksStore.stocks().length }}</span>
           </div>
         </div>

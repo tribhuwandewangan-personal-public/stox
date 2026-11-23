@@ -6,7 +6,7 @@ National Stock Exchange of India (NSE).
 
 Key Features:
 - Fetches all active 'EQ' series equities from official NSE archives or Kite public instruments.
-- Saves exclusively to `symbols_nse_all.json` — strictly protecting user's curated `symbols.json`.
+- Saves exclusively to `symbols_nse_catalog.json` — strictly protecting user's curated `symbols.json`.
 - Provides offline fallback covering all major NIFTY 500 / liquid equities.
 - Exposes clean APIs for `main.py`, `run_analysis.ps1`, and historical sync engines.
 """
@@ -26,9 +26,9 @@ if PROJECT_ROOT not in sys.path:
 
 try:
     from config import SYMBOLS_FILE_PATH
-    ALL_NSE_SYMBOLS_FILE = os.path.join(os.path.dirname(SYMBOLS_FILE_PATH), "symbols_nse_all.json")
+    ALL_NSE_SYMBOLS_FILE = os.path.join(os.path.dirname(SYMBOLS_FILE_PATH), "symbols_nse_catalog.json")
 except Exception:
-    ALL_NSE_SYMBOLS_FILE = os.path.join(PROJECT_ROOT, "symbols_nse_all.json")
+    ALL_NSE_SYMBOLS_FILE = os.path.join(PROJECT_ROOT, "symbols_nse_catalog.json")
 
 # Standard headers to prevent 403 / User-Agent blocking on official feeds
 HTTP_HEADERS = {
@@ -295,7 +295,7 @@ class NSEUniverseManager:
 
     def get_universe(self, force_refresh: bool = False, max_age_days: int = 14) -> List[Dict[str, str]]:
         """
-        Loads the all-NSE stock list from `symbols_nse_all.json`.
+        Loads the all-NSE stock list from `symbols_nse_catalog.json`.
         If missing, empty, or older than `max_age_days`, automatically fetches and updates it.
         """
         if not force_refresh and os.path.exists(self.output_file):
@@ -318,7 +318,7 @@ class NSEUniverseManager:
         """
         Fetches the complete NSE listed equity universe from official feeds,
         falling back gracefully to Kite instruments and the rich bootstrap catalog.
-        Writes strictly to `symbols_nse_all.json` without modifying `symbols.json`.
+        Writes strictly to `symbols_nse_catalog.json` without modifying `symbols.json`.
         """
         symbols: List[Dict[str, str]] = []
         source_used = "Offline Bootstrap"
@@ -397,7 +397,7 @@ class NSEUniverseManager:
         # Sort alphabetically by ticker
         deduped.sort(key=lambda x: x["symbol"])
 
-        # Save to symbols_nse_all.json
+        # Save to symbols_nse_catalog.json
         payload = {
             "description": f"Master list of all NSE equity stocks (Fetched from {source_used})",
             "updated_at": datetime.now().strftime("%Y-%m-%d"),
@@ -415,7 +415,7 @@ class NSEUniverseManager:
 
 
 def ensure_nse_universe(force_refresh: bool = False, output_file: str = ALL_NSE_SYMBOLS_FILE) -> List[Dict[str, str]]:
-    """Convenience helper to guarantee symbols_nse_all.json exists and return the list."""
+    """Convenience helper to guarantee symbols_nse_catalog.json exists and return the list."""
     mgr = NSEUniverseManager(output_file=output_file)
     return mgr.get_universe(force_refresh=force_refresh)
 
@@ -423,7 +423,7 @@ def ensure_nse_universe(force_refresh: bool = False, output_file: str = ALL_NSE_
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Fetch and manage complete NSE stock universe.")
-    parser.add_argument("--fetch", action="store_true", help="Force refresh and write symbols_nse_all.json")
+    parser.add_argument("--fetch", action="store_true", help="Force refresh and write symbols_nse_catalog.json")
     parser.add_argument("--info", action="store_true", help="Display summary count and status")
     parser.add_argument("--sample", type=int, default=0, help="Print first N stocks")
     args = parser.parse_args()
