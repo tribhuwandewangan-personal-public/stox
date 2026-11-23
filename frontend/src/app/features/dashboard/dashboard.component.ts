@@ -6,7 +6,6 @@ import { Component, AfterViewInit, ViewChild, ElementRef, signal } from '@angula
 import { CommonModule } from '@angular/common';
 import { StockGridComponent } from './stock-grid.component';
 import { SidebarComponent } from './sidebar.component';
-import { StockDetailModalComponent } from './stock-detail-modal.component';
 import { AddSymbolModalComponent } from './add-symbol-modal.component';
 import { MacroCatalystsBannerComponent } from './macro-catalysts-banner.component';
 import { QuickPicksTableComponent } from './quick-picks-table.component';
@@ -24,7 +23,6 @@ import { stocksStore } from '../../core/stores/stocks.store';
     QuickPicksTableComponent,
     FundamentalPicksTableComponent,
     StockGridComponent,
-    StockDetailModalComponent,
     AddSymbolModalComponent
   ],
   template: `
@@ -70,9 +68,6 @@ import { stocksStore } from '../../core/stores/stocks.store';
         <app-stock-grid (selectStock)="onStockSelect($event)"></app-stock-grid>
       </div>
     </div>
-
-    <!-- Stock detail modal (Level 3) -->
-    <app-stock-detail-modal></app-stock-detail-modal>
 
     <!-- Add Symbol Modal (Partial Search & Watchlist Manager) -->
     <app-add-symbol-modal

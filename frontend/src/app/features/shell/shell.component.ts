@@ -11,6 +11,7 @@ import { BulletinComponent } from './bulletin.component';
 import { DashboardComponent } from '../dashboard/dashboard.component';
 import { PatternScreenerComponent } from '../screener/pattern-screener.component';
 import { PortfolioModalComponent } from '../dashboard/portfolio-modal.component';
+import { StockDetailModalComponent } from '../dashboard/stock-detail-modal.component';
 import { stocksStore } from '../../core/stores/stocks.store';
 
 @Component({
@@ -24,6 +25,7 @@ import { stocksStore } from '../../core/stores/stocks.store';
     DashboardComponent,
     PatternScreenerComponent,
     PortfolioModalComponent,
+    StockDetailModalComponent,
   ],
   template: `
     <div class="app-container">
@@ -51,6 +53,9 @@ import { stocksStore } from '../../core/stores/stocks.store';
         *ngIf="showPortfolioModal()"
         (close)="showPortfolioModal.set(false)">
       </app-portfolio-modal>
+
+      <!-- Stock Detail Modal (shared across Watchlist & Pattern Screener) -->
+      <app-stock-detail-modal></app-stock-detail-modal>
 
       <footer class="app-footer">
         <div class="footer-content">
@@ -89,13 +94,21 @@ import { stocksStore } from '../../core/stores/stocks.store';
       min-height: 0;
     }
 
-    .main-content > app-dashboard,
-    .main-content > app-pattern-screener {
+    .main-content > app-dashboard {
       display: flex;
       flex: 1;
       min-height: 0;
       height: 100%;
       overflow: hidden;
+    }
+
+    .main-content > app-pattern-screener {
+      display: block;
+      flex: 1;
+      min-height: 0;
+      height: 100%;
+      overflow-y: auto;
+      overflow-x: hidden;
     }
 
     .app-footer {

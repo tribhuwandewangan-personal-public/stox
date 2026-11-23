@@ -10,7 +10,8 @@ import { Component, OnInit, OnDestroy, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/services/api.service';
-import { PatternPick } from '../../core/models/stock.model';
+import { PatternPick, Stock } from '../../core/models/stock.model';
+import { stocksStore } from '../../core/stores/stocks.store';
 
 type SortKey = 'upside_pct' | 'risk_reward' | 'confidence_score' | 'timestamp';
 type VerdictFilter = 'ALL' | 'BUY' | 'ACCUMULATE' | 'HOLD' | 'REDUCE' | 'SELL';
@@ -156,7 +157,8 @@ type CategoryFilter = 'ALL' | 'Moving Average' | 'Reversal' | 'Breakout' | 'Accu
             <tr *ngFor="let pick of filteredPicks(); let i = index"
                 class="pattern-row"
                 [class.bullish]="pick.direction === 'Bullish'"
-                [class.bearish]="pick.direction === 'Bearish'">
+                [class.bearish]="pick.direction === 'Bearish'"
+                (click)="openDetail(pick)">
 
               <!-- Rank -->
               <td class="col-rank">
@@ -260,10 +262,11 @@ type CategoryFilter = 'ALL' | 'Moving Average' | 'Reversal' | 'Breakout' | 'Accu
   styles: [`
     :host {
       display: block;
+      flex: 1;
+      min-height: 0;
       width: 100%;
-      height: 100%;
       overflow-y: auto;
-      padding: 20px;
+      padding: 20px 20px 48px 20px;
       box-sizing: border-box;
     }
 
@@ -413,9 +416,10 @@ type CategoryFilter = 'ALL' | 'Moving Average' | 'Reversal' | 'Breakout' | 'Accu
     }
     .pattern-row {
       border-bottom: 1px solid rgba(255,255,255,0.04);
+      cursor: pointer;
       transition: background 0.15s;
     }
-    .pattern-row:hover { background: rgba(255,255,255,0.03); }
+    .pattern-row:hover { background: rgba(56,189,248,0.06); }
     .pattern-row.bullish { border-left: 2px solid rgba(16,185,129,0.4); }
     .pattern-row.bearish { border-left: 2px solid rgba(239,68,68,0.4); }
     .pattern-row td { padding: 10px 12px; vertical-align: middle; }
@@ -595,6 +599,61 @@ export class PatternScreenerComponent implements OnInit, OnDestroy {
   private static cache: { picks: PatternPick[]; at: string } | null = null;
 
   refresh(): void { this.loadPicks(); }
+
+  openDetail(pick: PatternPick): void {
+    const existing = stocksStore.stocks().find(s => s.symbol === pick.symbol);
+    if (existing) {
+      stocksStore.selectSymbol(existing.symbol);
+      return;
+    }
+    const adHoc: Stock = {
+      symbol: pick.symbol,
+      name: pick.name || pick.symbol,
+      sector: pick.sector || 'Indian Equities',
+      queue_status: 'completed',
+      is_stale: false,
+      has_analysis: true,
+      synth_output: {
+        as_of_date: pick.timestamp || '',
+        structured_signal: {
+          action_verdict: pick.action_verdict as any,
+          confidence_score: pick.confidence_score,
+          confidence_percentage: Math.round(pick.confidence_score),
+          when_to_buy_entry: pick.entry_range,
+          when_to_sell_target: pick.target_price ? `Rs. ${pick.target_price.toFixed(2)}` : 'N/A',
+          stop_loss: pick.stop_loss ? `Rs. ${pick.stop_loss.toFixed(2)}` : 'N/A',
+          risk_reward_ratio: pick.risk_reward ? `1:${pick.risk_reward.toFixed(2)}` : 'N/A',
+          target_num: pick.target_price ?? undefined,
+          stop_num: pick.stop_loss ?? undefined,
+          chart_patterns: pick.pattern_name,
+        },
+      },
+      tech_output: null,
+      patterns: [
+        {
+          name: pick.pattern_name,
+          category: pick.pattern_category,
+          direction: pick.direction,
+          quality_score: Math.round(pick.confidence_score),
+          target_price: pick.target_price ?? undefined,
+          stop_loss: pick.stop_loss ?? undefined,
+          risk_reward_ratio: pick.risk_reward,
+        },
+      ],
+      events: {},
+      sparkline: pick.sparkline || [],
+      price_info: {
+        price: pick.last_price,
+        change_pct: null,
+        source: 'Cache',
+      },
+      long_term_signal: {
+        long_term_target: 'N/A',
+        long_term_verdict: 'N/A',
+      },
+    };
+    stocksStore.selectStock(adHoc);
+  }
 
   // ---- Filter setters ----
   setVerdictFilter(v: VerdictFilter)     { this.verdictFilter.set(v); }

@@ -4,6 +4,7 @@
  */
 
 :root {
+  color-scheme: dark;
   --bg-dark: #090d16;
   --bg-card: rgba(18, 26, 43, 0.75);
   --border-card: rgba(255, 255, 255, 0.08);
@@ -103,6 +104,18 @@ input:focus, select:focus, textarea:focus {
   box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.1);
 }
 
+select,
+select option,
+select optgroup {
+  background-color: #0f172a;
+  color: var(--text-main);
+}
+
+select option:checked {
+  background-color: #1e293b;
+  color: #38bdf8;
+}
+
 code {
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.9em;
@@ -171,4 +184,454 @@ pre code {
 .badge.pending {
   background: rgba(156, 163, 175, 0.15);
   color: var(--text-muted);
+}
+
+/* =====================================================================================
+ * Light Mode Theme Overrides (activated via data-theme="light" on <html>)
+ * ===================================================================================== */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg-dark: #f1f5f9;
+  --bg-card: #ffffff;
+  --border-card: rgba(15, 23, 42, 0.12);
+  --border-glow: rgba(2, 132, 199, 0.35);
+  --accent-blue: #0284c7;
+  --accent-green: #059669;
+  --accent-purple: #7c3aed;
+  --accent-red: #dc2626;
+  --accent-amber: #d97706;
+  --text-main: #0f172a;
+  --text-muted: #475569;
+  --text-secondary: #334155;
+}
+
+:root[data-theme='light'] body {
+  background-color: #f1f5f9;
+  background-image:
+    radial-gradient(at 10% 10%, rgba(14, 165, 233, 0.08) 0px, transparent 50%),
+    radial-gradient(at 90% 90%, rgba(124, 58, 237, 0.06) 0px, transparent 50%);
+  color: #0f172a;
+}
+
+:root[data-theme='light'] input,
+:root[data-theme='light'] select,
+:root[data-theme='light'] textarea {
+  background-color: #ffffff;
+  color: #0f172a;
+  border-color: rgba(15, 23, 42, 0.2);
+}
+
+:root[data-theme='light'] select option,
+:root[data-theme='light'] select optgroup {
+  background-color: #ffffff;
+  color: #0f172a;
+}
+
+:root[data-theme='light'] select option:checked {
+  background-color: #e0f2fe;
+  color: #0369a1;
+}
+
+/* Shell, Header, Ticker & Footer */
+:root[data-theme='light'] .app-container {
+  background-color: #f1f5f9 !important;
+  background-image:
+    radial-gradient(at 10% 10%, rgba(14, 165, 233, 0.08) 0px, transparent 50%),
+    radial-gradient(at 90% 90%, rgba(124, 58, 237, 0.06) 0px, transparent 50%) !important;
+}
+
+:root[data-theme='light'] .ticker-ribbon,
+:root[data-theme='light'] .ticker-bar {
+  background: #e2e8f0 !important;
+  border-bottom-color: rgba(15, 23, 42, 0.1) !important;
+  color: #1e293b !important;
+}
+
+:root[data-theme='light'] .top-bar {
+  background: rgba(255, 255, 255, 0.94) !important;
+  border-bottom-color: rgba(15, 23, 42, 0.1) !important;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05) !important;
+}
+
+:root[data-theme='light'] .top-bar .title,
+:root[data-theme='light'] .page-title,
+:root[data-theme='light'] .grid-title,
+:root[data-theme='light'] .sidebar-title {
+  color: #0f172a !important;
+}
+
+:root[data-theme='light'] .top-bar .subtitle,
+:root[data-theme='light'] .page-subtitle,
+:root[data-theme='light'] .stock-sector,
+:root[data-theme='light'] .sidebar-name {
+  color: #475569 !important;
+}
+
+:root[data-theme='light'] .nav-tab,
+:root[data-theme='light'] .header-btn,
+:root[data-theme='light'] .filter-tab,
+:root[data-theme='light'] .pill,
+:root[data-theme='light'] .sidebar-filter-chip {
+  background: #f8fafc !important;
+  color: #334155 !important;
+  border-color: rgba(15, 23, 42, 0.14) !important;
+}
+
+:root[data-theme='light'] .nav-tab:hover,
+:root[data-theme='light'] .header-btn:hover,
+:root[data-theme='light'] .filter-tab:hover,
+:root[data-theme='light'] .pill:hover {
+  background: #e0f2fe !important;
+  color: #0369a1 !important;
+  border-color: rgba(2, 132, 199, 0.35) !important;
+}
+
+:root[data-theme='light'] .nav-tab.active,
+:root[data-theme='light'] .filter-tab.active,
+:root[data-theme='light'] .pill.active,
+:root[data-theme='light'] .sidebar-filter-chip.active {
+  background: rgba(2, 132, 199, 0.14) !important;
+  color: #0369a1 !important;
+  border-color: #0284c7 !important;
+}
+
+:root[data-theme='light'] .status-badge {
+  background: #f8fafc !important;
+  border-color: rgba(15, 23, 42, 0.12) !important;
+  color: #334155 !important;
+}
+
+:root[data-theme='light'] .app-footer {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border-top-color: rgba(15, 23, 42, 0.1) !important;
+  color: #475569 !important;
+}
+
+:root[data-theme='light'] .bulletin-bar,
+:root[data-theme='light'] .catalysts-banner {
+  background: #ffffff !important;
+  border-color: rgba(15, 23, 42, 0.1) !important;
+  color: #1e293b !important;
+}
+
+/* Sidebar */
+:root[data-theme='light'] .sidebar-watchlist-panel {
+  background: #ffffff !important;
+  border-right-color: rgba(15, 23, 42, 0.1) !important;
+}
+
+:root[data-theme='light'] .sidebar-header {
+  background: #f8fafc !important;
+  border-bottom-color: rgba(15, 23, 42, 0.08) !important;
+}
+
+:root[data-theme='light'] .sidebar-search-input {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border-color: rgba(15, 23, 42, 0.18) !important;
+}
+
+:root[data-theme='light'] .sidebar-stock-item {
+  border-bottom-color: rgba(15, 23, 42, 0.06) !important;
+}
+
+:root[data-theme='light'] .sidebar-stock-item:hover {
+  background: #f1f5f9 !important;
+}
+
+:root[data-theme='light'] .sidebar-symbol {
+  color: #0f172a !important;
+}
+
+/* Dashboard Cards, Tables, Quick Picks & Screener */
+:root[data-theme='light'] .grid-header,
+:root[data-theme='light'] .filter-bar,
+:root[data-theme='light'] .table-wrapper,
+:root[data-theme='light'] .table-scroll-box,
+:root[data-theme='light'] .quick-picks-card,
+:root[data-theme='light'] .fund-picks-card,
+:root[data-theme='light'] .stock-card {
+  background: #ffffff !important;
+  border-color: rgba(15, 23, 42, 0.1) !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04) !important;
+  color: #0f172a !important;
+}
+
+:root[data-theme='light'] .stock-card:hover {
+  border-color: rgba(2, 132, 199, 0.4) !important;
+  box-shadow: 0 6px 18px rgba(2, 132, 199, 0.1) !important;
+}
+
+:root[data-theme='light'] .stocks-table thead th,
+:root[data-theme='light'] .pattern-table thead th,
+:root[data-theme='light'] .picks-table thead th {
+  background: #f8fafc !important;
+  color: #475569 !important;
+  border-bottom-color: rgba(15, 23, 42, 0.1) !important;
+}
+
+:root[data-theme='light'] .table-row,
+:root[data-theme='light'] .pattern-row,
+:root[data-theme='light'] .picks-table tbody tr {
+  border-bottom-color: rgba(15, 23, 42, 0.06) !important;
+}
+
+:root[data-theme='light'] .table-row:hover,
+:root[data-theme='light'] .pattern-row:hover,
+:root[data-theme='light'] .picks-table tbody tr:hover {
+  background: #f8fafc !important;
+}
+
+:root[data-theme='light'] .symbol-ticker,
+:root[data-theme='light'] .stock-name,
+:root[data-theme='light'] .ltp-val,
+:root[data-theme='light'] .pattern-name,
+:root[data-theme='light'] .stock-symbol,
+:root[data-theme='light'] .card-price {
+  color: #0f172a !important;
+}
+
+:root[data-theme='light'] .view-mode-toggle {
+  background: #e2e8f0 !important;
+  border-color: rgba(15, 23, 42, 0.12) !important;
+}
+
+:root[data-theme='light'] .view-btn {
+  color: #475569 !important;
+}
+
+:root[data-theme='light'] .view-btn.active {
+  background: #ffffff !important;
+  color: #0369a1 !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12) !important;
+}
+
+:root[data-theme='light'] .disclaimer-banner {
+  background: rgba(245, 158, 11, 0.1) !important;
+  border-color: rgba(217, 119, 6, 0.25) !important;
+  color: #92400e !important;
+}
+
+/* Modals (Stock Detail, Portfolio, Add Symbol) */
+:root[data-theme='light'] .modal-overlay {
+  background: rgba(15, 23, 42, 0.45) !important;
+}
+
+:root[data-theme='light'] .modal-card,
+:root[data-theme='light'] .modal-container {
+  background: #ffffff !important;
+  border-color: rgba(15, 23, 42, 0.14) !important;
+  color: #0f172a !important;
+}
+
+:root[data-theme='light'] .modal-symbol-title,
+:root[data-theme='light'] .modal-card h2,
+:root[data-theme='light'] .modal-card h3,
+:root[data-theme='light'] .modal-card h4 {
+  color: #0f172a !important;
+}
+
+:root[data-theme='light'] .modal-chart-box,
+:root[data-theme='light'] .quadrant-card,
+:root[data-theme='light'] .report-box,
+:root[data-theme='light'] .swing-box,
+:root[data-theme='light'] .longterm-box {
+  background: #f8fafc !important;
+  border-color: rgba(15, 23, 42, 0.1) !important;
+  color: #1e293b !important;
+}
+
+/* Ticker Bar */
+:root[data-theme='light'] .ticker-bar {
+  background: #f8fafc !important;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.1) !important;
+}
+:root[data-theme='light'] .ticker-name { color: #475569 !important; }
+:root[data-theme='light'] .ticker-val  { color: #0f172a !important; font-weight: 600 !important; }
+:root[data-theme='light'] .ticker-up   { color: #059669 !important; }
+:root[data-theme='light'] .ticker-down { color: #dc2626 !important; }
+
+/* Live Common Market Bulletin */
+:root[data-theme='light'] .bulletin-card {
+  background: #ffffff !important;
+  border: 1px solid rgba(15, 23, 42, 0.1) !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04) !important;
+}
+:root[data-theme='light'] .bulletin-title { color: #0284c7 !important; }
+:root[data-theme='light'] .bulletin-body  { color: #0f172a !important; }
+:root[data-theme='light'] .bulletin-footer { border-top-color: rgba(15, 23, 42, 0.08) !important; }
+:root[data-theme='light'] .bulletin-meta  { color: #64748b !important; }
+:root[data-theme='light'] .bulletin-action-link { color: #0284c7 !important; }
+:root[data-theme='light'] .sentiment-pill.neutral {
+  background: #f1f5f9 !important;
+  color: #334155 !important;
+  border-color: rgba(15, 23, 42, 0.15) !important;
+}
+
+/* Upcoming Market Catalysts Banner */
+:root[data-theme='light'] .events-banner-card {
+  background: #ffffff !important;
+  border: 1px solid rgba(15, 23, 42, 0.1) !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04) !important;
+}
+:root[data-theme='light'] .events-banner-title { color: #0284c7 !important; }
+:root[data-theme='light'] .events-counter-badge {
+  background: #e0f2fe !important;
+  color: #0369a1 !important;
+  border-color: rgba(2, 132, 199, 0.25) !important;
+}
+:root[data-theme='light'] .event-card-item {
+  background: #f8fafc !important;
+  border: 1px solid rgba(15, 23, 42, 0.1) !important;
+}
+:root[data-theme='light'] .event-item-name    { color: #0f172a !important; }
+:root[data-theme='light'] .event-item-sectors { color: #64748b !important; }
+:root[data-theme='light'] .event-date-chip    { color: #0369a1 !important; }
+
+/* Quick Picks & Top 10 Fundamental Picks Cards/Tables */
+:root[data-theme='light'] .qp-card,
+:root[data-theme='light'] .fp-card {
+  background: #ffffff !important;
+  border: 1px solid rgba(15, 23, 42, 0.1) !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04) !important;
+}
+:root[data-theme='light'] .qp-heading,
+:root[data-theme='light'] .fp-heading { color: #0f172a !important; }
+:root[data-theme='light'] .qp-sub,
+:root[data-theme='light'] .fp-sub     { color: #475569 !important; }
+:root[data-theme='light'] .qp-toggle-btn,
+:root[data-theme='light'] .fp-toggle-btn {
+  background: #f1f5f9 !important;
+  color: #334155 !important;
+  border-color: rgba(15, 23, 42, 0.15) !important;
+}
+:root[data-theme='light'] .qp-table thead th,
+:root[data-theme='light'] .fp-table thead th {
+  background: #f8fafc !important;
+  color: #475569 !important;
+  border-bottom-color: rgba(15, 23, 42, 0.1) !important;
+}
+:root[data-theme='light'] .qp-table tbody td,
+:root[data-theme='light'] .fp-table tbody td {
+  color: #0f172a !important;
+  border-bottom-color: rgba(15, 23, 42, 0.06) !important;
+}
+:root[data-theme='light'] .qp-table tbody tr:hover,
+:root[data-theme='light'] .fp-table tbody tr:hover {
+  background: #f1f5f9 !important;
+}
+:root[data-theme='light'] .sym-pill {
+  background: #e0f2fe !important;
+  color: #0369a1 !important;
+  border-color: rgba(2, 132, 199, 0.3) !important;
+}
+:root[data-theme='light'] .rr-pill {
+  background: #dcfce7 !important;
+  color: #15803d !important;
+  border-color: rgba(21, 128, 61, 0.25) !important;
+}
+:root[data-theme='light'] .score-pill {
+  background: #f1f5f9 !important;
+  color: #334155 !important;
+}
+:root[data-theme='light'] .score-pill.high-score {
+  background: #e0f2fe !important;
+  color: #0369a1 !important;
+}
+:root[data-theme='light'] .val-pill {
+  background: #f1f5f9 !important;
+  color: #334155 !important;
+}
+:root[data-theme='light'] .val-pill.undervalued {
+  background: #dcfce7 !important;
+  color: #15803d !important;
+}
+:root[data-theme='light'] .col-sec,
+:root[data-theme='light'] .qp-tip { color: #64748b !important; }
+:root[data-theme='light'] .accent-green { color: #059669 !important; }
+:root[data-theme='light'] .accent-red   { color: #dc2626 !important; }
+:root[data-theme='light'] .accent-blue  { color: #0284c7 !important; }
+
+/* Sidebar Readability */
+:root[data-theme='light'] .stock-sym       { color: #0f172a !important; font-weight: 700 !important; }
+:root[data-theme='light'] .stock-full-name { color: #475569 !important; }
+:root[data-theme='light'] .stock-price     { color: #1e293b !important; font-weight: 600 !important; }
+:root[data-theme='light'] .stock-sec       { color: #64748b !important; }
+:root[data-theme='light'] .sector-group-header {
+  background: #f1f5f9 !important;
+  color: #334155 !important;
+  border-bottom-color: rgba(15, 23, 42, 0.08) !important;
+}
+:root[data-theme='light'] .sidebar-stock-item.selected {
+  background: #e0f2fe !important;
+  border-left: 3px solid #0284c7 !important;
+}
+:root[data-theme='light'] .sidebar-view-toggle {
+  background: #e2e8f0 !important;
+}
+:root[data-theme='light'] .sidebar-view-btn {
+  color: #475569 !important;
+}
+:root[data-theme='light'] .sidebar-view-btn.active {
+  background: #ffffff !important;
+  color: #0369a1 !important;
+}
+
+/* Stock Cards Light Mode Contrast */
+:root[data-theme='light'] .stock-card .symbol,
+:root[data-theme='light'] .stock-card .price,
+:root[data-theme='light'] .stock-card .conf-label strong,
+:root[data-theme='light'] .stock-card .lt-target-pill {
+  color: #0f172a !important;
+}
+:root[data-theme='light'] .stock-card .card-name,
+:root[data-theme='light'] .stock-card .conf-label,
+:root[data-theme='light'] .stock-card .item-label,
+:root[data-theme='light'] .stock-card .lt-verdict,
+:root[data-theme='light'] .stock-card .lt-moat,
+:root[data-theme='light'] .stock-card .sparkline-label,
+:root[data-theme='light'] .stock-card .peers-label {
+  color: #475569 !important;
+}
+:root[data-theme='light'] .stock-card .conf-bar-bg {
+  background: #e2e8f0 !important;
+}
+:root[data-theme='light'] .stock-card .swing-section {
+  background: #f8fafc !important;
+  border-color: rgba(15, 23, 42, 0.1) !important;
+}
+:root[data-theme='light'] .stock-card .swing-section .section-title {
+  color: #0284c7 !important;
+}
+:root[data-theme='light'] .stock-card .item-value {
+  color: #0f172a !important;
+}
+:root[data-theme='light'] .stock-card .item-value.accent-cyan,
+:root[data-theme='light'] .stock-card .accent-cyan { color: #0284c7 !important; }
+:root[data-theme='light'] .stock-card .item-value.accent-green,
+:root[data-theme='light'] .stock-card .accent-green { color: #059669 !important; }
+:root[data-theme='light'] .stock-card .item-value.accent-red,
+:root[data-theme='light'] .stock-card .accent-red { color: #dc2626 !important; }
+:root[data-theme='light'] .stock-card .lt-section {
+  background: #fffbeb !important;
+  border-color: rgba(217, 119, 6, 0.25) !important;
+}
+:root[data-theme='light'] .stock-card .section-title.accent-gold {
+  color: #b45309 !important;
+}
+:root[data-theme='light'] .stock-card .report-snippet {
+  background: #f8fafc !important;
+  color: #334155 !important;
+  border-color: rgba(15, 23, 42, 0.1) !important;
+}
+:root[data-theme='light'] .stock-card .forensic-pill {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+  border-color: rgba(15, 23, 42, 0.15) !important;
+}
+:root[data-theme='light'] .stock-card .card-footer {
+  border-top-color: rgba(15, 23, 42, 0.08) !important;
+}
+:root[data-theme='light'] .stock-card .open-view {
+  color: #0284c7 !important;
 }

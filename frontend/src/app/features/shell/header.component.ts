@@ -3,7 +3,7 @@
  * Includes nav tabs to switch between Watchlist and Pattern Screener views.
  */
 
-import { Component, OnInit, Output, EventEmitter, Input } from '@angular/core';
+import { Component, OnInit, Output, EventEmitter, Input, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AppStore } from '../../core/stores/app.store';
 import { stocksStore, StockUniverse } from '../../core/stores/stocks.store';
@@ -72,6 +72,11 @@ export type AppView = 'watchlist' | 'screener';
 
         <button class="header-btn btn-accuracy" title="Past verdict performance tracking">
           <span>🎯</span> Accuracy
+        </button>
+
+        <button class="header-btn btn-theme" (click)="toggleTheme()" title="Switch between Light and Dark mode">
+          <span>{{ theme() === 'light' ? '🌙' : '☀️' }}</span>
+          <span>{{ theme() === 'light' ? 'Dark' : 'Light' }}</span>
         </button>
 
         <!-- Market status badge -->
@@ -321,9 +326,35 @@ export class HeaderComponent implements OnInit {
   @Output() viewChange = new EventEmitter<AppView>();
   @Output() openPortfolio = new EventEmitter<void>();
 
-  constructor(public appStore: AppStore) {}
+  constructor(public appStore: AppStore) {
+    this.applyTheme(this.theme());
+  }
 
   currentUniverse = stocksStore.activeUniverse;
+  theme = signal<'dark' | 'light'>(HeaderComponent.readStoredTheme());
+
+  private static readStoredTheme(): 'dark' | 'light' {
+    try {
+      return localStorage.getItem('stox_theme') === 'light' ? 'light' : 'dark';
+    } catch {
+      return 'dark';
+    }
+  }
+
+  private applyTheme(mode: 'dark' | 'light'): void {
+    try {
+      document.documentElement.setAttribute('data-theme', mode);
+    } catch {}
+  }
+
+  toggleTheme(): void {
+    const next: 'dark' | 'light' = this.theme() === 'light' ? 'dark' : 'light';
+    this.theme.set(next);
+    this.applyTheme(next);
+    try {
+      localStorage.setItem('stox_theme', next);
+    } catch {}
+  }
 
   get status() { return this.appStore.status(); }
   get engineLabel() { return this.appStore.status()?.model ?? ''; }

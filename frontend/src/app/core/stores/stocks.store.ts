@@ -18,6 +18,7 @@ interface StocksStoreState {
   error: string | null;
   lastUpdated: Date | null;
   selectedSymbol: string | null;
+  adHocStock: Stock | null;
   horizonStrategy: HorizonStrategy;
   activeUniverse: StockUniverse;
   filter: {
@@ -33,6 +34,7 @@ const initialState: StocksStoreState = {
   error: null,
   lastUpdated: null,
   selectedSymbol: null,
+  adHocStock: null,
   horizonStrategy: 'ALL',
   activeUniverse: 'curated',
   filter: {
@@ -170,7 +172,10 @@ class StocksStore {
   selectedStock = computed(() => {
     const sym = this.state().selectedSymbol;
     if (!sym) return null;
-    return this.state().stocks.find(s => s.symbol === sym) || null;
+    const found = this.state().stocks.find(s => s.symbol === sym);
+    if (found) return found;
+    const adHoc = this.state().adHocStock;
+    return adHoc && adHoc.symbol === sym ? adHoc : null;
   });
 
   // ---- Actions ----
@@ -203,7 +208,19 @@ class StocksStore {
   }
 
   selectSymbol(symbol: string | null): void {
-    this.updateState(s => ({ ...s, selectedSymbol: symbol }));
+    this.updateState(s => ({
+      ...s,
+      selectedSymbol: symbol,
+      adHocStock: symbol ? s.adHocStock : null,
+    }));
+  }
+
+  selectStock(stock: Stock): void {
+    this.updateState(s => ({
+      ...s,
+      selectedSymbol: stock.symbol,
+      adHocStock: stock,
+    }));
   }
 
   setHorizonStrategy(horizonStrategy: HorizonStrategy): void {
