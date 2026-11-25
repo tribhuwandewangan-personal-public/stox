@@ -568,17 +568,21 @@ _history_memo = OrderedDict()
 _history_lock = threading.Lock()
 
 
-def get_history_response_body(sym: str, days: int, cache_mgr, tech_engine) -> bytes:
-    """Get cached or compute chart data (candles + indicators) for a symbol."""
-    key = (sym, days, cache_mgr.get_latest_candle_date(sym) or "")
+def get_history_response_body(sym: str, days: int, cache_mgr, tech_engine, interval: str = "1d") -> bytes:
+    """Get cached or compute chart data (candles + indicators) for a symbol and tick interval."""
+    norm_interval = tech_engine.normalize_chart_interval(interval) if hasattr(tech_engine, "normalize_chart_interval") else (interval or "1d")
+    is_intraday = norm_interval in ("15m", "30m", "1h")
+    freshness = str(int(time.time() // 300)) if is_intraday else (cache_mgr.get_latest_candle_date(sym) or "")
+    key = (sym, days, norm_interval, freshness)
     with _history_lock:
         if key in _history_memo:
             _history_memo.move_to_end(key)
             return _history_memo[key]
-    chart_data = tech_engine.get_chart_data(sym, limit_days=days)
+    chart_data = tech_engine.get_chart_data(sym, limit_days=days, interval=norm_interval)
     body = safe_json_dumps(chart_data)
     if chart_data.get("candles"):
-        key = (sym, days, cache_mgr.get_latest_candle_date(sym) or "")  # may have just been downloaded
+        freshness = str(int(time.time() // 300)) if is_intraday else (cache_mgr.get_latest_candle_date(sym) or "")
+        key = (sym, days, norm_interval, freshness)
         with _history_lock:
             _history_memo[key] = body
             while len(_history_memo) > _HISTORY_MEMO_MAX:

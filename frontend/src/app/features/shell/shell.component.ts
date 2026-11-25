@@ -10,6 +10,7 @@ import { HeaderComponent, AppView } from './header.component';
 import { BulletinComponent } from './bulletin.component';
 import { DashboardComponent } from '../dashboard/dashboard.component';
 import { PatternScreenerComponent } from '../screener/pattern-screener.component';
+import { SectorResearchComponent } from '../sector-research/sector-research.component';
 import { PortfolioModalComponent } from '../dashboard/portfolio-modal.component';
 import { StockDetailModalComponent } from '../dashboard/stock-detail-modal.component';
 import { stocksStore } from '../../core/stores/stocks.store';
@@ -24,6 +25,7 @@ import { stocksStore } from '../../core/stores/stocks.store';
     BulletinComponent,
     DashboardComponent,
     PatternScreenerComponent,
+    SectorResearchComponent,
     PortfolioModalComponent,
     StockDetailModalComponent,
   ],
@@ -46,6 +48,9 @@ import { stocksStore } from '../../core/stores/stocks.store';
 
         <!-- Pattern Screener view -->
         <app-pattern-screener *ngIf="activeView() === 'screener'"></app-pattern-screener>
+
+        <!-- Dynamic LLM Sector Research view -->
+        <app-sector-research *ngIf="activeView() === 'sector'"></app-sector-research>
       </main>
 
       <!-- Portfolio Diagnostics Modal -->
@@ -102,7 +107,8 @@ import { stocksStore } from '../../core/stores/stocks.store';
       overflow: hidden;
     }
 
-    .main-content > app-pattern-screener {
+    .main-content > app-pattern-screener,
+    .main-content > app-sector-research {
       display: block;
       flex: 1;
       min-height: 0;

@@ -434,24 +434,80 @@ class TechnicalAnalysisEngine:
             "detected_patterns": patterns
         }
 
-    def get_chart_data(self, symbol: str, limit_days: int = 90) -> Dict[str, Any]:
+    _CHART_INTERVAL_ALIASES = {
+        "15m": "15m",
+        "30m": "30m",
+        "1h": "1h",
+        "60m": "1h",
+        "1d": "1d",
+        "1wk": "1wk",
+        "1w": "1wk",
+        "1mo": "1mo",
+        "1M": "1mo",
+    }
+
+    @classmethod
+    def normalize_chart_interval(cls, interval: Optional[str]) -> str:
+        raw = str(interval or "1d").strip()
+        return cls._CHART_INTERVAL_ALIASES.get(raw, cls._CHART_INTERVAL_ALIASES.get(raw.lower(), "1d"))
+
+    def get_chart_data(self, symbol: str, limit_days: int = 365, interval: str = "1d") -> Dict[str, Any]:
         """
         Extracts formatted historical candles, technical indicators, and patterns
         for interactive frontend charts (Canvas / SVG / Chart.js).
-        Loads sufficient warmup bars so SMA-200 is populated across 1M-1Y views.
+        Supports 1-year default lookback and customizable tick intervals from 15m to 1mo.
         """
-        limit_days = max(15, min(int(limit_days or 90), 400))
-        df = self.rag_engine.load_symbol_history(symbol, limit_days=limit_days + 210)
-        if df.empty or len(df) < 15:
-            return {"symbol": symbol, "candles": [], "patterns": []}
+        limit_days = max(1, min(int(limit_days or 365), 1825))
+        norm_interval = self.normalize_chart_interval(interval)
+        is_intraday = norm_interval in ("15m", "30m", "1h")
+        note = None
 
+        if is_intraday:
+            df = self.rag_engine.fetch_intraday_history(symbol, interval=norm_interval, days=limit_days)
+            if norm_interval in ("15m", "30m") and limit_days > 60:
+                note = f"{norm_interval} tick data is capped at 60 days by market data provider"
+        elif norm_interval in ("1wk", "1mo"):
+            df_daily = self.rag_engine.load_symbol_history(symbol, limit_days=2000)
+            if df_daily.empty:
+                df = pd.DataFrame()
+            else:
+                df_idx = df_daily.copy()
+                df_idx['DATE'] = pd.to_datetime(df_idx['DATE'])
+                df_idx = df_idx.sort_values('DATE').set_index('DATE')
+                rule = 'W-FRI' if norm_interval == '1wk' else 'ME'
+                agg = {
+                    'OPEN_PRICE': 'first',
+                    'HIGH_PRICE': 'max',
+                    'LOW_PRICE': 'min',
+                    'CLOSE_PRICE': 'last',
+                    'VOLUME': 'sum',
+                }
+                df = df_idx.resample(rule).agg(agg).dropna(subset=['CLOSE_PRICE']).reset_index()
+        else:
+            df = self.rag_engine.load_symbol_history(symbol, limit_days=limit_days + 250)
+
+        if df.empty or len(df) < 2:
+            return {
+                "symbol": symbol,
+                "interval": norm_interval,
+                "days": limit_days,
+                "candles": [],
+                "patterns": [],
+                **({"note": note} if note else {}),
+            }
+
+        df['DATE'] = pd.to_datetime(df['DATE'])
         df = self._compute_indicators(df)
-        df_chart = df.tail(limit_days).reset_index(drop=True)
+        cutoff = df['DATE'].max() - pd.Timedelta(days=limit_days)
+        df_chart = df[df['DATE'] >= cutoff].reset_index(drop=True)
+        if df_chart.empty:
+            df_chart = df.tail(1).reset_index(drop=True)
 
+        date_fmt = '%Y-%m-%d %H:%M' if is_intraday else '%Y-%m-%d'
         candles = []
         for _, row in df_chart.iterrows():
             candles.append({
-                "date": str(row['DATE'])[:10],
+                "date": pd.Timestamp(row['DATE']).strftime(date_fmt),
                 "open": round(float(row.get('OPEN_PRICE', row['CLOSE_PRICE'])), 2),
                 "high": round(float(row.get('HIGH_PRICE', row['CLOSE_PRICE'])), 2),
                 "low": round(float(row.get('LOW_PRICE', row['CLOSE_PRICE'])), 2),
@@ -466,10 +522,12 @@ class TechnicalAnalysisEngine:
                 "rsi": round(float(row['RSI_14']), 1) if pd.notna(row.get('RSI_14')) else None
             })
 
-        patterns = self.detect_chart_patterns(df)
+        patterns = self.detect_chart_patterns(df) if norm_interval == "1d" and len(df) >= 20 else []
 
-        return {
+        res = {
             "symbol": symbol,
+            "interval": norm_interval,
+            "days": limit_days,
             "candles": candles,
             "patterns": patterns,
             "last_price": round(float(df_chart['CLOSE_PRICE'].iloc[-1]), 2),
@@ -477,3 +535,6 @@ class TechnicalAnalysisEngine:
             "bb_lower": round(float(df_chart['BB_LOWER'].iloc[-1]), 2) if pd.notna(df_chart['BB_LOWER'].iloc[-1]) else None,
             "sma_20": round(float(df_chart['SMA_20'].iloc[-1]), 2) if pd.notna(df_chart['SMA_20'].iloc[-1]) else None
         }
+        if note:
+            res["note"] = note
+        return res

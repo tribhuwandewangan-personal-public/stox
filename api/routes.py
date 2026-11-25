@@ -131,7 +131,7 @@ async def accuracy(request: Request) -> Response:
 
 
 async def history(request: Request) -> Response:
-    """GET /api/history?symbol=XXX&days=90: Chart data for a symbol."""
+    """GET /api/history?symbol=XXX&days=365&interval=1d: Chart data for a symbol."""
     try:
         cache_mgr = _managers["cache_mgr"]
         tech_engine = _managers["tech_engine"]
@@ -143,13 +143,14 @@ async def history(request: Request) -> Response:
         if not valid_symbol(sym):
             return _json_response({"error": "Invalid symbol", "candles": []}, status_code=400)
 
-        raw_days = query_params.get("days", "90")
+        raw_days = query_params.get("days", "365")
         try:
-            days = int(''.join(c for c in str(raw_days) if c.isdigit())) or 90
+            days = int(''.join(c for c in str(raw_days) if c.isdigit())) or 365
         except Exception:
-            days = 90
+            days = 365
 
-        body = get_history_response_body(sym, days, cache_mgr, tech_engine)
+        interval = query_params.get("interval", "1d").strip() or "1d"
+        body = get_history_response_body(sym, days, cache_mgr, tech_engine, interval=interval)
         return Response(content=body, media_type="application/json", headers={"Cache-Control": "no-store"})
     except Exception as e:
         print(f"Error fetching chart data: {e}", flush=True)
@@ -568,6 +569,83 @@ async def financial_cashflow(request: Request) -> Response:
         return _json_response({"error": str(e)}, status_code=500)
 
 
+async def sector_research_list(request: Request) -> Response:
+    """GET /api/sector-research: List saved LLM sector research runs from SQLite."""
+    try:
+        cache_mgr = _managers["cache_mgr"]
+        runs = cache_mgr.list_sector_research_runs()
+        return _json_response({"runs": runs})
+    except Exception as e:
+        return _json_response({"error": str(e), "runs": []}, status_code=500)
+
+
+async def sector_research_create(request: Request) -> Response:
+    """POST /api/sector-research: Run Gemini sector decomposition + existing Stox stock analysis."""
+    try:
+        cache_mgr = _managers["cache_mgr"]
+        data = await request.json()
+        if not isinstance(data, dict):
+            return _json_response({"error": "Invalid JSON body"}, status_code=400)
+        sector_query = str(data.get("sector", "")).strip()
+        if not sector_query or len(sector_query) > 200:
+            return _json_response({"error": "Provide a valid sector query (1-200 chars)"}, status_code=400)
+        use_search = bool(data.get("use_search", False))
+        force_refresh = bool(data.get("force_refresh", False))
+
+        from tools.sector_research_engine import SectorResearchEngine
+        engine = SectorResearchEngine(cache_manager=cache_mgr)
+        result = await asyncio.to_thread(
+            engine.run_research,
+            sector_query,
+            use_search=use_search,
+            force_refresh=force_refresh,
+        )
+        return _json_response(result)
+    except Exception as e:
+        return _json_response({"error": str(e)}, status_code=500)
+
+
+async def sector_research_detail(request: Request) -> Response:
+    """GET /api/sector-research/{run_id}: Get full value-chain & ranked stocks for a run."""
+    try:
+        cache_mgr = _managers["cache_mgr"]
+        run_id = int(request.path_params.get("run_id", 0))
+        run = cache_mgr.get_sector_research_run(run_id)
+        if not run:
+            return _json_response({"error": "Sector research run not found"}, status_code=404)
+        return _json_response(run)
+    except Exception as e:
+        return _json_response({"error": str(e)}, status_code=500)
+
+
+async def sector_research_rescore(request: Request) -> Response:
+    """POST /api/sector-research/{run_id}/rescore: Re-score stored stocks using existing Stox tools."""
+    try:
+        cache_mgr = _managers["cache_mgr"]
+        run_id = int(request.path_params.get("run_id", 0))
+        from tools.sector_research_engine import SectorResearchEngine
+        engine = SectorResearchEngine(cache_manager=cache_mgr)
+        result = await asyncio.to_thread(engine.rescore_run, run_id)
+        if not result:
+            return _json_response({"error": "Sector research run not found"}, status_code=404)
+        return _json_response(result)
+    except Exception as e:
+        return _json_response({"error": str(e)}, status_code=500)
+
+
+async def sector_research_delete(request: Request) -> Response:
+    """DELETE / POST /api/sector-research/{run_id}/delete: Remove a saved run."""
+    try:
+        cache_mgr = _managers["cache_mgr"]
+        run_id = int(request.path_params.get("run_id", 0))
+        deleted = cache_mgr.delete_sector_research_run(run_id)
+        if not deleted:
+            return _json_response({"error": "Sector research run not found"}, status_code=404)
+        return _json_response({"status": "deleted", "id": run_id})
+    except Exception as e:
+        return _json_response({"error": str(e)}, status_code=500)
+
+
 # Route definitions
 routes = [
     Route("/api/status", endpoint=status, methods=["GET"]),
@@ -593,5 +671,11 @@ routes = [
     Route("/api/trigger", endpoint=trigger, methods=["POST"]),
     Route("/api/add-symbol", endpoint=add_symbol, methods=["POST"]),
     Route("/api/remove-symbol", endpoint=remove_symbol, methods=["POST"]),
+    Route("/api/sector-research", endpoint=sector_research_list, methods=["GET"]),
+    Route("/api/sector-research", endpoint=sector_research_create, methods=["POST"]),
+    Route("/api/sector-research/{run_id:int}", endpoint=sector_research_detail, methods=["GET"]),
+    Route("/api/sector-research/{run_id:int}", endpoint=sector_research_delete, methods=["DELETE"]),
+    Route("/api/sector-research/{run_id:int}/rescore", endpoint=sector_research_rescore, methods=["POST"]),
+    Route("/api/sector-research/{run_id:int}/delete", endpoint=sector_research_delete, methods=["POST"]),
     Route("/favicon.ico", endpoint=favicon, methods=["GET"]),
 ]

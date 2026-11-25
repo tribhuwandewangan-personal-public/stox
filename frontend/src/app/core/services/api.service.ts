@@ -113,10 +113,10 @@ export class ApiService {
   }
 
   /**
-   * GET /api/history?symbol=XXX&days=90: Chart data for a stock.
+   * GET /api/history?symbol=XXX&days=365&interval=1d: Chart data for a stock.
    */
-  static getHistory(symbol: string, days: number = 90): Promise<ChartData> {
-    const params = new URLSearchParams({ symbol, days: String(days) });
+  static getHistory(symbol: string, days: number = 365, interval: string = '1d'): Promise<ChartData> {
+    const params = new URLSearchParams({ symbol, days: String(days), interval });
     return fetchJson<ChartData>(`/history?${params}`);
   }
 
@@ -124,7 +124,7 @@ export class ApiService {
    * GET /api/chart?symbol=XXX: Get candlestick data for modal.
    */
   static getChartData(symbol: string): Promise<ChartData> {
-    return this.getHistory(symbol, 100);
+    return this.getHistory(symbol, 365, '1d');
   }
 
   /**
@@ -253,6 +253,50 @@ export class ApiService {
    */
   static getFinancialStatement(ticker: string, type: 'income' | 'balance' | 'cashflow'): Promise<FinancialStatementRow[]> {
     return fetchJson<FinancialStatementRow[]>(`/financial/${encodeURIComponent(ticker)}/${type}`);
+  }
+
+  /**
+   * GET /api/sector-research: List saved LLM sector research runs.
+   */
+  static listSectorResearch(): Promise<{ runs: any[] }> {
+    return fetchJson<{ runs: any[] }>('/sector-research');
+  }
+
+  /**
+   * POST /api/sector-research: Run Gemini sector research + existing Stox stock analysis.
+   */
+  static runSectorResearch(sector: string, useSearch: boolean = false): Promise<any> {
+    return fetchJson<any>('/sector-research', withCsrfHeaders({
+      method: 'POST',
+      body: JSON.stringify({ sector, use_search: useSearch })
+    }));
+  }
+
+  /**
+   * GET /api/sector-research/{id}: Get full value-chain breakdown & ranked stocks.
+   */
+  static getSectorResearch(runId: number): Promise<any> {
+    return fetchJson<any>(`/sector-research/${runId}`);
+  }
+
+  /**
+   * POST /api/sector-research/{id}/rescore: Re-score stored tickers using existing Stox tools.
+   */
+  static rescoreSectorResearch(runId: number): Promise<any> {
+    return fetchJson<any>(`/sector-research/${runId}/rescore`, withCsrfHeaders({
+      method: 'POST',
+      body: JSON.stringify({})
+    }));
+  }
+
+  /**
+   * POST /api/sector-research/{id}/delete: Delete a saved sector research run.
+   */
+  static deleteSectorResearch(runId: number): Promise<any> {
+    return fetchJson<any>(`/sector-research/${runId}/delete`, withCsrfHeaders({
+      method: 'POST',
+      body: JSON.stringify({})
+    }));
   }
 }
 

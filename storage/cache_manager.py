@@ -449,6 +449,44 @@ class CacheManager:
                 CREATE INDEX IF NOT EXISTS idx_prediction_status ON prediction_log(status)
             """)
 
+            # Dynamic LLM Sector & Industry Research (no static symbols.json)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS sector_research_runs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sector_query TEXT NOT NULL,
+                    normalized_sector TEXT,
+                    model_used TEXT,
+                    overview_json TEXT,
+                    components_json TEXT,
+                    status TEXT DEFAULT 'ready',
+                    error_message TEXT,
+                    created_at TEXT,
+                    updated_at TEXT
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS sector_value_chain_stocks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id INTEGER NOT NULL,
+                    symbol TEXT NOT NULL,
+                    company_name TEXT,
+                    component_name TEXT,
+                    role_tag TEXT,
+                    rationale TEXT,
+                    validated INTEGER DEFAULT 1,
+                    fundamental_score REAL,
+                    technical_score REAL,
+                    composite_score REAL,
+                    verdict TEXT,
+                    quant_snapshot_json TEXT,
+                    updated_at TEXT,
+                    UNIQUE(run_id, symbol, component_name)
+                )
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_sector_stocks_run ON sector_value_chain_stocks(run_id)
+            """)
+
             # Tiny key/value store (scheduler bookkeeping)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS kv_state (
@@ -1753,3 +1791,212 @@ class CacheManager:
             """, (cutoff,))
             conn.commit()
             return cur.rowcount
+
+    # --- Dynamic Sector & Industry Research ---
+    def _ensure_sector_tables(self, conn: sqlite3.Connection) -> None:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS sector_research_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sector_query TEXT NOT NULL,
+                normalized_sector TEXT,
+                model_used TEXT,
+                overview_json TEXT,
+                components_json TEXT,
+                status TEXT DEFAULT 'ready',
+                error_message TEXT,
+                created_at TEXT,
+                updated_at TEXT
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS sector_value_chain_stocks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id INTEGER NOT NULL,
+                symbol TEXT NOT NULL,
+                company_name TEXT,
+                component_name TEXT,
+                role_tag TEXT,
+                rationale TEXT,
+                validated INTEGER DEFAULT 1,
+                fundamental_score REAL,
+                technical_score REAL,
+                composite_score REAL,
+                verdict TEXT,
+                quant_snapshot_json TEXT,
+                updated_at TEXT,
+                UNIQUE(run_id, symbol, component_name)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sector_stocks_run ON sector_value_chain_stocks(run_id)")
+
+    def _sector_db_conn(self) -> sqlite3.Connection:
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        return open_db(self.db_path)
+
+    def create_sector_research_run(
+        self,
+        sector_query: str,
+        normalized_sector: str = "",
+        model_used: str = "",
+        overview: Optional[Dict[str, Any]] = None,
+        components: Optional[List[Dict[str, Any]]] = None,
+        status: str = "ready",
+        error_message: str = "",
+    ) -> int:
+        now = datetime.now().isoformat()
+        with self._sector_db_conn() as conn:
+            self._ensure_sector_tables(conn)
+            cur = conn.execute(
+                """
+                INSERT INTO sector_research_runs (
+                    sector_query, normalized_sector, model_used,
+                    overview_json, components_json, status, error_message,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    sector_query,
+                    normalized_sector or sector_query,
+                    model_used,
+                    self._safe_json_dumps(overview or {}),
+                    self._safe_json_dumps(components or []),
+                    status,
+                    error_message,
+                    now,
+                    now,
+                ),
+            )
+            conn.commit()
+            return int(cur.lastrowid)
+
+    def save_sector_value_chain_stocks(self, run_id: int, stocks: List[Dict[str, Any]]) -> None:
+        now = datetime.now().isoformat()
+        with self._sector_db_conn() as conn:
+            self._ensure_sector_tables(conn)
+            conn.execute("DELETE FROM sector_value_chain_stocks WHERE run_id = ?", (run_id,))
+            for s in stocks:
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO sector_value_chain_stocks (
+                        run_id, symbol, company_name, component_name, role_tag,
+                        rationale, validated, fundamental_score, technical_score,
+                        composite_score, verdict, quant_snapshot_json, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        run_id,
+                        str(s.get("symbol") or "").upper().strip(),
+                        s.get("company_name") or "",
+                        s.get("component_name") or "",
+                        s.get("role_tag") or "challenger",
+                        s.get("rationale") or "",
+                        1 if s.get("validated", True) else 0,
+                        s.get("fundamental_score"),
+                        s.get("technical_score"),
+                        s.get("composite_score"),
+                        s.get("verdict") or "UNANALYZED",
+                        self._safe_json_dumps(s.get("quant_snapshot") or {}),
+                        now,
+                    ),
+                )
+            conn.execute("UPDATE sector_research_runs SET updated_at = ? WHERE id = ?", (now, run_id))
+            conn.commit()
+
+    def list_sector_research_runs(self, limit: int = 50) -> List[Dict[str, Any]]:
+        with self._sector_db_conn() as conn:
+            self._ensure_sector_tables(conn)
+            rows = conn.execute(
+                """
+                SELECT r.id, r.sector_query, r.normalized_sector, r.model_used,
+                       r.status, r.error_message, r.created_at, r.updated_at,
+                       COUNT(s.id) AS stock_count,
+                       MAX(s.composite_score) AS top_score
+                FROM sector_research_runs r
+                LEFT JOIN sector_value_chain_stocks s ON s.run_id = r.id
+                GROUP BY r.id
+                ORDER BY r.id DESC
+                LIMIT ?
+                """,
+                (max(1, min(int(limit or 50), 200)),),
+            ).fetchall()
+        return [
+            {
+                "id": r[0],
+                "sector_query": r[1],
+                "normalized_sector": r[2],
+                "model_used": r[3],
+                "status": r[4],
+                "error_message": r[5] or "",
+                "created_at": r[6],
+                "updated_at": r[7],
+                "stock_count": r[8] or 0,
+                "top_score": r[9],
+            }
+            for r in rows
+        ]
+
+    def get_sector_research_run(self, run_id: int) -> Optional[Dict[str, Any]]:
+        with self._sector_db_conn() as conn:
+            self._ensure_sector_tables(conn)
+            r = conn.execute(
+                """
+                SELECT id, sector_query, normalized_sector, model_used,
+                       overview_json, components_json, status, error_message,
+                       created_at, updated_at
+                FROM sector_research_runs
+                WHERE id = ?
+                """,
+                (run_id,),
+            ).fetchone()
+            if not r:
+                return None
+            s_rows = conn.execute(
+                """
+                SELECT symbol, company_name, component_name, role_tag, rationale,
+                       validated, fundamental_score, technical_score, composite_score,
+                       verdict, quant_snapshot_json, updated_at
+                FROM sector_value_chain_stocks
+                WHERE run_id = ?
+                ORDER BY COALESCE(composite_score, -999) DESC, id ASC
+                """,
+                (run_id,),
+            ).fetchall()
+
+        stocks = []
+        for sr in s_rows:
+            stocks.append({
+                "symbol": sr[0],
+                "company_name": sr[1],
+                "component_name": sr[2],
+                "role_tag": sr[3],
+                "rationale": sr[4],
+                "validated": bool(sr[5]),
+                "fundamental_score": sr[6],
+                "technical_score": sr[7],
+                "composite_score": sr[8],
+                "verdict": sr[9],
+                "quant_snapshot": json.loads(sr[10]) if sr[10] else {},
+                "updated_at": sr[11],
+            })
+
+        return {
+            "id": r[0],
+            "sector_query": r[1],
+            "normalized_sector": r[2],
+            "model_used": r[3],
+            "overview": json.loads(r[4]) if r[4] else {},
+            "components": json.loads(r[5]) if r[5] else [],
+            "status": r[6],
+            "error_message": r[7] or "",
+            "created_at": r[8],
+            "updated_at": r[9],
+            "stocks": stocks,
+        }
+
+    def delete_sector_research_run(self, run_id: int) -> bool:
+        with self._sector_db_conn() as conn:
+            self._ensure_sector_tables(conn)
+            conn.execute("DELETE FROM sector_value_chain_stocks WHERE run_id = ?", (run_id,))
+            cur = conn.execute("DELETE FROM sector_research_runs WHERE id = ?", (run_id,))
+            conn.commit()
+            return cur.rowcount > 0

@@ -483,8 +483,13 @@ export interface FinancialStatementRow {
   cfoToPatRatio?: number | null;
 }
 
+export type ChartInterval = '15m' | '30m' | '1h' | '1d' | '1wk' | '1mo';
+
 export interface ChartData {
   symbol: string;
+  interval?: ChartInterval | string;
+  days?: number;
+  note?: string;
   candles: Candle[];
   patterns?: PatternResult[];
   last_price?: number;

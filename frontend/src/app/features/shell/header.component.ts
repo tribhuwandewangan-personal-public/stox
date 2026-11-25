@@ -8,7 +8,7 @@ import { CommonModule } from '@angular/common';
 import { AppStore } from '../../core/stores/app.store';
 import { stocksStore, StockUniverse } from '../../core/stores/stocks.store';
 
-export type AppView = 'watchlist' | 'screener';
+export type AppView = 'watchlist' | 'screener' | 'sector';
 
 @Component({
   selector: 'app-header',
@@ -35,6 +35,10 @@ export type AppView = 'watchlist' | 'screener';
           <button class="nav-tab" [class.active]="activeView === 'watchlist' && currentUniverse() === 'midcap250'" (click)="selectUniverse('midcap250')">
             🏢 Midcap 100
             <span class="nav-badge midcap-badge">100 STOCKS</span>
+          </button>
+          <button class="nav-tab" [class.active]="activeView === 'sector'" (click)="switchView('sector')">
+            🧭 Sector Research
+            <span class="nav-badge">GEMINI + QUANT</span>
           </button>
         </nav>
       </div>

@@ -210,6 +210,23 @@ class HistoricalDataEngine:
         self.df_cache: Dict[str, pd.DataFrame] = {}
         self._df_loaded_at: Dict[str, float] = {}
         self._last_sync_attempt: Dict[str, float] = {}
+        self._intraday_cache: Dict[tuple, tuple] = {}
+
+    def _resolve_yf_candidates(self, symbol_clean: str):
+        """Resolves yfinance ticker candidates and failure tracker for a symbol."""
+        is_index = symbol_clean.startswith("^")
+        if is_index:
+            return [symbol_clean], None
+        try:
+            from tools.ticker_validator import build_yf_candidates, get_tracker, _is_sme_or_derivative
+            if _is_sme_or_derivative(symbol_clean):
+                return [], None
+            tracker = get_tracker()
+            if tracker.is_unavailable(symbol_clean):
+                return [], tracker
+            return build_yf_candidates(symbol_clean), tracker
+        except ImportError:
+            return [f"{symbol_clean}.NS", f"{symbol_clean}.BO"], None
 
     def fetch_from_source(self, symbol: str, period: str = "5y", start: Optional[str] = None) -> pd.DataFrame:
         """
@@ -222,25 +239,9 @@ class HistoricalDataEngine:
         import yfinance as yf
 
         symbol_clean = symbol.upper().strip()
-        is_index = symbol_clean.startswith("^")
-
-        # Use smart candidate builder (handles special chars, known overrides, .NS -> .BO fallback)
-        if is_index:
-            tracker = None
-            candidates = [symbol_clean]
-        else:
-            try:
-                from tools.ticker_validator import build_yf_candidates, get_tracker, _is_sme_or_derivative
-                # Skip symbols known to be SME / derivatives / unavailable upfront
-                if _is_sme_or_derivative(symbol_clean):
-                    return pd.DataFrame()
-                tracker = get_tracker()
-                if tracker.is_unavailable(symbol_clean):
-                    return pd.DataFrame()
-                candidates = build_yf_candidates(symbol_clean)
-            except ImportError:
-                tracker = None
-                candidates = [f"{symbol_clean}.NS", f"{symbol_clean}.BO"]
+        candidates, tracker = self._resolve_yf_candidates(symbol_clean)
+        if not candidates:
+            return pd.DataFrame()
 
         df_history = pd.DataFrame()
 
@@ -297,6 +298,72 @@ class HistoricalDataEngine:
         # Keep ordered and sorted
         df_history = df_history.sort_values('DATE').reset_index(drop=True)
         return self._drop_provisional_bar(df_history)
+
+    def fetch_intraday_history(self, symbol: str, interval: str = "1h", days: int = 365) -> pd.DataFrame:
+        """
+        Fetches intraday OHLCV candles (15m, 30m, 1h) from yfinance with a 5-minute in-memory TTL cache.
+        yfinance supports up to 60d for 15m/30m and up to 730d for 1h.
+        """
+        if interval not in ("15m", "30m", "1h"):
+            return pd.DataFrame()
+
+        symbol_clean = symbol.upper().strip()
+        if interval in ("15m", "30m"):
+            period = "60d"
+        else:
+            period = "730d" if days > 365 else "400d"
+
+        cache_key = (symbol_clean, interval, period)
+        now = time.time()
+        with self._cache_lock:
+            cached = self._intraday_cache.get(cache_key)
+            if cached and (now - cached[0]) < 300:
+                return cached[1].copy()
+
+        import yfinance as yf
+
+        candidates, tracker = self._resolve_yf_candidates(symbol_clean)
+        if not candidates:
+            return pd.DataFrame()
+
+        df_history = pd.DataFrame()
+        for candidate in candidates:
+            try:
+                df = yf.Ticker(candidate).history(period=period, interval=interval, auto_adjust=True)
+                if df is not None and not df.empty:
+                    df_history = df.copy()
+                    if tracker:
+                        tracker.record_success(symbol_clean)
+                    break
+            except Exception:
+                continue
+
+        if df_history.empty:
+            return pd.DataFrame()
+
+        df_history = df_history.dropna(subset=['Close']).reset_index()
+        if df_history.empty:
+            return pd.DataFrame()
+
+        date_col = 'Datetime' if 'Datetime' in df_history.columns else ('Date' if 'Date' in df_history.columns else df_history.columns[0])
+        dt_series = pd.to_datetime(df_history[date_col])
+        if dt_series.dt.tz is not None:
+            dt_series = dt_series.dt.tz_convert('Asia/Kolkata').dt.tz_localize(None)
+
+        df_out = pd.DataFrame({
+            'DATE': dt_series,
+            'SYMBOL': symbol_clean,
+            'OPEN_PRICE': df_history['Open'].astype(float),
+            'HIGH_PRICE': df_history['High'].astype(float),
+            'LOW_PRICE': df_history['Low'].astype(float),
+            'CLOSE_PRICE': df_history['Close'].astype(float),
+            'VOLUME': df_history['Volume'].fillna(0).astype(int),
+        })
+        df_out = df_out.sort_values('DATE').drop_duplicates(subset=['DATE']).reset_index(drop=True)
+
+        with self._cache_lock:
+            self._intraday_cache[cache_key] = (now, df_out.copy())
+        return df_out
 
     @staticmethod
     def _drop_provisional_bar(df: pd.DataFrame) -> pd.DataFrame:

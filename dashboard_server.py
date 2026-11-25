@@ -350,14 +350,15 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
             if not valid_symbol(sym):
                 self._send_json(400, {"error": "Invalid symbol", "candles": []})
                 return
-            raw_days = query.get("days", ["90"])[0]
+            raw_days = query.get("days", ["365"])[0]
             try:
-                days = int(''.join(c for c in str(raw_days) if c.isdigit())) or 90
+                days = int(''.join(c for c in str(raw_days) if c.isdigit())) or 365
             except Exception:
-                days = 90
+                days = 365
+            interval = query.get("interval", ["1d"])[0].strip() or "1d"
 
             try:
-                body = get_history_response_body(sym, days, cache_mgr, tech_engine)
+                body = get_history_response_body(sym, days, cache_mgr, tech_engine, interval=interval)
                 self._send_json(200, body)
             except Exception as e:
                 print(f"Error fetching chart data for {sym}: {e}", flush=True)
@@ -510,6 +511,28 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                 self._send_json(200, safe_json_dumps(earnings_data))
             except Exception as e:
                 self._send_json(500, {"error": str(e), "ticker": ticker})
+            return
+
+        elif path == "/api/sector-research":
+            try:
+                runs = cache_mgr.list_sector_research_runs()
+                self._send_json(200, {"runs": runs})
+            except Exception as e:
+                self._send_json(500, {"error": str(e), "runs": []})
+            return
+
+        elif path.startswith("/api/sector-research/"):
+            raw_id = path.split("/api/sector-research/")[1].split("/")[0].split("?")[0].strip()
+            try:
+                run_id = int(raw_id)
+            except ValueError:
+                self._send_json(400, {"error": "Invalid run ID"})
+                return
+            run = cache_mgr.get_sector_research_run(run_id)
+            if not run:
+                self._send_json(404, {"error": "Sector research run not found"})
+                return
+            self._send_json(200, run)
             return
 
         elif path.startswith("/api/financial/"):
@@ -812,6 +835,53 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
             except Exception as e:
                 self._send_json(500, {"status": "error", "message": str(e)})
             return
+
+        elif parsed_path.path == "/api/sector-research":
+            req_data = self._read_json_body()
+            if req_data is None:
+                return
+            sector_query = str(req_data.get("sector", "")).strip()
+            if not sector_query or len(sector_query) > 200:
+                self._send_json(400, {"status": "error", "message": "Provide a valid sector query (1-200 chars)"})
+                return
+            use_search = bool(req_data.get("use_search", False))
+            force_refresh = bool(req_data.get("force_refresh", False))
+            try:
+                from tools.sector_research_engine import SectorResearchEngine
+                engine = SectorResearchEngine(cache_manager=cache_mgr)
+                result = engine.run_research(sector_query, use_search=use_search, force_refresh=force_refresh)
+                self._send_json(200, result)
+            except Exception as e:
+                self._send_json(500, {"status": "error", "message": str(e)})
+            return
+
+        elif parsed_path.path.startswith("/api/sector-research/"):
+            rest = parsed_path.path.split("/api/sector-research/")[1].strip("/")
+            parts = rest.split("/")
+            try:
+                run_id = int(parts[0])
+            except (ValueError, IndexError):
+                self._send_json(400, {"status": "error", "message": "Invalid run ID"})
+                return
+            action = parts[1] if len(parts) > 1 else ""
+            if action == "rescore":
+                try:
+                    from tools.sector_research_engine import SectorResearchEngine
+                    engine = SectorResearchEngine(cache_manager=cache_mgr)
+                    result = engine.rescore_run(run_id)
+                    if not result:
+                        self._send_json(404, {"status": "error", "message": "Sector research run not found"})
+                        return
+                    self._send_json(200, result)
+                except Exception as e:
+                    self._send_json(500, {"status": "error", "message": str(e)})
+                return
+            elif action == "delete":
+                if not cache_mgr.delete_sector_research_run(run_id):
+                    self._send_json(404, {"status": "error", "message": "Sector research run not found"})
+                    return
+                self._send_json(200, {"status": "deleted", "id": run_id})
+                return
 
         self._send_json(404, {"status": "error", "message": "Unknown endpoint"})
 

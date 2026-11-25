@@ -17,7 +17,7 @@ import { Component, OnInit, OnDestroy, HostListener, signal, computed, ViewChild
 import { CommonModule } from '@angular/common';
 import { stocksStore } from '../../core/stores/stocks.store';
 import { apiService } from '../../core/services/api.service';
-import { Stock, Candle, PatternResult } from '../../core/models/stock.model';
+import { Stock, Candle, PatternResult, ChartInterval } from '../../core/models/stock.model';
 import { verdictInfo, getStockBucket } from '../../core/utils/verdict';
 import { bestPrice, fmtPrice, fmtChg } from '../../core/utils/price';
 import { parseMarkdown } from '../../core/utils/markdown';
@@ -76,13 +76,30 @@ interface ChartProjection {
               <span class="legend-item" *ngIf="showProjection() && activeProjection()"><span class="legend-dash sl-color"></span> Stop Loss</span>
             </div>
             <div class="chart-time-tabs">
-              <button class="tab-btn" [class.active]="chartDays() === 30" (click)="changeDays(30)">30D</button>
-              <button class="tab-btn" [class.active]="chartDays() === 60" (click)="changeDays(60)">60D</button>
-              <button class="tab-btn" [class.active]="chartDays() === 90" (click)="changeDays(90)">90D</button>
+              <div class="tab-group" title="Lookback Period">
+                <button class="tab-btn" [class.active]="chartDays() === 30" (click)="changeDays(30)">30D</button>
+                <button class="tab-btn" [class.active]="chartDays() === 60" (click)="changeDays(60)">60D</button>
+                <button class="tab-btn" [class.active]="chartDays() === 90" (click)="changeDays(90)">90D</button>
+                <button class="tab-btn" [class.active]="chartDays() === 180" (click)="changeDays(180)">6M</button>
+                <button class="tab-btn" [class.active]="chartDays() === 365" (click)="changeDays(365)">1Y</button>
+              </div>
+              <div class="tab-group tick-group" title="Candle Tick Interval (15m to 1M)">
+                <span class="tick-label">Tick:</span>
+                <button
+                  *ngFor="let t of tickOptions"
+                  class="tab-btn"
+                  [class.active]="chartInterval() === t.value"
+                  (click)="changeInterval(t.value)"
+                >{{ t.label }}</button>
+              </div>
               <button class="tab-btn proj-toggle" [class.active]="showProjection()" (click)="toggleProjection()" title="Toggle 4-Week Projection Overlay on Graph">
                 🚀 4W Projection
               </button>
             </div>
+          </div>
+
+          <div class="chart-note-bar" *ngIf="chartNote()">
+            ℹ️ {{ chartNote() }}
           </div>
 
           <div class="chart-proj-banner" *ngIf="showProjection() && activeProjection() as proj" [class.bear]="proj.direction === 'Bearish'">
@@ -512,7 +529,26 @@ interface ChartProjection {
     .bull-color { background: #10b981; }
     .bear-color { background: #ef4444; }
 
-    .chart-time-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+    .chart-time-tabs { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .tab-group { display: inline-flex; gap: 4px; align-items: center; }
+    .tick-group {
+      padding-left: 8px;
+      border-left: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .tick-label {
+      font-size: 0.7rem;
+      color: #94a3b8;
+      font-weight: 600;
+      margin-right: 2px;
+    }
+    .chart-note-bar {
+      font-size: 0.72rem;
+      color: #fbbf24;
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px solid rgba(245, 158, 11, 0.25);
+      border-radius: 6px;
+      padding: 4px 10px;
+    }
     .tab-btn {
       background: rgba(255, 255, 255, 0.05);
       border: 1px solid rgba(255, 255, 255, 0.1);
@@ -911,8 +947,19 @@ export class StockDetailModalComponent implements OnInit, AfterViewInit, OnDestr
     }
   }
 
+  readonly tickOptions: { value: ChartInterval; label: string }[] = [
+    { value: '15m', label: '15m' },
+    { value: '30m', label: '30m' },
+    { value: '1h', label: '1h' },
+    { value: '1d', label: '1D' },
+    { value: '1wk', label: '1W' },
+    { value: '1mo', label: '1M' },
+  ];
+
   stocksStore = stocksStore;
-  chartDays = signal<number>(90);
+  chartDays = signal<number>(365);
+  chartInterval = signal<ChartInterval>('1d');
+  chartNote = signal<string>('');
   candles = signal<Candle[]>([]);
   historyPatterns = signal<PatternResult[]>([]);
   showProjection = signal<boolean>(true);
@@ -1199,6 +1246,11 @@ export class StockDetailModalComponent implements OnInit, AfterViewInit, OnDestr
     this.loadCandles();
   }
 
+  changeInterval(interval: ChartInterval): void {
+    this.chartInterval.set(interval);
+    this.loadCandles();
+  }
+
   toggleProjection(): void {
     this.showProjection.update(v => !v);
     setTimeout(() => this.drawChart(), 10);
@@ -1241,16 +1293,18 @@ export class StockDetailModalComponent implements OnInit, AfterViewInit, OnDestr
     if (!s) return;
 
     this.isLoadingChart.set(true);
-    apiService.getHistory(s.symbol, this.chartDays())
+    apiService.getHistory(s.symbol, this.chartDays(), this.chartInterval())
       .then(res => {
         this.candles.set(res.candles || []);
         this.historyPatterns.set(res.patterns || []);
+        this.chartNote.set(res.note || '');
         this.isLoadingChart.set(false);
         setTimeout(() => this.drawChart(), 20);
       })
       .catch(() => {
         this.candles.set([]);
         this.historyPatterns.set([]);
+        this.chartNote.set('');
         this.isLoadingChart.set(false);
         setTimeout(() => this.drawChart(), 20);
       });
@@ -1455,7 +1509,7 @@ export class StockDetailModalComponent implements OnInit, AfterViewInit, OnDestr
     ctx.stroke();
 
     // 5. Candlesticks
-    const candleWidth = Math.max(2.5, (plotW / (totalSlots + 1)) * 0.65);
+    const candleWidth = Math.max(1, Math.min(18, (plotW / (totalSlots + 1)) * 0.65));
     for (let i = 0; i < n; i++) {
       const c = candles[i];
       const open = Number(c.open ?? c.OPEN_PRICE ?? 0);
