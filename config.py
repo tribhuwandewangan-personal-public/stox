@@ -29,7 +29,7 @@ MAX_CONCURRENT_TRIGGERS = int(os.getenv("MAX_CONCURRENT_TRIGGERS", "4"))  # dash
 DASHBOARD_HOST = os.getenv("DASHBOARD_HOST", "127.0.0.1")                    # loopback only; set 0.0.0.0 to expose (not advised)
 QUOTE_SOURCES = os.getenv("QUOTE_SOURCES", "kite,yahoo")                     # provider order; yahoo is always the last resort
 QUOTE_POLL_SECONDS = int(os.getenv("QUOTE_POLL_SECONDS", "300"))             # live quote refresh during market hours
-AUTO_SCHEDULE = os.getenv("AUTO_SCHEDULE", "1").lower() in ("1", "true", "yes")  # pre-market refresh + post-close analysis
+AUTO_SCHEDULE = os.getenv("AUTO_SCHEDULE", "0").lower() in ("1", "true", "yes")  # opt-in pre-market refresh + post-close analysis
 
 # Target Symbols Config Files
 SYMBOLS_FILE_PATH = os.path.join(os.path.dirname(__file__), "symbols.json")

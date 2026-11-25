@@ -1,6 +1,6 @@
 {
   "description": "List of NSE stock symbols for multi-agent RAG analysis and prediction",
-  "updated_at": "2026-11-23",
+  "updated_at": "2026-11-25",
   "default_timeframe_days": 1825,
   "symbols": [
     {
@@ -428,6 +428,60 @@
     {
       "symbol": "SOLARINDU",
       "name": "SOLARINDU Limited",
+      "sector": "Indian Equities",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "HAL",
+      "name": "Hindustan Aeronautics Limited",
+      "sector": "Capital Goods",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "BDL",
+      "name": "Bharat Dynamics Limited",
+      "sector": "Capital Goods",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "SOLARINDS",
+      "name": "Solar Industries India Limited",
+      "sector": "Chemicals",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "MIDHANI",
+      "name": "Mishra Dhatu Nigam Limited",
+      "sector": "Indian Equities",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "GRSE",
+      "name": "Garden Reach Shipbuilders & Engineers Limited",
+      "sector": "Indian Equities",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "PARAS",
+      "name": "Paras Defence and Space Technologies Limited",
+      "sector": "Information Technology",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "BEML",
+      "name": "BEML Limited",
+      "sector": "Indian Equities",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "APOLLO",
+      "name": "Apollo Micro Systems Limited",
+      "sector": "Indian Equities",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "AEQUS",
+      "name": "Aequs Limited",
       "sector": "Indian Equities",
       "exchange": "NSE"
     }

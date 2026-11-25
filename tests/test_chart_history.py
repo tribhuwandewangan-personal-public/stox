@@ -97,6 +97,24 @@ class TestChartHistoryIntervals(unittest.TestCase):
         self.assertEqual(body_1wk["interval"], "1wk")
         self.assertGreater(len(body_1d["candles"]), len(body_1wk["candles"]))
 
+    def test_intraday_sqlite_incremental_ticks(self):
+        import os, tempfile
+        from storage.cache_manager import CacheManager
+        from tools.historical_data_tools import HistoricalDataEngine
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cm = CacheManager(db_path=os.path.join(tmpdir, "t.db"), prefer_valkey=False)
+            cm.save_intraday_candles("TESTSYM", "1h", [
+                {"dt": "2026-11-24 10:15:00", "open": 100, "high": 102, "low": 99, "close": 101, "volume": 1000},
+                {"dt": "2026-11-25 15:15:00", "open": 101, "high": 103, "low": 100, "close": 102, "volume": 1200},
+            ])
+            eng = HistoricalDataEngine(cache_manager=cm)
+            # Mock _intraday_is_up_to_date=True to verify zero network fetch when ticks are current
+            eng._intraday_is_up_to_date = lambda sym, iv, dt: True
+            df = eng.fetch_intraday_history("TESTSYM", interval="1h", days=365)
+            self.assertEqual(len(df), 2)
+            self.assertEqual(float(df["CLOSE_PRICE"].iloc[-1]), 102.0)
+
 
 if __name__ == "__main__":
     unittest.main()

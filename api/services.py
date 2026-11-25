@@ -42,7 +42,7 @@ RISK_AGENT = "Risk & Volatility Agent"
 FUND_AGENT = "Fundamental Analyst Agent"
 
 STALE_SYNTH_HOURS = 72          # older synthesizer output is still shown, flagged as "previous run"
-STOCKS_CACHE_SECONDS = 30       # /api/stocks response is rebuilt at least this often (prices, sparklines)
+STOCKS_CACHE_SECONDS = 60       # /api/stocks response is rebuilt at least this often (prices, sparklines)
 _stocks_lock = threading.Lock()
 _stocks_cache = {}
 _pattern_memo = {}              # (symbol, newest candle date) -> detected patterns
@@ -292,7 +292,7 @@ def get_all_stock_data(cache_mgr, queue_mgr, hist_engine, tech_engine, events_en
     sym_names = [s.get("symbol", "").upper() for s in symbols_list if s.get("symbol")]
 
     queue_statuses = queue_mgr.get_symbol_statuses()
-    bulk_outputs = cache_mgr.get_latest_agent_outputs_bulk()
+    bulk_outputs = cache_mgr.get_latest_agent_outputs_bulk(symbols=sym_names)
     quotes = cache_mgr.get_all_quotes()
     candle_summaries = (
         cache_mgr.get_candles_bulk_summary(sym_names, limit_days=260, sparkline_days=25)
@@ -667,7 +667,7 @@ def _compute_pre_breakout_projections(
                 "sector": item.get("sector") or "Indian Equities",
             }
 
-    bulk_outputs = cache_mgr.get_latest_agent_outputs_bulk()
+    bulk_outputs = cache_mgr.get_latest_agent_outputs_bulk(symbols=None if universe == "all" else list(sym_meta.keys()))
     if universe == "all":
         for sym in bulk_outputs.keys():
             k = str(sym or "").upper().strip()
@@ -1093,7 +1093,7 @@ def _compute_fundamental_picks(cache_mgr, universe: str) -> Dict[str, Any]:
 
     symbols_list = _load_symbols_list(universe=universe)
     sym_names = [str(s.get("symbol") or "").upper().strip() for s in symbols_list if s.get("symbol")]
-    bulk_outputs = cache_mgr.get_latest_agent_outputs_bulk()
+    bulk_outputs = cache_mgr.get_latest_agent_outputs_bulk(symbols=sym_names)
     candle_summaries = (
         cache_mgr.get_candles_bulk_summary(sym_names, limit_days=260, sparkline_days=5)
         if hasattr(cache_mgr, "get_candles_bulk_summary")

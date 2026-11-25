@@ -17,17 +17,45 @@ _SYMBOLS_CACHE_LOCK = threading.Lock()
 _SYMBOLS_CACHE = {"path": None, "mtime": None, "data": []}
 
 
+def _compute_symbol_perf_from_rows(desc: List[tuple], canon_sector: Optional[str]) -> Optional[Dict[str, Any]]:
+    if len(desc) < 200:
+        return None
+    p0 = desc[0][1]
+    if p0 <= 0:
+        return None
+    c_1y = desc[min(251, len(desc) - 1)][1]
+    ret_1y = round(((p0 - c_1y) / c_1y) * 100.0, 2) if c_1y > 0 else None
+    ret_3y = None
+    if len(desc) >= 480:
+        c_3y = desc[min(755, len(desc) - 1)][1]
+        if c_3y > 0:
+            ret_3y = round(((p0 - c_3y) / c_3y) * 100.0, 2)
+    h_3y = max(r[0] for r in desc)
+    dd_3y = round(((p0 - h_3y) / h_3y) * 100.0, 2) if h_3y > 0 else None
+    return {
+        "ret_1y_pct": ret_1y,
+        "ret_3y_pct": ret_3y,
+        "drawdown_3y_pct": dd_3y,
+        "high_3y": h_3y,
+        "canon_sector": canon_sector,
+    }
+
+
 def _get_cached_multi_year_perf(symbol: str, current_price: float = 0.0, sector: str = "") -> Dict[str, Optional[float]]:
     """
     Computes 1Y return %, 3Y return %, 3Y peak drawdown %, and Sector-Relative 1Y/3Y Alpha %
     by comparing each stock against its canonical sector peers' median 1Y and 3Y price performance.
-    Cached in memory for 5 minutes across all symbols to avoid repeated DB queries.
+    Uses indexed per-symbol SQLite lookups (15-min in-memory cache) instead of full-table scans.
     """
     import time
     import statistics
+    from datetime import datetime, timedelta
     from tools.peer_benchmark_engine import _resolve_sector, SECTOR_PEER_MAP
 
-    now_bucket = int(time.time() // 300)
+    now_bucket = int(time.time() // 900)
+    cutoff_3y = (datetime.now() - timedelta(days=1120)).strftime("%Y-%m-%d")
+    sym_u = symbol.upper().strip()
+
     with _PRICE_PERF_LOCK:
         if _PRICE_PERF_CACHE["ts"] != now_bucket:
             try:
@@ -40,7 +68,7 @@ def _get_cached_multi_year_perf(symbol: str, current_price: float = 0.0, sector:
                         try:
                             with open(spath, "r", encoding="utf-8") as f:
                                 sdata = json.load(f)
-                            for s_it in (sdata.get("symbols", []) if isinstance(sdata, dict) else []):
+                            for s_it in (sdata.get("symbols", []) if isinstance(data := sdata, dict) else []):
                                 k = str(s_it.get("symbol") or "").upper().strip()
                                 sc = _resolve_sector(str(s_it.get("sector") or ""))
                                 if k and sc:
@@ -51,46 +79,27 @@ def _get_cached_multi_year_perf(symbol: str, current_price: float = 0.0, sector:
                     for p_sym in peer_list:
                         sym_sec_map.setdefault(p_sym.upper(), canon_sec)
 
-                if os.path.exists(CACHE_DB_PATH):
+                sec_1y_buckets: Dict[str, List[float]] = {}
+                sec_3y_buckets: Dict[str, List[float]] = {}
+                if os.path.exists(CACHE_DB_PATH) and sym_sec_map:
                     with open_db(CACHE_DB_PATH) as conn:
-                        rows = conn.execute(
-                            "SELECT symbol, high, close FROM historical_candles ORDER BY symbol, date DESC"
-                        ).fetchall()
-                    grouped: Dict[str, List[tuple]] = {}
-                    for sym, h, c in rows:
-                        b = grouped.setdefault(sym, [])
-                        if len(b) < 760:
-                            b.append((float(h or c or 0.0), float(c or 0.0)))
-                    sec_1y_buckets: Dict[str, List[float]] = {}
-                    sec_3y_buckets: Dict[str, List[float]] = {}
-                    for sym, desc in grouped.items():
-                        if len(desc) < 200:
-                            continue
-                        p0 = desc[0][1]
-                        if p0 <= 0:
-                            continue
-                        c_1y = desc[min(251, len(desc) - 1)][1]
-                        ret_1y = round(((p0 - c_1y) / c_1y) * 100.0, 2) if c_1y > 0 else None
-                        ret_3y = None
-                        if len(desc) >= 480:
-                            c_3y = desc[min(755, len(desc) - 1)][1]
-                            if c_3y > 0:
-                                ret_3y = round(((p0 - c_3y) / c_3y) * 100.0, 2)
-                        h_3y = max(r[0] for r in desc)
-                        dd_3y = round(((p0 - h_3y) / h_3y) * 100.0, 2) if h_3y > 0 else None
-                        c_sec = sym_sec_map.get(sym)
-                        if c_sec:
-                            if ret_1y is not None:
-                                sec_1y_buckets.setdefault(c_sec, []).append(ret_1y)
-                            if ret_3y is not None:
-                                sec_3y_buckets.setdefault(c_sec, []).append(ret_3y)
-                        perf_map[sym] = {
-                            "ret_1y_pct": ret_1y,
-                            "ret_3y_pct": ret_3y,
-                            "drawdown_3y_pct": dd_3y,
-                            "high_3y": h_3y,
-                            "canon_sector": c_sec,
-                        }
+                        for sym, c_sec in sym_sec_map.items():
+                            rows = conn.execute(
+                                "SELECT high, close FROM historical_candles WHERE symbol = ? AND date >= ? ORDER BY date DESC LIMIT 760",
+                                (sym, cutoff_3y),
+                            ).fetchall()
+                            if not rows:
+                                continue
+                            desc = [(float(h or c or 0.0), float(c or 0.0)) for h, c in rows]
+                            entry = _compute_symbol_perf_from_rows(desc, c_sec)
+                            if not entry:
+                                continue
+                            if entry["ret_1y_pct"] is not None:
+                                sec_1y_buckets.setdefault(c_sec, []).append(entry["ret_1y_pct"])
+                            if entry["ret_3y_pct"] is not None:
+                                sec_3y_buckets.setdefault(c_sec, []).append(entry["ret_3y_pct"])
+                            perf_map[sym] = entry
+
                     sec_med_1y = {k: round(statistics.median(v), 2) for k, v in sec_1y_buckets.items() if v}
                     sec_med_3y = {k: round(statistics.median(v), 2) for k, v in sec_3y_buckets.items() if v}
                     for sym, p_entry in perf_map.items():
@@ -101,16 +110,40 @@ def _get_cached_multi_year_perf(symbol: str, current_price: float = 0.0, sector:
                         p_entry["sector_median_3y_pct"] = m3
                         p_entry["alpha_1y_vs_sector_pct"] = round(p_entry["ret_1y_pct"] - m1, 2) if (p_entry.get("ret_1y_pct") is not None and m1 is not None) else None
                         p_entry["alpha_3y_vs_sector_pct"] = round(p_entry["ret_3y_pct"] - m3, 2) if (p_entry.get("ret_3y_pct") is not None and m3 is not None) else None
+                else:
+                    sec_med_1y = {}
+                    sec_med_3y = {}
                 _PRICE_PERF_CACHE["ts"] = now_bucket
                 _PRICE_PERF_CACHE["data"] = perf_map
-                _PRICE_PERF_CACHE["sec_med_1y"] = sec_med_1y if os.path.exists(CACHE_DB_PATH) else {}
-                _PRICE_PERF_CACHE["sec_med_3y"] = sec_med_3y if os.path.exists(CACHE_DB_PATH) else {}
+                _PRICE_PERF_CACHE["sec_med_1y"] = sec_med_1y
+                _PRICE_PERF_CACHE["sec_med_3y"] = sec_med_3y
             except Exception:
                 _PRICE_PERF_CACHE["ts"] = now_bucket
                 _PRICE_PERF_CACHE["data"] = {}
                 _PRICE_PERF_CACHE["sec_med_1y"] = {}
                 _PRICE_PERF_CACHE["sec_med_3y"] = {}
-        hit = dict(_PRICE_PERF_CACHE["data"].get(symbol.upper().strip()) or {})
+
+        if sym_u and sym_u not in _PRICE_PERF_CACHE["data"]:
+            try:
+                from config import CACHE_DB_PATH
+                from storage.cache_manager import open_db
+                if os.path.exists(CACHE_DB_PATH):
+                    with open_db(CACHE_DB_PATH) as conn:
+                        rows = conn.execute(
+                            "SELECT high, close FROM historical_candles WHERE symbol = ? AND date >= ? ORDER BY date DESC LIMIT 760",
+                            (sym_u, cutoff_3y),
+                        ).fetchall()
+                    desc = [(float(h or c or 0.0), float(c or 0.0)) for h, c in rows]
+                    cs = _resolve_sector(sector) if sector else None
+                    entry = _compute_symbol_perf_from_rows(desc, cs)
+                    if entry:
+                        _PRICE_PERF_CACHE["data"][sym_u] = entry
+                    else:
+                        _PRICE_PERF_CACHE["data"][sym_u] = {}
+            except Exception:
+                _PRICE_PERF_CACHE["data"][sym_u] = {}
+
+        hit = dict(_PRICE_PERF_CACHE["data"].get(sym_u) or {})
         if hit and not hit.get("canon_sector") and sector:
             cs = _resolve_sector(sector)
             if cs:

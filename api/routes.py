@@ -266,7 +266,7 @@ async def add_symbol(request: Request) -> Response:
         if not valid_symbol(sym):
             return _json_response({"status": "error", "message": "Invalid symbol"}, status_code=400)
 
-        result = add_symbol_to_json(symbol=sym, name=name, sector=sector, exchange=exchange)
+        result = add_symbol_to_json(symbol=sym, name=name, sector=sector, exchange=exchange, queue_manager=_managers.get("queue_mgr"))
         return _json_response(result)
     except Exception as e:
         return _json_response({"status": "error", "message": str(e)}, status_code=500)

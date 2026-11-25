@@ -299,10 +299,29 @@ class HistoricalDataEngine:
         df_history = df_history.sort_values('DATE').reset_index(drop=True)
         return self._drop_provisional_bar(df_history)
 
+    def _intraday_is_up_to_date(self, symbol: str, interval: str, latest_dt: datetime) -> bool:
+        """True if cached intraday ticks already reach the last completed session or were synced recently."""
+        now_ist = market_calendar.now_ist().replace(tzinfo=None)
+        last_sess = market_calendar.last_completed_session(now_ist)
+        if not market_calendar.is_market_open(now_ist):
+            # After hours / weekend: if we have ticks from the last completed session afternoon (>= 14:15), we're current
+            if latest_dt.date() > last_sess or (latest_dt.date() == last_sess and latest_dt.hour >= 14):
+                return True
+        else:
+            step_mins = {"15m": 15, "30m": 30, "1h": 60}.get(interval, 60)
+            if (now_ist - latest_dt) < timedelta(minutes=step_mins):
+                return True
+        with self._cache_lock:
+            last_try = self._last_sync_attempt.get(f"{symbol}::{interval}", 0.0)
+        return (time.time() - last_try) < 300
+
     def fetch_intraday_history(self, symbol: str, interval: str = "1h", days: int = 365) -> pd.DataFrame:
         """
-        Fetches intraday OHLCV candles (15m, 30m, 1h) from yfinance with a 5-minute in-memory TTL cache.
-        yfinance supports up to 60d for 15m/30m and up to 730d for 1h.
+        Fetches intraday OHLCV candles (15m, 30m, 1h) incrementally:
+        1. Reads cached ticks from SQLite (`intraday_candles`).
+        2. If up to date, returns cached ticks with zero network calls.
+        3. If behind, downloads ONLY missing ticks since `latest_dt - 1 day` and persists them.
+        4. If empty, performs initial full-window download (`60d` for 15m/30m, `400d`/`730d` for 1h).
         """
         if interval not in ("15m", "30m", "1h"):
             return pd.DataFrame()
@@ -313,23 +332,47 @@ class HistoricalDataEngine:
         else:
             period = "730d" if days > 365 else "400d"
 
-        cache_key = (symbol_clean, interval, period)
+        cached_df = pd.DataFrame()
+        if hasattr(self.cache_manager, "get_intraday_candles"):
+            try:
+                rows = self.cache_manager.get_intraday_candles(symbol_clean, interval)
+                if rows:
+                    cached_df = pd.DataFrame(rows)
+                    cached_df['DATE'] = pd.to_datetime(cached_df['DATE'])
+                    cached_df = cached_df.sort_values('DATE').reset_index(drop=True)
+            except Exception:
+                cached_df = pd.DataFrame()
+
+        start_str: Optional[str] = None
+        if not cached_df.empty:
+            latest_dt = cached_df['DATE'].iloc[-1].to_pydatetime()
+            if self._intraday_is_up_to_date(symbol_clean, interval, latest_dt):
+                return cached_df
+            # Fetch only missing ticks (with 1-day overlap)
+            start_str = (latest_dt - timedelta(days=1)).strftime("%Y-%m-%d")
+
+        cache_key = (symbol_clean, interval, start_str or period)
         now = time.time()
         with self._cache_lock:
-            cached = self._intraday_cache.get(cache_key)
-            if cached and (now - cached[0]) < 300:
-                return cached[1].copy()
+            self._last_sync_attempt[f"{symbol_clean}::{interval}"] = now
+            cached_mem = self._intraday_cache.get(cache_key)
+            if cached_mem and (now - cached_mem[0]) < 300 and cached_df.empty:
+                return cached_mem[1].copy()
 
         import yfinance as yf
 
         candidates, tracker = self._resolve_yf_candidates(symbol_clean)
         if not candidates:
-            return pd.DataFrame()
+            return cached_df
 
         df_history = pd.DataFrame()
         for candidate in candidates:
             try:
-                df = yf.Ticker(candidate).history(period=period, interval=interval, auto_adjust=True)
+                tkr = yf.Ticker(candidate)
+                if start_str:
+                    df = tkr.history(start=start_str, interval=interval, auto_adjust=True)
+                else:
+                    df = tkr.history(period=period, interval=interval, auto_adjust=True)
                 if df is not None and not df.empty:
                     df_history = df.copy()
                     if tracker:
@@ -339,18 +382,18 @@ class HistoricalDataEngine:
                 continue
 
         if df_history.empty:
-            return pd.DataFrame()
+            return cached_df
 
         df_history = df_history.dropna(subset=['Close']).reset_index()
         if df_history.empty:
-            return pd.DataFrame()
+            return cached_df
 
         date_col = 'Datetime' if 'Datetime' in df_history.columns else ('Date' if 'Date' in df_history.columns else df_history.columns[0])
         dt_series = pd.to_datetime(df_history[date_col])
         if dt_series.dt.tz is not None:
             dt_series = dt_series.dt.tz_convert('Asia/Kolkata').dt.tz_localize(None)
 
-        df_out = pd.DataFrame({
+        df_new = pd.DataFrame({
             'DATE': dt_series,
             'SYMBOL': symbol_clean,
             'OPEN_PRICE': df_history['Open'].astype(float),
@@ -359,11 +402,33 @@ class HistoricalDataEngine:
             'CLOSE_PRICE': df_history['Close'].astype(float),
             'VOLUME': df_history['Volume'].fillna(0).astype(int),
         })
-        df_out = df_out.sort_values('DATE').drop_duplicates(subset=['DATE']).reset_index(drop=True)
+        df_new = df_new.sort_values('DATE').drop_duplicates(subset=['DATE']).reset_index(drop=True)
+
+        if hasattr(self.cache_manager, "save_intraday_candles") and not df_new.empty:
+            try:
+                records = [
+                    {
+                        "dt": pd.Timestamp(r['DATE']).strftime('%Y-%m-%d %H:%M:%S'),
+                        "open": r['OPEN_PRICE'],
+                        "high": r['HIGH_PRICE'],
+                        "low": r['LOW_PRICE'],
+                        "close": r['CLOSE_PRICE'],
+                        "volume": r['VOLUME'],
+                    }
+                    for _, r in df_new.iterrows()
+                ]
+                self.cache_manager.save_intraday_candles(symbol_clean, interval, records)
+            except Exception:
+                pass
+
+        if not cached_df.empty:
+            merged = pd.concat([cached_df, df_new], ignore_index=True)
+            merged = merged.drop_duplicates(subset=['DATE'], keep='last').sort_values('DATE').reset_index(drop=True)
+            return merged
 
         with self._cache_lock:
-            self._intraday_cache[cache_key] = (now, df_out.copy())
-        return df_out
+            self._intraday_cache[cache_key] = (now, df_new.copy())
+        return df_new
 
     @staticmethod
     def _drop_provisional_bar(df: pd.DataFrame) -> pd.DataFrame:

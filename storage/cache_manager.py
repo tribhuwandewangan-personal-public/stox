@@ -487,6 +487,21 @@ class CacheManager:
                 CREATE INDEX IF NOT EXISTS idx_sector_stocks_run ON sector_value_chain_stocks(run_id)
             """)
 
+            # Intraday OHLCV ticks (15m, 30m, 1h) for incremental missing-tick fetching
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS intraday_candles (
+                    symbol TEXT NOT NULL,
+                    interval TEXT NOT NULL,
+                    dt TEXT NOT NULL,
+                    open REAL,
+                    high REAL,
+                    low REAL,
+                    close REAL,
+                    volume INTEGER,
+                    PRIMARY KEY (symbol, interval, dt)
+                )
+            """)
+
             # Tiny key/value store (scheduler bookkeeping)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS kv_state (
@@ -1137,38 +1152,75 @@ class CacheManager:
                 return json.loads(row[0])
             return None
 
-    def get_latest_agent_outputs_bulk(self) -> Dict[str, Dict[str, Dict[str, Any]]]:
+    _KNOWN_AGENTS = (
+        "Historical Data RAG Agent",
+        "Technical Analysis Agent",
+        "News & Sentiment Agent",
+        "Global Macro Agent",
+        "Fundamental Analyst Agent",
+        "Risk & Volatility Agent",
+        "Master Prediction Synthesizer Agent",
+    )
+
+    def get_latest_agent_outputs_bulk(self, symbols: Optional[List[str]] = None) -> Dict[str, Dict[str, Dict[str, Any]]]:
         """
-        Latest output of every agent for every symbol in ONE query.
+        Latest output of every agent for every symbol (or a filtered list of symbols) in ONE query.
         Returns {symbol: {agent_name: {"timestamp": iso, "output": dict}}}.
         """
+        sym_list = [str(s).upper().strip() for s in (symbols or []) if s]
         if self.use_valkey and self.valkey:
             result: Dict[str, Dict[str, Dict[str, Any]]] = {}
             try:
-                raw_all = self.valkey.hgetall("stox:agent_runs") or {}
-                for k, v in raw_all.items():
-                    key_str = self._dec(k)
-                    if "::" not in key_str:
-                        continue
-                    sym, agent = key_str.split("::", 1)
-                    rec = json.loads(self._dec(v))
-                    result.setdefault(sym, {})[agent] = {
-                        "timestamp": rec.get("timestamp", ""),
-                        "output": rec.get("output", {}),
-                    }
+                if sym_list:
+                    keys = [f"{s}::{ag}" for s in sym_list for ag in self._KNOWN_AGENTS]
+                    vals = self.valkey.hmget("stox:agent_runs", keys) or []
+                    for key_str, v in zip(keys, vals):
+                        if not v:
+                            continue
+                        sym, agent = key_str.split("::", 1)
+                        rec = json.loads(self._dec(v))
+                        result.setdefault(sym, {})[agent] = {
+                            "timestamp": rec.get("timestamp", ""),
+                            "output": rec.get("output", {}),
+                        }
+                else:
+                    raw_all = self.valkey.hgetall("stox:agent_runs") or {}
+                    for k, v in raw_all.items():
+                        key_str = self._dec(k)
+                        if "::" not in key_str:
+                            continue
+                        sym, agent = key_str.split("::", 1)
+                        rec = json.loads(self._dec(v))
+                        result.setdefault(sym, {})[agent] = {
+                            "timestamp": rec.get("timestamp", ""),
+                            "output": rec.get("output", {}),
+                        }
             except Exception:
                 pass
             return result
         with self._get_connection() as conn:
-            rows = conn.execute("""
-                SELECT a.symbol, a.agent_name, a.timestamp, a.output_data
-                FROM agent_runs_cache a
-                JOIN (
-                    SELECT symbol, agent_name, MAX(timestamp) AS ts
-                    FROM agent_runs_cache
-                    GROUP BY symbol, agent_name
-                ) m ON m.symbol = a.symbol AND m.agent_name = a.agent_name AND m.ts = a.timestamp
-            """).fetchall()
+            if sym_list:
+                placeholders = ",".join("?" for _ in sym_list)
+                rows = conn.execute(f"""
+                    SELECT a.symbol, a.agent_name, a.timestamp, a.output_data
+                    FROM agent_runs_cache a
+                    JOIN (
+                        SELECT symbol, agent_name, MAX(timestamp) AS ts
+                        FROM agent_runs_cache
+                        WHERE symbol IN ({placeholders})
+                        GROUP BY symbol, agent_name
+                    ) m ON m.symbol = a.symbol AND m.agent_name = a.agent_name AND m.ts = a.timestamp
+                """, sym_list).fetchall()
+            else:
+                rows = conn.execute("""
+                    SELECT a.symbol, a.agent_name, a.timestamp, a.output_data
+                    FROM agent_runs_cache a
+                    JOIN (
+                        SELECT symbol, agent_name, MAX(timestamp) AS ts
+                        FROM agent_runs_cache
+                        GROUP BY symbol, agent_name
+                    ) m ON m.symbol = a.symbol AND m.agent_name = a.agent_name AND m.ts = a.timestamp
+                """).fetchall()
         result: Dict[str, Dict[str, Dict[str, Any]]] = {}
         for sym, agent, ts, blob in rows:
             try:
@@ -2000,3 +2052,84 @@ class CacheManager:
             cur = conn.execute("DELETE FROM sector_research_runs WHERE id = ?", (run_id,))
             conn.commit()
             return cur.rowcount > 0
+
+    # --- Incremental Intraday Ticks (15m, 30m, 1h) ---
+    def _ensure_intraday_table(self, conn: sqlite3.Connection) -> None:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS intraday_candles (
+                symbol TEXT NOT NULL,
+                interval TEXT NOT NULL,
+                dt TEXT NOT NULL,
+                open REAL,
+                high REAL,
+                low REAL,
+                close REAL,
+                volume INTEGER,
+                PRIMARY KEY (symbol, interval, dt)
+            )
+        """)
+
+    def get_intraday_candles(self, symbol: str, interval: str, cutoff_dt: Optional[str] = None) -> List[Dict[str, Any]]:
+        sym = symbol.upper().strip()
+        with self._sector_db_conn() as conn:
+            self._ensure_intraday_table(conn)
+            if cutoff_dt:
+                rows = conn.execute(
+                    """
+                    SELECT dt, open, high, low, close, volume
+                    FROM intraday_candles
+                    WHERE symbol = ? AND interval = ? AND dt >= ?
+                    ORDER BY dt ASC
+                    """,
+                    (sym, interval, cutoff_dt),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT dt, open, high, low, close, volume
+                    FROM intraday_candles
+                    WHERE symbol = ? AND interval = ?
+                    ORDER BY dt ASC
+                    """,
+                    (sym, interval),
+                ).fetchall()
+        return [
+            {
+                "DATE": r[0],
+                "SYMBOL": sym,
+                "OPEN_PRICE": r[1],
+                "HIGH_PRICE": r[2],
+                "LOW_PRICE": r[3],
+                "CLOSE_PRICE": r[4],
+                "VOLUME": r[5],
+            }
+            for r in rows
+        ]
+
+    def save_intraday_candles(self, symbol: str, interval: str, records: List[Dict[str, Any]]) -> None:
+        if not records:
+            return
+        sym = symbol.upper().strip()
+        with self._sector_db_conn() as conn:
+            self._ensure_intraday_table(conn)
+            conn.executemany(
+                """
+                INSERT OR REPLACE INTO intraday_candles
+                (symbol, interval, dt, open, high, low, close, volume)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        sym,
+                        interval,
+                        r["dt"],
+                        float(r["open"]),
+                        float(r["high"]),
+                        float(r["low"]),
+                        float(r["close"]),
+                        int(r["volume"]),
+                    )
+                    for r in records
+                ],
+            )
+            conn.commit()

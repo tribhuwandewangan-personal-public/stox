@@ -812,7 +812,7 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                 self._send_json(400, {"status": "error", "message": "Invalid symbol"})
                 return
 
-            self._send_json(200, add_symbol_to_json(symbol=sym, name=name, sector=sector, exchange=exchange))
+            self._send_json(200, add_symbol_to_json(symbol=sym, name=name, sector=sector, exchange=exchange, queue_manager=queue_mgr))
             return
 
         elif parsed_path.path == "/api/remove-symbol":

@@ -9,6 +9,7 @@ import os
 import json
 import sqlite3
 import threading
+import time
 from storage.cache_manager import open_db
 import urllib.request
 import urllib.parse
@@ -20,6 +21,9 @@ from config import SYMBOLS_FILE_PATH, CACHE_DB_PATH, MIDCAP_250_SYMBOLS_FILE_PAT
 
 _CATALOG_LOCK = threading.Lock()
 _CATALOG_CACHE: Dict[str, Any] = {"loaded": False, "items": []}
+_REMOTE_SEARCH_LOCK = threading.Lock()
+_REMOTE_SEARCH_CACHE: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
+_REMOTE_SEARCH_TTL = 600.0
 
 
 def _load_local_nse_catalog() -> List[Dict[str, Any]]:
@@ -184,51 +188,72 @@ def search_internet_symbols(
 
     # Supplement with Yahoo Finance live search only when local partial search found few matches
     if allow_remote and len(results) < 6 and len(clean_query) >= 2:
-        encoded = urllib.parse.quote(clean_query)
-        search_url = f"https://query2.finance.yahoo.com/v1/finance/search?q={encoded}&quotesCount=12&newsCount=0"
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        }
-        try:
-            req = urllib.request.Request(search_url, headers=headers)
-            with urllib.request.urlopen(req, timeout=2.5) as response:
-                raw_data = json.loads(response.read().decode("utf-8"))
-                quotes = raw_data.get("quotes", [])
-                for q in quotes:
-                    full_sym = q.get("symbol", "")
-                    exch = (q.get("exchange") or "").upper()
-                    qtype = (q.get("quoteType") or "").upper()
+        cache_k = q_lower
+        now_ts = time.time()
+        remote_hits: List[Dict[str, Any]] = []
+        cache_hit = False
+        with _REMOTE_SEARCH_LOCK:
+            cached = _REMOTE_SEARCH_CACHE.get(cache_k)
+            if cached and (now_ts - cached[0]) < _REMOTE_SEARCH_TTL:
+                remote_hits = cached[1]
+                cache_hit = True
 
-                    is_indian = (
-                        full_sym.endswith(".NS")
-                        or full_sym.endswith(".BO")
-                        or exch in ("NSI", "NSE", "BSE")
-                    )
-                    if not is_indian and qtype != "EQUITY":
-                        continue
+        if not cache_hit:
+            encoded = urllib.parse.quote(clean_query)
+            search_url = f"https://query2.finance.yahoo.com/v1/finance/search?q={encoded}&quotesCount=12&newsCount=0"
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
+            try:
+                req = urllib.request.Request(search_url, headers=headers)
+                with urllib.request.urlopen(req, timeout=1.2) as response:
+                    raw_data = json.loads(response.read().decode("utf-8"))
+                    for q in raw_data.get("quotes", []):
+                        full_sym = q.get("symbol", "")
+                        exch = (q.get("exchange") or "").upper()
+                        qtype = (q.get("quoteType") or "").upper()
 
-                    clean_sym = full_sym.replace(".NS", "").replace(".BO", "").upper().strip()
-                    if not clean_sym or clean_sym in seen_tickers:
-                        continue
-                    seen_tickers.add(clean_sym)
+                        is_indian = (
+                            full_sym.endswith(".NS")
+                            or full_sym.endswith(".BO")
+                            or exch in ("NSI", "NSE", "BSE")
+                        )
+                        if not is_indian and qtype != "EQUITY":
+                            continue
 
-                    name = q.get("shortname") or q.get("longname") or clean_sym
-                    sector = q.get("sector") or q.get("industry") or "Indian Equities"
-                    exchange = "NSE" if (full_sym.endswith(".NS") or exch in ("NSI", "NSE")) else ("BSE" if full_sym.endswith(".BO") or exch == "BSE" else "NSE")
+                        clean_sym = full_sym.replace(".NS", "").replace(".BO", "").upper().strip()
+                        if not clean_sym:
+                            continue
+                        name = q.get("shortname") or q.get("longname") or clean_sym
+                        sector = q.get("sector") or q.get("industry") or "Indian Equities"
+                        exchange = "NSE" if (full_sym.endswith(".NS") or exch in ("NSI", "NSE")) else ("BSE" if full_sym.endswith(".BO") or exch == "BSE" else "NSE")
 
-                    results.append({
-                        "symbol": clean_sym,
-                        "name": name,
-                        "sector": sector,
-                        "exchange": exchange,
-                        "yahoo_ticker": full_sym,
-                        "is_added": clean_sym in existing_symbols,
-                        "source": "Yahoo Finance Live Feed",
-                    })
-                    if len(results) >= limit:
-                        break
-        except Exception:
-            pass
+                        remote_hits.append({
+                            "symbol": clean_sym,
+                            "name": name,
+                            "sector": sector,
+                            "exchange": exchange,
+                            "yahoo_ticker": full_sym,
+                            "source": "Yahoo Finance Live Feed",
+                        })
+            except Exception:
+                remote_hits = []
+            with _REMOTE_SEARCH_LOCK:
+                if len(_REMOTE_SEARCH_CACHE) > 256:
+                    _REMOTE_SEARCH_CACHE.clear()
+                _REMOTE_SEARCH_CACHE[cache_k] = (now_ts, remote_hits)
+
+        for rh in remote_hits:
+            clean_sym = rh["symbol"]
+            if clean_sym in seen_tickers:
+                continue
+            seen_tickers.add(clean_sym)
+            results.append({
+                **rh,
+                "is_added": clean_sym in existing_symbols,
+            })
+            if len(results) >= limit:
+                break
 
     # If the user typed a valid custom ticker directly that wasn't in the catalog, offer direct entry
     direct_sym = q_upper
@@ -252,7 +277,8 @@ def add_symbol_to_json(
     sector: str = "",
     exchange: str = "NSE",
     symbols_file: str = SYMBOLS_FILE_PATH,
-    db_path: str = CACHE_DB_PATH
+    db_path: str = CACHE_DB_PATH,
+    queue_manager=None,
 ) -> Dict[str, Any]:
     """
     Appends a new verified stock symbol into symbols.json and registers it in the SQLite queue.
@@ -303,9 +329,12 @@ def add_symbol_to_json(
 
     # Register in Valkey queue if available, otherwise fallback to SQLite queue
     try:
-        from storage.queue_manager import ValkeyQueueManager
-        qm = ValkeyQueueManager(db_path=db_path)
-        qm.enqueue_symbols([new_stock], force=False)
+        if queue_manager is not None:
+            queue_manager.enqueue_symbols([new_stock], force=False)
+        else:
+            from storage.queue_manager import ValkeyQueueManager
+            qm = ValkeyQueueManager(db_path=db_path)
+            qm.enqueue_symbols([new_stock], force=False)
     except Exception as e:
         print(f"Notice: Could not insert {clean_sym} into queue: {e}")
 

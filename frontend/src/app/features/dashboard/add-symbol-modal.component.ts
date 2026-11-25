@@ -992,7 +992,7 @@ export class AddSymbolModalComponent implements OnInit, AfterViewInit, OnDestroy
         this.feedbackMsg.set(res?.message || `✅ Added ${symbol} (${name}) to Watchlist!`);
       }
 
-      await stocksStore.loadUniverse(stocksStore.activeUniverse());
+      void stocksStore.loadUniverse(stocksStore.activeUniverse());
     } catch (err: any) {
       this.feedbackType.set('error');
       this.feedbackMsg.set(`❌ Could not add ${symbol}: ${err?.message || err}`);
@@ -1012,7 +1012,7 @@ export class AddSymbolModalComponent implements OnInit, AfterViewInit, OnDestroy
       this.results.set(updatedList);
       this.feedbackType.set('info');
       this.feedbackMsg.set(`Removed ${item.symbol} from Curated Watchlist.`);
-      await stocksStore.loadUniverse(stocksStore.activeUniverse());
+      void stocksStore.loadUniverse(stocksStore.activeUniverse());
     } catch (err: any) {
       this.feedbackType.set('error');
       this.feedbackMsg.set(`❌ Could not remove ${item.symbol}: ${err?.message || err}`);

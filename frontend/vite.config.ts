@@ -7,7 +7,7 @@ export default defineConfig({
     port: 4200,
     proxy: {
       '/api': {
-        target: 'http://localhost:8765',
+        target: 'http://127.0.0.1:8765',
         changeOrigin: true,
         secure: false,
         // No WebSocket proxy for standard API calls
@@ -15,13 +15,13 @@ export default defineConfig({
         timeout: 30000
       },
       '/news_reports': {
-        target: 'http://localhost:8765',
+        target: 'http://127.0.0.1:8765',
         changeOrigin: true,
         secure: false,
         timeout: 30000
       },
       '/reports': {
-        target: 'http://localhost:8765',
+        target: 'http://127.0.0.1:8765',
         changeOrigin: true,
         secure: false,
         timeout: 30000
