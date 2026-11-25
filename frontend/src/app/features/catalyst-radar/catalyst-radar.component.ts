@@ -108,7 +108,7 @@ import { stocksStore } from '../../core/stores/stocks.store';
     </div>
   `,
   styles: [`
-    .cat-page { padding: 18px 24px; color: #e2e8f0; max-width: 1440px; margin: 0 auto; }
+    .cat-page { padding: 18px 24px; color: #e2e8f0; width: 100%; box-sizing: border-box; }
     .cat-hero {
       display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 14px;
       background: rgba(15, 23, 42, 0.72); border: 1px solid rgba(56, 189, 248, 0.2);
@@ -175,6 +175,45 @@ import { stocksStore } from '../../core/stores/stocks.store';
     .breakdown-row { display: flex; gap: 8px; flex-wrap: wrap; font-size: 0.68rem; color: #94a3b8; margin-bottom: 6px; }
     .pb-signals { display: flex; gap: 4px; flex-wrap: wrap; }
     .sig-chip { font-size: 0.65rem; background: rgba(56, 189, 248, 0.12); color: #7dd3fc; padding: 2px 6px; border-radius: 4px; }
+
+    :host-context([data-theme='light']) .cat-page { color: #0f172a; }
+    :host-context([data-theme='light']) .cat-hero,
+    :host-context([data-theme='light']) .tester-card,
+    :host-context([data-theme='light']) .ev-card,
+    :host-context([data-theme='light']) .empty-box {
+      background: #ffffff;
+      border-color: #cbd5e1;
+      box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+    }
+    :host-context([data-theme='light']) .hero-title,
+    :host-context([data-theme='light']) .ev-title { color: #0f172a; }
+    :host-context([data-theme='light']) .hero-sub,
+    :host-context([data-theme='light']) .tester-title,
+    :host-context([data-theme='light']) .ev-meta,
+    :host-context([data-theme='light']) .ev-cat-row,
+    :host-context([data-theme='light']) .breakdown-row { color: #475569; }
+    :host-context([data-theme='light']) .inp {
+      background: #f8fafc;
+      border-color: #cbd5e1;
+      color: #0f172a;
+    }
+    :host-context([data-theme='light']) .tab-btn {
+      background: #f8fafc;
+      border-color: #cbd5e1;
+      color: #475569;
+    }
+    :host-context([data-theme='light']) .tab-btn.active {
+      background: #e0f2fe;
+      border-color: #0284c7;
+      color: #0369a1;
+    }
+    :host-context([data-theme='light']) .ev-sym { color: #0284c7; }
+    :host-context([data-theme='light']) .src-badge,
+    :host-context([data-theme='light']) .sig-chip { background: #e0f2fe; color: #0369a1; }
+    :host-context([data-theme='light']) .bt-card { background: #ecfdf5; border-color: #10b981; }
+    :host-context([data-theme='light']) .bt-head { color: #047857; }
+    :host-context([data-theme='light']) .bt-metrics { color: #1e293b; }
+    :host-context([data-theme='light']) .btn-secondary { background: #e0f2fe; border-color: #38bdf8; color: #0369a1; }
   `]
 })
 export class CatalystRadarComponent implements OnInit {

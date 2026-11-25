@@ -13,7 +13,6 @@
   },
   "private": true,
   "dependencies": {
-    "tslib": "^2.6.2",
     "@angular/animations": "^22.0.0",
     "@angular/cdk": "^22.2.6",
     "@angular/common": "^22.0.0",
@@ -26,7 +25,9 @@
     "@fontsource/inter": "^5.0.0",
     "@fontsource/jetbrains-mono": "^5.0.0",
     "@fontsource/outfit": "^5.0.0",
+    "@tanstack/angular-table": "^9.3.2",
     "rxjs": "^7.8.0",
+    "tslib": "^2.6.2",
     "zone.js": "^0.15.0"
   },
   "devDependencies": {
@@ -40,4 +41,3 @@
     "vitest": "^2.1.0"
   }
 }
-

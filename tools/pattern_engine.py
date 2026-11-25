@@ -40,6 +40,11 @@ def compute_pattern_projection(
     ret_10d: Optional[float] = None,
     sma_50: Optional[float] = None,
     symbol: str = "",
+    daily_close: Optional[float] = None,
+    prev_close: Optional[float] = None,
+    curr_low: Optional[float] = None,
+    market_ok: Optional[bool] = None,
+    sector_ok: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """
     Computes deterministic pre-breakout lifecycle stage, anti-chasing flags,
@@ -63,6 +68,11 @@ def compute_pattern_projection(
             "readiness_score": 0,
             "projection_summary": "",
             "forming_evidence": [],
+            "confirmation_status": "N/A",
+            "daily_close_confirmed": False,
+            "volume_confirmed": False,
+            "retest_hold_confirmed": False,
+            "regime_ok": None,
         }
 
     p_name = str(pattern.get("name", "Bullish Pattern"))
@@ -191,11 +201,62 @@ def compute_pattern_projection(
         readiness += 6
     elif projected_rr < 1.3:
         readiness -= 10
+
+    # 4-Condition Breakout Confirmation Checks:
+    # 1) Daily candle close above trigger (vs intraday cross)
+    eff_daily_close = float(daily_close) if (daily_close is not None and daily_close > 0) else float(curr_close)
+    daily_close_confirmed = eff_daily_close >= trigger
+    intraday_only_cross = (curr_close >= trigger) and (not daily_close_confirmed)
+    if intraday_only_cross and setup_stage == "FRESH_BREAKOUT":
+        entry_window = "Await Daily Close"
+
+    # 2) Volume >= 1.5x 20-day average
+    volume_confirmed = (rvol is not None and rvol >= 1.5)
+    if setup_stage == "FRESH_BREAKOUT":
+        if volume_confirmed:
+            readiness += 6
+        elif rvol is not None and rvol < 1.2:
+            readiness -= 6
+    elif volume_confirmed:
+        readiness += 4
+
+    # 3) Next-session hold above trigger or successful retest
+    prev_broke = prev_close is not None and prev_close > trigger
+    held_above = curr_close >= trigger
+    retested_pivot = prev_broke and curr_low is not None and curr_low <= trigger * 1.015 and held_above
+    two_day_hold = prev_broke and held_above
+    retest_hold_confirmed = bool(retested_pivot or two_day_hold)
+    if retest_hold_confirmed:
+        readiness += 6
+
+    if retested_pivot:
+        confirmation_status = "RETEST_HOLD"
+    elif two_day_hold:
+        confirmation_status = "TWO_DAY_HOLD"
+    elif daily_close_confirmed and volume_confirmed:
+        confirmation_status = "CLOSE_VOL_CONFIRMED"
+    elif daily_close_confirmed:
+        confirmation_status = "CLOSE_ONLY"
+    elif intraday_only_cross:
+        confirmation_status = "INTRADAY_CROSS"
+    else:
+        confirmation_status = "PRE_BREAKOUT"
+
+    # 4) Broader market & sector regime
+    if market_ok is None and sector_ok is None:
+        regime_ok: Optional[bool] = None
+    else:
+        regime_ok = (market_ok is not False) and (sector_ok is not False)
+        if not regime_ok:
+            readiness -= 6
+
     readiness = max(0, min(100, readiness))
 
     forming_evidence: List[str] = []
     if dist_pct > 0:
         forming_evidence.append(f"{dist_pct:.1f}% below trigger Rs.{trigger:.2f}")
+    elif intraday_only_cross:
+        forming_evidence.append(f"Intraday > Rs.{trigger:.2f} (await close)")
     elif dist_pct >= -2.5:
         forming_evidence.append(f"At pivot Rs.{trigger:.2f} ({abs(dist_pct):.1f}% above)")
     else:
@@ -206,10 +267,18 @@ def compute_pattern_projection(
             forming_evidence.append(f"RSI {rsi_14:.1f} (room to run)")
         else:
             forming_evidence.append(f"RSI {rsi_14:.1f} (stretched)")
-    if ud_ratio is not None and ud_ratio >= 1.15:
+    if volume_confirmed and rvol is not None:
+        forming_evidence.append(f"Vol {rvol:.2f}x (>=1.5x)")
+    elif ud_ratio is not None and ud_ratio >= 1.15:
         forming_evidence.append(f"20D U/D vol {ud_ratio:.2f}x accumulation")
     elif rvol is not None and rvol >= 1.2:
         forming_evidence.append(f"RVOL {rvol:.2f}x")
+    if retested_pivot:
+        forming_evidence.append("Retest & hold > pivot")
+    elif two_day_hold:
+        forming_evidence.append("2D hold > pivot")
+    if regime_ok is False:
+        forming_evidence.append("Weak market/sector")
     forming_evidence.append(f"R:R {projected_rr:.1f}x")
 
     sym_lbl = f"{symbol} is " if symbol else "Stock is "
@@ -258,7 +327,12 @@ def compute_pattern_projection(
         "projected_rr": projected_rr,
         "readiness_score": readiness,
         "projection_summary": summary,
-        "forming_evidence": forming_evidence[:4],
+        "forming_evidence": forming_evidence[:5],
+        "confirmation_status": confirmation_status,
+        "daily_close_confirmed": daily_close_confirmed,
+        "volume_confirmed": volume_confirmed,
+        "retest_hold_confirmed": retest_hold_confirmed,
+        "regime_ok": regime_ok,
     }
 
 
@@ -306,6 +380,10 @@ def enrich_patterns_with_projections(
     if len(closes) >= 11 and float(closes.iloc[-11]) > 0:
         ret_10d = ((curr_close - float(closes.iloc[-11])) / float(closes.iloc[-11])) * 100.0
 
+    daily_close = float(closes.iloc[-1]) if len(closes) >= 1 else None
+    prev_close = float(closes.iloc[-2]) if len(closes) >= 2 else None
+    curr_low = float(df["LOW_PRICE"].iloc[-1]) if ("LOW_PRICE" in df and len(df) >= 1 and pd.notna(df["LOW_PRICE"].iloc[-1])) else None
+
     for p in patterns:
         proj = compute_pattern_projection(
             p,
@@ -317,6 +395,9 @@ def enrich_patterns_with_projections(
             ret_10d=ret_10d,
             sma_50=sma_50,
             symbol=symbol,
+            daily_close=daily_close,
+            prev_close=prev_close,
+            curr_low=curr_low,
         )
         p.update(proj)
     return patterns

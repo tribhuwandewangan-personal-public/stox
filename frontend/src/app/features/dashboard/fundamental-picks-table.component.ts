@@ -3,10 +3,11 @@
  * Direct parity with Jinja fundPicksBanner (Image 2).
  */
 
-import { Component, effect, signal } from '@angular/core';
+import { Component, TemplateRef, ViewChild, computed, effect, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { stocksStore } from '../../core/stores/stocks.store';
 import { ApiService } from '../../core/services/api.service';
+import { StoxGridComponent, StoxGridColumn } from '../../shared/data-grid/stox-grid.component';
 
 interface FundPickRow {
   symbol: string;
@@ -14,231 +15,92 @@ interface FundPickRow {
   sector: string;
   ltp: number | null;
   peg: string;
+  peg_num: number;
   intrinsic_value: string;
   margin_of_safety: number | null;
   valuation: string;
   pct_52w: string;
+  pct_52w_num: number;
   inst_flow: string;
+  inst_flow_num: number;
   lt_rating: string;
 }
 
 @Component({
   selector: 'app-fundamental-picks-table',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, StoxGridComponent],
   template: `
-    <div class="fp-wrapper" *ngIf="picks().length">
-      <div class="fp-card">
-        <div class="fp-header">
-          <div class="fp-title-block">
-            <span class="fp-icon">🏛️</span>
+    <div class="stox-banner-wrap" *ngIf="picks().length">
+      <div class="stox-banner-card stox-banner-card--emerald">
+        <div class="stox-banner-header">
+          <div class="stox-banner-title-block">
+            <span class="stox-banner-icon accent-green">🏛️</span>
             <div>
-              <div class="fp-heading">Top 10 Fundamental Picks — Right Time to Buy</div>
-              <div class="fp-sub">Long-term compounders at the right valuation &amp; technical entry &bull; Scored on 8 dimensions &bull; Accumulate in tranches</div>
+              <div class="stox-banner-heading">Top 10 Fundamental Picks — Right Time to Buy</div>
+              <div class="stox-banner-sub">Long-term compounders at the right valuation &amp; technical entry &bull; Scored on 8 dimensions &bull; Accumulate in tranches</div>
             </div>
           </div>
-          <button class="fp-toggle-btn" (click)="collapsed.update(v => !v)">
+          <button class="stox-banner-toggle stox-banner-toggle--emerald" (click)="collapsed.update(v => !v)">
             {{ collapsed() ? '▼ Show' : '▲ Hide' }}
           </button>
         </div>
 
-        <div class="fp-body" *ngIf="!collapsed()">
-          <div class="table-wrap">
-            <table class="fp-table">
-              <thead>
-                <tr>
-                  <th class="col-num">#</th>
-                  <th>SYMBOL</th>
-                  <th>SCORE</th>
-                  <th>SECTOR</th>
-                  <th>LTP</th>
-                  <th>PEG</th>
-                  <th>INTRINSIC VALUE</th>
-                  <th>VALUATION</th>
-                  <th>% FROM 52W HIGH</th>
-                  <th>INST. FLOW</th>
-                  <th>LT RATING</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (p of picks(); track p.symbol; let i = $index) {
-                  <tr (click)="onSelect(p.symbol)">
-                    <td class="col-num">{{ i + 1 }}</td>
-                    <td class="col-sym">
-                      <button class="sym-pill">{{ p.symbol }} ↗</button>
-                    </td>
-                    <td>
-                      <span class="score-pill" [class.high-score]="p.score >= 75">{{ p.score }}</span>
-                    </td>
-                    <td class="col-sec">{{ p.sector }}</td>
-                    <td class="col-mono">{{ p.ltp != null ? ('Rs. ' + (p.ltp | number:'1.2-2')) : 'N/A' }}</td>
-                    <td class="col-mono">{{ p.peg }}</td>
-                    <td class="col-mono">
-                      <span>{{ p.intrinsic_value }}</span>
-                      <small *ngIf="p.margin_of_safety !== null" [style.color]="p.margin_of_safety >= 0 ? '#34d399' : '#f87171'" style="margin-left: 4px; font-weight: 600;">
-                        ({{ p.margin_of_safety > 0 ? '+' : '' }}{{ p.margin_of_safety.toFixed(0) }}%)
-                      </small>
-                    </td>
-                    <td>
-                      <span class="val-pill" [class.undervalued]="p.valuation.includes('Undervalued')">{{ p.valuation }}</span>
-                    </td>
-                    <td class="col-mono accent-blue">{{ p.pct_52w }}</td>
-                    <td class="accent-green bold">{{ p.inst_flow }}</td>
-                    <td class="accent-green font-medium">{{ p.lt_rating }}</td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          </div>
+        <div class="stox-banner-body" *ngIf="!collapsed()">
+          <app-stox-grid
+            [data]="picks()"
+            [columns]="gridColumns()"
+            (rowClick)="onSelect($event.symbol)"
+          ></app-stox-grid>
         </div>
       </div>
     </div>
+
+    <ng-template #fpIdxTpl let-i="index"><span class="col-num">{{ i + 1 }}</span></ng-template>
+    <ng-template #fpSymTpl let-p><button class="sym-pill sym-pill--green">{{ p.symbol }} ↗</button></ng-template>
+    <ng-template #fpScoreTpl let-p><span class="score-pill" [class.high-score]="p.score >= 75">{{ p.score }}</span></ng-template>
+    <ng-template #fpLtpTpl let-p><span class="col-mono">{{ p.ltp != null ? ('Rs. ' + (p.ltp | number:'1.2-2')) : 'N/A' }}</span></ng-template>
+    <ng-template #fpIvTpl let-p>
+      <span class="col-mono">{{ p.intrinsic_value }}</span>
+      <small *ngIf="p.margin_of_safety !== null" [class]="p.margin_of_safety >= 0 ? 'accent-green bold' : 'accent-red bold'" style="margin-left: 4px;">
+        ({{ p.margin_of_safety > 0 ? '+' : '' }}{{ p.margin_of_safety.toFixed(0) }}%)
+      </small>
+    </ng-template>
+    <ng-template #fpValTpl let-p><span class="val-pill" [class.undervalued]="p.valuation.includes('Undervalued')">{{ p.valuation }}</span></ng-template>
+    <ng-template #fp52Tpl let-p><span class="col-mono accent-blue">{{ p.pct_52w }}</span></ng-template>
+    <ng-template #fpFlowTpl let-p><span class="accent-green bold">{{ p.inst_flow }}</span></ng-template>
+    <ng-template #fpRatTpl let-p><span class="accent-green font-medium">{{ p.lt_rating }}</span></ng-template>
   `,
-  styles: [`
-    .fp-wrapper {
-      padding: 12px 20px 0 20px;
-    }
-
-    .fp-card {
-      background: rgba(18, 26, 43, 0.7);
-      border: 1px solid rgba(16, 185, 129, 0.25);
-      border-radius: 12px;
-      padding: 14px 18px;
-      backdrop-filter: blur(12px);
-    }
-
-    .fp-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .fp-title-block {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .fp-icon {
-      font-size: 1.4rem;
-      color: #10b981;
-    }
-
-    .fp-heading {
-      font-family: 'Outfit', sans-serif;
-      font-size: 0.95rem;
-      font-weight: 700;
-      color: #fff;
-    }
-
-    .fp-sub {
-      font-size: 0.72rem;
-      color: #94a3b8;
-    }
-
-    .fp-toggle-btn {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      color: #10b981;
-      padding: 4px 10px;
-      border-radius: 6px;
-      font-size: 0.75rem;
-      font-weight: 600;
-      cursor: pointer;
-    }
-
-    .fp-body {
-      margin-top: 12px;
-    }
-
-    .table-wrap {
-      overflow-x: auto;
-    }
-
-    .fp-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.78rem;
-    }
-
-    .fp-table th {
-      text-align: left;
-      padding: 8px 10px;
-      color: #64748b;
-      font-size: 0.68rem;
-      font-weight: 700;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      white-space: nowrap;
-    }
-
-    .fp-table td {
-      padding: 9px 10px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-      vertical-align: middle;
-      color: #e2e8f0;
-    }
-    .fp-table tr:hover td {
-      background: rgba(16, 185, 129, 0.05);
-      cursor: pointer;
-    }
-
-    .col-num { color: #64748b; width: 30px; }
-    .col-mono { font-family: 'JetBrains Mono', monospace; white-space: nowrap; }
-    .col-sec { color: #94a3b8; font-size: 0.74rem; }
-
-    .sym-pill {
-      background: rgba(16, 185, 129, 0.12);
-      border: 1px solid rgba(16, 185, 129, 0.3);
-      color: #34d399;
-      padding: 3px 8px;
-      border-radius: 6px;
-      font-weight: 700;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.75rem;
-      cursor: pointer;
-    }
-
-    .score-pill {
-      background: rgba(56, 189, 248, 0.15);
-      color: #38bdf8;
-      border: 1px solid rgba(56, 189, 248, 0.3);
-      padding: 2px 7px;
-      border-radius: 8px;
-      font-weight: 700;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.72rem;
-    }
-    .score-pill.high-score {
-      background: rgba(16, 185, 129, 0.18);
-      color: #34d399;
-      border-color: rgba(16, 185, 129, 0.35);
-    }
-
-    .val-pill {
-      font-size: 0.72rem;
-      color: #cbd5e1;
-    }
-    .val-pill.undervalued {
-      color: #34d399;
-      font-weight: 600;
-    }
-
-    .accent-blue  { color: #38bdf8; }
-    .accent-green { color: #10b981; }
-    .bold { font-weight: 700; }
-    .font-medium { font-size: 0.72rem; }
-
-    @media (max-width: 768px) {
-      .fp-wrapper { padding: 8px 12px 0 12px; }
-    }
-  `]
 })
 export class FundamentalPicksTableComponent {
   stocksStore = stocksStore;
   collapsed = signal(false);
   picks = signal<FundPickRow[]>([]);
   private fetchSeq = 0;
+
+  @ViewChild('fpIdxTpl', { static: true }) fpIdxTpl!: TemplateRef<any>;
+  @ViewChild('fpSymTpl', { static: true }) fpSymTpl!: TemplateRef<any>;
+  @ViewChild('fpScoreTpl', { static: true }) fpScoreTpl!: TemplateRef<any>;
+  @ViewChild('fpLtpTpl', { static: true }) fpLtpTpl!: TemplateRef<any>;
+  @ViewChild('fpIvTpl', { static: true }) fpIvTpl!: TemplateRef<any>;
+  @ViewChild('fpValTpl', { static: true }) fpValTpl!: TemplateRef<any>;
+  @ViewChild('fp52Tpl', { static: true }) fp52Tpl!: TemplateRef<any>;
+  @ViewChild('fpFlowTpl', { static: true }) fpFlowTpl!: TemplateRef<any>;
+  @ViewChild('fpRatTpl', { static: true }) fpRatTpl!: TemplateRef<any>;
+
+  gridColumns = computed<StoxGridColumn<FundPickRow>[]>(() => [
+    { id: 'idx', header: '#', sortable: false, cellTemplate: this.fpIdxTpl, cellClass: 'col-num' },
+    { id: 'symbol', header: 'Symbol', accessorFn: r => r.symbol, cellTemplate: this.fpSymTpl },
+    { id: 'score', header: 'Score', accessorFn: r => r.score, cellTemplate: this.fpScoreTpl },
+    { id: 'sector', header: 'Sector', accessorFn: r => r.sector, cellClass: 'col-muted' },
+    { id: 'ltp', header: 'LTP', accessorFn: r => r.ltp ?? 0, cellTemplate: this.fpLtpTpl, cellClass: 'col-mono' },
+    { id: 'peg', header: 'PEG', accessorFn: r => r.peg_num, cellClass: 'col-mono' },
+    { id: 'intrinsic_value', header: 'Intrinsic Value', accessorFn: r => r.margin_of_safety ?? -999, cellTemplate: this.fpIvTpl, cellClass: 'col-mono' },
+    { id: 'valuation', header: 'Valuation', accessorFn: r => r.valuation, cellTemplate: this.fpValTpl },
+    { id: 'pct_52w', header: '% From 52W High', accessorFn: r => r.pct_52w_num, cellTemplate: this.fp52Tpl, cellClass: 'col-mono' },
+    { id: 'inst_flow', header: 'Inst. Flow', accessorFn: r => r.inst_flow_num, cellTemplate: this.fpFlowTpl },
+    { id: 'lt_rating', header: 'LT Rating', accessorFn: r => r.lt_rating, cellTemplate: this.fpRatTpl },
+  ]);
 
   constructor() {
     effect(() => {
@@ -259,6 +121,7 @@ export class FundamentalPicksTableComponent {
         const ltp = typeof p.last_price === 'number' && Number.isFinite(p.last_price) && p.last_price > 0
           ? p.last_price
           : null;
+        const pegNum = typeof p.peg === 'number' && Number.isFinite(p.peg) ? p.peg : 999;
         const pegVal = typeof p.peg === 'number' && Number.isFinite(p.peg)
           ? `${p.peg.toFixed(2)}x`
           : 'N/A';
@@ -268,9 +131,11 @@ export class FundamentalPicksTableComponent {
         const mosVal = typeof p.margin_of_safety_pct === 'number' && Number.isFinite(p.margin_of_safety_pct)
           ? p.margin_of_safety_pct
           : null;
+        const pct52Num = typeof p.pct52w === 'number' && Number.isFinite(p.pct52w) ? p.pct52w : -999;
         const pct52 = typeof p.pct52w === 'number' && Number.isFinite(p.pct52w)
           ? `${p.pct52w > 0 ? '+' : ''}${p.pct52w.toFixed(1)}%`
           : '—';
+        const flowNum = typeof p.ud_ratio === 'number' && Number.isFinite(p.ud_ratio) ? p.ud_ratio : -999;
         const flow = typeof p.ud_ratio === 'number' && Number.isFinite(p.ud_ratio)
           ? `${p.ud_ratio.toFixed(2)}x`
           : '—';
@@ -280,11 +145,14 @@ export class FundamentalPicksTableComponent {
           sector: String(p.sector || '—'),
           ltp,
           peg: pegVal,
+          peg_num: pegNum,
           intrinsic_value: ivVal,
           margin_of_safety: mosVal,
           valuation: String(p.valuation || 'N/A'),
           pct_52w: pct52,
+          pct_52w_num: pct52Num,
           inst_flow: flow,
+          inst_flow_num: flowNum,
           lt_rating: String(p.lt_verdict || '—'),
         };
       }));

@@ -30,6 +30,8 @@ DASHBOARD_HOST = os.getenv("DASHBOARD_HOST", "127.0.0.1")                    # l
 QUOTE_SOURCES = os.getenv("QUOTE_SOURCES", "kite,yahoo")                     # provider order; yahoo is always the last resort
 QUOTE_POLL_SECONDS = int(os.getenv("QUOTE_POLL_SECONDS", "300"))             # live quote refresh during market hours
 AUTO_SCHEDULE = os.getenv("AUTO_SCHEDULE", "0").lower() in ("1", "true", "yes")  # opt-in pre-market refresh + post-close analysis
+CATALYST_AUTO_SCAN = os.getenv("CATALYST_AUTO_SCAN", "0").lower() in ("1", "true", "yes")  # scheduled NSE/BSE/PIB catalyst scan
+CATALYST_POLL_SECONDS = int(os.getenv("CATALYST_POLL_SECONDS", "900"))  # 15 min default catalyst polling interval
 
 # Target Symbols Config Files
 SYMBOLS_FILE_PATH = os.path.join(os.path.dirname(__file__), "symbols.json")

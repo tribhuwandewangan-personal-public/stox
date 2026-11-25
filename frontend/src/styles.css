@@ -1,3 +1,5 @@
+@import './app/shared/data-grid/stox-grid.css';
+
 /**
  * Global styles for NSE Stock Predictor.
  * Dark theme with accent colors matching the legacy UI.
@@ -343,7 +345,7 @@ pre code {
   color: #0f172a !important;
 }
 
-/* Dashboard Cards, Tables, Quick Picks & Screener */
+/* Dashboard Cards, Tables & Screener */
 :root[data-theme='light'] .grid-header,
 :root[data-theme='light'] .filter-bar,
 :root[data-theme='light'] .table-wrapper,
@@ -362,30 +364,6 @@ pre code {
   box-shadow: 0 6px 18px rgba(2, 132, 199, 0.1) !important;
 }
 
-:root[data-theme='light'] .stocks-table thead th,
-:root[data-theme='light'] .pattern-table thead th,
-:root[data-theme='light'] .picks-table thead th {
-  background: #f8fafc !important;
-  color: #475569 !important;
-  border-bottom-color: rgba(15, 23, 42, 0.1) !important;
-}
-
-:root[data-theme='light'] .table-row,
-:root[data-theme='light'] .pattern-row,
-:root[data-theme='light'] .picks-table tbody tr {
-  border-bottom-color: rgba(15, 23, 42, 0.06) !important;
-}
-
-:root[data-theme='light'] .table-row:hover,
-:root[data-theme='light'] .pattern-row:hover,
-:root[data-theme='light'] .picks-table tbody tr:hover {
-  background: #f8fafc !important;
-}
-
-:root[data-theme='light'] .symbol-ticker,
-:root[data-theme='light'] .stock-name,
-:root[data-theme='light'] .ltp-val,
-:root[data-theme='light'] .pattern-name,
 :root[data-theme='light'] .stock-symbol,
 :root[data-theme='light'] .card-price {
   color: #0f172a !important;
@@ -487,70 +465,6 @@ pre code {
 :root[data-theme='light'] .event-item-name    { color: #0f172a !important; }
 :root[data-theme='light'] .event-item-sectors { color: #64748b !important; }
 :root[data-theme='light'] .event-date-chip    { color: #0369a1 !important; }
-
-/* Quick Picks & Top 10 Fundamental Picks Cards/Tables */
-:root[data-theme='light'] .qp-card,
-:root[data-theme='light'] .fp-card {
-  background: #ffffff !important;
-  border: 1px solid rgba(15, 23, 42, 0.1) !important;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04) !important;
-}
-:root[data-theme='light'] .qp-heading,
-:root[data-theme='light'] .fp-heading { color: #0f172a !important; }
-:root[data-theme='light'] .qp-sub,
-:root[data-theme='light'] .fp-sub     { color: #475569 !important; }
-:root[data-theme='light'] .qp-toggle-btn,
-:root[data-theme='light'] .fp-toggle-btn {
-  background: #f1f5f9 !important;
-  color: #334155 !important;
-  border-color: rgba(15, 23, 42, 0.15) !important;
-}
-:root[data-theme='light'] .qp-table thead th,
-:root[data-theme='light'] .fp-table thead th {
-  background: #f8fafc !important;
-  color: #475569 !important;
-  border-bottom-color: rgba(15, 23, 42, 0.1) !important;
-}
-:root[data-theme='light'] .qp-table tbody td,
-:root[data-theme='light'] .fp-table tbody td {
-  color: #0f172a !important;
-  border-bottom-color: rgba(15, 23, 42, 0.06) !important;
-}
-:root[data-theme='light'] .qp-table tbody tr:hover,
-:root[data-theme='light'] .fp-table tbody tr:hover {
-  background: #f1f5f9 !important;
-}
-:root[data-theme='light'] .sym-pill {
-  background: #e0f2fe !important;
-  color: #0369a1 !important;
-  border-color: rgba(2, 132, 199, 0.3) !important;
-}
-:root[data-theme='light'] .rr-pill {
-  background: #dcfce7 !important;
-  color: #15803d !important;
-  border-color: rgba(21, 128, 61, 0.25) !important;
-}
-:root[data-theme='light'] .score-pill {
-  background: #f1f5f9 !important;
-  color: #334155 !important;
-}
-:root[data-theme='light'] .score-pill.high-score {
-  background: #e0f2fe !important;
-  color: #0369a1 !important;
-}
-:root[data-theme='light'] .val-pill {
-  background: #f1f5f9 !important;
-  color: #334155 !important;
-}
-:root[data-theme='light'] .val-pill.undervalued {
-  background: #dcfce7 !important;
-  color: #15803d !important;
-}
-:root[data-theme='light'] .col-sec,
-:root[data-theme='light'] .qp-tip { color: #64748b !important; }
-:root[data-theme='light'] .accent-green { color: #059669 !important; }
-:root[data-theme='light'] .accent-red   { color: #dc2626 !important; }
-:root[data-theme='light'] .accent-blue  { color: #0284c7 !important; }
 
 /* Sidebar Readability */
 :root[data-theme='light'] .stock-sym       { color: #0f172a !important; font-weight: 700 !important; }

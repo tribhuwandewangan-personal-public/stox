@@ -14,6 +14,7 @@ import { SectorResearchComponent } from '../sector-research/sector-research.comp
 import { CatalystRadarComponent } from '../catalyst-radar/catalyst-radar.component';
 import { PortfolioModalComponent } from '../dashboard/portfolio-modal.component';
 import { StockDetailModalComponent } from '../dashboard/stock-detail-modal.component';
+import { ActivityChatComponent } from './activity-chat.component';
 import { stocksStore } from '../../core/stores/stocks.store';
 
 @Component({
@@ -30,6 +31,7 @@ import { stocksStore } from '../../core/stores/stocks.store';
     CatalystRadarComponent,
     PortfolioModalComponent,
     StockDetailModalComponent,
+    ActivityChatComponent,
   ],
   template: `
     <div class="app-container">
@@ -66,6 +68,9 @@ import { stocksStore } from '../../core/stores/stocks.store';
 
       <!-- Stock Detail Modal (shared across Watchlist & Pattern Screener) -->
       <app-stock-detail-modal></app-stock-detail-modal>
+
+      <!-- Floating Live Tool Change Chat-Box -->
+      <app-activity-chat></app-activity-chat>
 
       <footer class="app-footer">
         <div class="footer-content">

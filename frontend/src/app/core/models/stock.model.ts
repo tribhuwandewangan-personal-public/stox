@@ -575,7 +575,13 @@ export interface PatternPick {
   readiness_score?: number;
   quality_score?: number;
   rsi_14?: number | null;
+  rvol?: number | null;
   up_down_vol_ratio?: number | null;
+  confirmation_status?: 'RETEST_HOLD' | 'TWO_DAY_HOLD' | 'CLOSE_VOL_CONFIRMED' | 'CLOSE_ONLY' | 'INTRADAY_CROSS' | 'PRE_BREAKOUT' | string;
+  daily_close_confirmed?: boolean;
+  volume_confirmed?: boolean;
+  retest_hold_confirmed?: boolean;
+  regime_ok?: boolean | null;
   projection_summary?: string;
   forming_evidence?: string[];
   sparkline: number[];

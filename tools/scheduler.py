@@ -115,6 +115,13 @@ class Scheduler:
         symbols = self.symbols_loader()
         with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
             list(pool.map(lambda s: news.fetch_stock_news(s["symbol"], s.get("name", ""), force_refresh=True), symbols))
+        try:
+            events_bus.publish("scheduler", {
+                "job": "premarket",
+                "message": f"Pre-market macro & news refresh completed for {len(symbols)} symbols.",
+            })
+        except Exception:
+            pass
 
     def run_postclose(self) -> None:
         symbols = self.symbols_loader()
@@ -147,3 +154,10 @@ class Scheduler:
         counts = resolve_open_predictions(self.cache)
         pruned = self.cache.prune_agent_runs(PRUNE_KEEP_DAYS)
         print(f"🗓️ [Scheduler] Post-close done. Predictions scored: {counts}; old agent rows pruned: {pruned}", flush=True)
+        try:
+            events_bus.publish("scheduler", {
+                "job": "postclose",
+                "message": f"Post-close sync & analysis finished for {len(symbols)} symbols.",
+            })
+        except Exception:
+            pass

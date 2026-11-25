@@ -4,9 +4,10 @@
  * and swing diagnostics, and forensic governance badges.
  */
 
-import { Component, EventEmitter, OnInit, Output, signal } from '@angular/core';
+import { Component, EventEmitter, OnInit, Output, TemplateRef, ViewChild, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
+import { StoxGridComponent, StoxGridColumn } from '../../shared/data-grid/stox-grid.component';
 
 interface PortfolioHolding {
   symbol: string;
@@ -39,7 +40,7 @@ interface PortfolioSummary {
 @Component({
   selector: 'app-portfolio-modal',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, StoxGridComponent],
   template: `
     <div class="modal-overlay" (click)="close.emit()">
       <div class="modal-card" (click)="$event.stopPropagation()">
@@ -81,48 +82,12 @@ interface PortfolioSummary {
         </div>
 
         <!-- Holdings Table -->
-        <div class="table-container" *ngIf="!loading() && holdings().length > 0">
-          <table class="portfolio-table">
-            <thead>
-              <tr>
-                <th>Symbol</th>
-                <th>Qty</th>
-                <th>Avg Price</th>
-                <th>LTP</th>
-                <th>Current Value</th>
-                <th>P&amp;L</th>
-                <th>Long-Term Strategy</th>
-                <th>Swing Action</th>
-                <th>Governance</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let h of holdings()">
-                <td>
-                  <b>{{ h.symbol }}</b>
-                  <div class="sub-text">{{ h.sector }}</div>
-                </td>
-                <td>{{ h.quantity }}</td>
-                <td>Rs. {{ h.average_price | number:'1.2-2' }}</td>
-                <td>Rs. {{ h.last_price | number:'1.2-2' }}</td>
-                <td>Rs. {{ h.current_value | number:'1.2-2' }}</td>
-                <td [style.color]="h.pnl >= 0 ? '#34d399' : '#f87171'">
-                  {{ h.pnl >= 0 ? '+' : '' }}Rs. {{ h.pnl | number:'1.2-2' }} ({{ h.pnl_pct }}%)
-                </td>
-                <td>
-                  <div class="action-pill lt-pill">{{ h.long_term_action }}</div>
-                </td>
-                <td>
-                  <div class="action-pill swing-pill">{{ h.swing_action }}</div>
-                </td>
-                <td>
-                  <span class="badge" [ngClass]="'badge-' + (h.governance_grade || 'sound').toLowerCase()">
-                    {{ h.governance_grade || 'SOUND' }}
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <div *ngIf="!loading() && holdings().length > 0">
+          <app-stox-grid
+            [data]="holdings()"
+            [columns]="gridColumns()"
+            [clickable]="false"
+          ></app-stox-grid>
         </div>
 
         <div class="empty-state" *ngIf="!loading() && holdings().length === 0">
@@ -131,6 +96,26 @@ interface PortfolioSummary {
 
       </div>
     </div>
+
+    <ng-template #pmSymTpl let-h>
+      <b>{{ h.symbol }}</b>
+      <div class="sub-text">{{ h.sector }}</div>
+    </ng-template>
+    <ng-template #pmAvgTpl let-h><span class="col-mono">Rs. {{ h.average_price | number:'1.2-2' }}</span></ng-template>
+    <ng-template #pmLtpTpl let-h><span class="col-mono">Rs. {{ h.last_price | number:'1.2-2' }}</span></ng-template>
+    <ng-template #pmValTpl let-h><span class="col-mono">Rs. {{ h.current_value | number:'1.2-2' }}</span></ng-template>
+    <ng-template #pmPnlTpl let-h>
+      <span class="col-mono bold" [class]="h.pnl >= 0 ? 'accent-green' : 'accent-red'">
+        {{ h.pnl >= 0 ? '+' : '' }}Rs. {{ h.pnl | number:'1.2-2' }} ({{ h.pnl_pct }}%)
+      </span>
+    </ng-template>
+    <ng-template #pmLtTpl let-h><div class="action-pill lt-pill">{{ h.long_term_action }}</div></ng-template>
+    <ng-template #pmSwingTpl let-h><div class="action-pill swing-pill">{{ h.swing_action }}</div></ng-template>
+    <ng-template #pmGovTpl let-h>
+      <span class="badge" [ngClass]="'badge-' + (h.governance_grade || 'sound').toLowerCase()">
+        {{ h.governance_grade || 'SOUND' }}
+      </span>
+    </ng-template>
   `,
   styles: [`
     .modal-overlay {
@@ -148,8 +133,8 @@ interface PortfolioSummary {
       background: #0f172a;
       border: 1px solid rgba(56, 189, 248, 0.35);
       border-radius: 16px;
-      width: 100%;
-      max-width: 1100px;
+      width: 96vw;
+      max-width: 1680px;
       max-height: 90vh;
       overflow-y: auto;
       padding: 24px 28px;
@@ -196,30 +181,6 @@ interface PortfolioSummary {
     .card-label { font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; }
     .card-val { font-size: 1.05rem; font-weight: 700; color: #f8fafc; }
 
-    .table-container {
-      overflow-x: auto;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 10px;
-    }
-    .portfolio-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.82rem;
-      color: #e2e8f0;
-    }
-    .portfolio-table th {
-      background: rgba(15, 23, 42, 0.95);
-      padding: 10px 12px;
-      text-align: left;
-      font-size: 0.75rem;
-      color: #94a3b8;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    }
-    .portfolio-table td {
-      padding: 10px 12px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-      vertical-align: middle;
-    }
     .sub-text { font-size: 0.72rem; color: #64748b; margin-top: 2px; }
 
     .action-pill {
@@ -247,6 +208,26 @@ interface PortfolioSummary {
       color: #94a3b8;
       font-size: 0.85rem;
     }
+
+    :host-context([data-theme='light']) .modal-overlay { background: rgba(15, 23, 42, 0.45); }
+    :host-context([data-theme='light']) .modal-card {
+      background: #ffffff;
+      border-color: #cbd5e1;
+      color: #0f172a;
+    }
+    :host-context([data-theme='light']) .modal-header { border-bottom-color: #e2e8f0; }
+    :host-context([data-theme='light']) .modal-title,
+    :host-context([data-theme='light']) .card-val { color: #0f172a; }
+    :host-context([data-theme='light']) .modal-sub,
+    :host-context([data-theme='light']) .card-label,
+    :host-context([data-theme='light']) .sub-text,
+    :host-context([data-theme='light']) .loading-state,
+    :host-context([data-theme='light']) .empty-state { color: #475569; }
+    :host-context([data-theme='light']) .close-btn { background: #f1f5f9; color: #334155; }
+    :host-context([data-theme='light']) .summary-card {
+      background: #f8fafc;
+      border-color: #e2e8f0;
+    }
   `]
 })
 export class PortfolioModalComponent implements OnInit {
@@ -255,6 +236,27 @@ export class PortfolioModalComponent implements OnInit {
   holdings = signal<PortfolioHolding[]>([]);
   summary = signal<PortfolioSummary | null>(null);
   loading = signal<boolean>(true);
+
+  @ViewChild('pmSymTpl', { static: true }) pmSymTpl!: TemplateRef<any>;
+  @ViewChild('pmAvgTpl', { static: true }) pmAvgTpl!: TemplateRef<any>;
+  @ViewChild('pmLtpTpl', { static: true }) pmLtpTpl!: TemplateRef<any>;
+  @ViewChild('pmValTpl', { static: true }) pmValTpl!: TemplateRef<any>;
+  @ViewChild('pmPnlTpl', { static: true }) pmPnlTpl!: TemplateRef<any>;
+  @ViewChild('pmLtTpl', { static: true }) pmLtTpl!: TemplateRef<any>;
+  @ViewChild('pmSwingTpl', { static: true }) pmSwingTpl!: TemplateRef<any>;
+  @ViewChild('pmGovTpl', { static: true }) pmGovTpl!: TemplateRef<any>;
+
+  gridColumns = computed<StoxGridColumn<PortfolioHolding>[]>(() => [
+    { id: 'symbol', header: 'Symbol', accessorFn: r => r.symbol, cellTemplate: this.pmSymTpl },
+    { id: 'quantity', header: 'Qty', accessorFn: r => r.quantity, cellClass: 'col-mono' },
+    { id: 'average_price', header: 'Avg Price', accessorFn: r => r.average_price, cellTemplate: this.pmAvgTpl, cellClass: 'col-mono' },
+    { id: 'last_price', header: 'LTP', accessorFn: r => r.last_price, cellTemplate: this.pmLtpTpl, cellClass: 'col-mono' },
+    { id: 'current_value', header: 'Current Value', accessorFn: r => r.current_value, cellTemplate: this.pmValTpl, cellClass: 'col-mono' },
+    { id: 'pnl', header: 'P&L', accessorFn: r => r.pnl, cellTemplate: this.pmPnlTpl, cellClass: 'col-mono' },
+    { id: 'long_term_action', header: 'Long-Term Strategy', accessorFn: r => r.long_term_action, cellTemplate: this.pmLtTpl },
+    { id: 'swing_action', header: 'Swing Action', accessorFn: r => r.swing_action, cellTemplate: this.pmSwingTpl },
+    { id: 'governance_grade', header: 'Governance', accessorFn: r => r.governance_grade, cellTemplate: this.pmGovTpl },
+  ]);
 
   constructor(private http: HttpClient) {}
 

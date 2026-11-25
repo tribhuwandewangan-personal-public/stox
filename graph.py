@@ -225,8 +225,33 @@ class MultiAgentWorkflow:
         if VERBOSE_LOGGING:
             safe_print(f"  └─ [Complete] Total multi-agent parallel runtime: {time.time()-start_time:.2f}s (Synthesis: {time.time()-t_synth:.2f}s)")
 
+        # Check previous verdict before overwriting cache so we can emit verdict-change alerts
+        prev_synth = self.cache_manager.get_latest_agent_output(symbol, "Master Prediction Synthesizer Agent", max_age_hours=720)
+        old_verdict = ((prev_synth or {}).get("structured_signal") or {}).get("action_verdict")
+        new_verdict = (final_synth.get("structured_signal") or {}).get("action_verdict")
+
         # Save Synthesizer output in incremental cache
         self.cache_manager.save_agent_output(symbol, "Master Prediction Synthesizer Agent", final_synth)
+
+        try:
+            from tools import events_bus
+            if old_verdict and new_verdict and old_verdict != new_verdict:
+                events_bus.publish("verdict_change", {
+                    "symbol": symbol,
+                    "old_verdict": old_verdict,
+                    "new_verdict": new_verdict,
+                    "price": final_synth.get("last_price"),
+                    "message": f"{symbol} verdict changed: {old_verdict} -> {new_verdict}",
+                })
+            elif new_verdict:
+                events_bus.publish("analysis_done", {
+                    "symbol": symbol,
+                    "verdict": new_verdict,
+                    "price": final_synth.get("last_price"),
+                    "message": f"{symbol} analyzed: {new_verdict} @ Rs.{final_synth.get('last_price')}",
+                })
+        except Exception:
+            pass
 
         # Record the call so it can be scored against what the stock actually did (tools/outcome_tracker.py)
         try:

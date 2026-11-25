@@ -41,3 +41,12 @@
   - Restart backend: `.\cleanup_server.ps1 -Restart`
   - Backend tests: `.\.venv\Scripts\python.exe -m unittest discover tests`
   - Frontend build: `cd frontend; npm run build`
+
+## Frontend Grid & Centralized Styling Context
+- **Shared Data Grid**: Use `<app-stox-grid>` (`frontend/src/app/shared/data-grid/stox-grid.component.ts`, powered by `@tanstack/angular-table`) for all tabular views instead of raw `<table>` elements.
+  - Supports `StoxGridColumn<T>` (`id`, `header`, `accessorFn`, `cellTemplate`, `sortable`, `align`, `headerClass`, `cellClass`), `[defaultSort]`, `[clickable]`, `[emptyText]`, `[rowClass]`, and `[rowSymbolFn]`.
+  - **Angular Gotcha**: Any `<ng-template>` referenced via `@ViewChild(..., { static: true })` MUST be placed outside `@if` / `*ngIf` blocks in the parent template.
+- **Centralized Grid & Banner CSS**: `frontend/src/app/shared/data-grid/stox-grid.css` (imported globally in `frontend/src/styles.css`) is the single source of truth for all grid, cell chip/badge, collapsible banner, and `[data-theme='light']` styles. Do **not** duplicate `.stox-grid-*` or cell chip CSS inside individual components.
+  - **Collapsible Banners**: `.stox-banner-wrap`, `.stox-banner-card` (`.stox-banner-card--emerald`), `.stox-banner-header`, `.stox-banner-title-block`, `.stox-banner-heading`, `.stox-banner-sub`, `.stox-banner-controls`, `.stox-banner-toggle`, `.stox-banner-body`, `.stox-banner-tip` (`.stox-banner-tip--emerald`).
+  - **Cell Pills & Chips**: `.sym-pill` (`.sym-pill--green`), `.trig-chip` / `.entry-chip`, `.sl-chip`, `.upside-pill` (`.upside-pill--neg`), `.rr-pill`, `.score-pill` (`.high-score`), `.val-pill`, `.verdict-pill`, `.verdict-badge`, `.category-badge`, `.stage-badge`, `.micro-tags` / `.micro-tag` (`.micro-tag--good`).
+  - **Column Widths & Utilities**: `.col-num`, `.col-mono`, `.col-muted`, `.accent-green`, `.accent-sky`, `.accent-red`. Keep `.col-pattern` / `.col-proj` compact (`min-width: 140px; max-width: 210px`) with 2-line `.proj-line` clamping so numeric/chip columns retain breathing room.

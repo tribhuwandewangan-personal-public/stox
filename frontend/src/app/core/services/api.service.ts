@@ -336,6 +336,13 @@ export class ApiService {
   static getCatalystBacktest(): Promise<any> {
     return fetchJson<any>('/catalysts/backtest');
   }
+
+  /**
+   * GET /api/activity-feed?since_id=0&limit=60: Live tool change feed.
+   */
+  static getActivityFeed(sinceId: number = 0, limit: number = 60): Promise<{ events: any[]; latest_id: number }> {
+    return fetchJson<{ events: any[]; latest_id: number }>(`/activity-feed?since_id=${sinceId}&limit=${limit}`);
+  }
 }
 
 export const apiService = ApiService;

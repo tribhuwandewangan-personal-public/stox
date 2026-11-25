@@ -401,8 +401,8 @@ interface ChartProjection {
       background: #0f172a;
       border: 1px solid rgba(56, 189, 248, 0.35);
       border-radius: 18px;
-      width: 100%;
-      max-width: 980px;
+      width: 95vw;
+      max-width: 1380px;
       max-height: 90vh;
       overflow-y: auto;
       padding: 24px 28px;

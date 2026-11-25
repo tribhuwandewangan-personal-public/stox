@@ -741,6 +741,36 @@ def _compute_pre_breakout_projections(
             for sym_clean in missing_syms:
                 patterns_by_sym[sym_clean] = _patterns_from_cached_candles(sym_clean, cache_mgr, tech_engine)
 
+    # Compute deterministic market & sector breadth regime from cached candles/SMA50
+    _mkt_total = 0
+    _mkt_healthy = 0
+    _sec_stats: Dict[str, List[int]] = {}  # sector -> [healthy, total]
+    for s_k, s_meta in sym_meta.items():
+        cs = candle_summaries.get(s_k)
+        sp = cs["sparkline"] if cs else []
+        if not sp:
+            continue
+        lp_s = _extract_numeric_val((quotes.get(s_k) or {}).get("ltp")) or _extract_numeric_val(cs.get("latest_close"))
+        if not lp_s:
+            continue
+        ri = ((bulk_outputs.get(s_k, {}).get(TECH_AGENT) or {}).get("output") or {}).get("raw_indicators") or {}
+        s50 = _extract_numeric_val(ri.get("sma_50"))
+        healthy = (lp_s >= s50 * 0.98) if (s50 and s50 > 0) else (len(sp) >= 11 and lp_s >= sp[-11])
+        _mkt_total += 1
+        if healthy:
+            _mkt_healthy += 1
+        sec_name = s_meta.get("sector") or "Indian Equities"
+        st = _sec_stats.setdefault(sec_name, [0, 0])
+        st[1] += 1
+        if healthy:
+            st[0] += 1
+
+    market_ok = (_mkt_healthy / _mkt_total >= 0.40) if _mkt_total >= 10 else None
+    sector_ok_map = {
+        sec: (vals[0] / vals[1] >= 0.40) if vals[1] >= 3 else None
+        for sec, vals in _sec_stats.items()
+    }
+
     picks: List[Dict[str, Any]] = []
     for sym_clean, meta in sym_meta.items():
         c_sum = candle_summaries.get(sym_clean)
@@ -771,6 +801,9 @@ def _compute_pre_breakout_projections(
         rvol = _extract_numeric_val(raw_ind.get("rvol"))
         ud_ratio = _extract_numeric_val(raw_ind.get("up_down_vol_ratio"))
         sma_50 = _extract_numeric_val(raw_ind.get("sma_50"))
+        daily_close = float(sparkline[-1]) if len(sparkline) >= 1 else None
+        prev_close = float(sparkline[-2]) if len(sparkline) >= 2 else None
+        sector_ok = sector_ok_map.get(meta["sector"])
 
         best_candidate = None
         best_sort_tuple = (-1, -1, -1.0)
@@ -791,6 +824,10 @@ def _compute_pre_breakout_projections(
                 ret_10d=ret_10d,
                 sma_50=sma_50,
                 symbol=sym_clean,
+                daily_close=daily_close,
+                prev_close=prev_close,
+                market_ok=market_ok,
+                sector_ok=sector_ok,
             )
             stage = proj.get("setup_stage")
             if stage not in allowed_stages or proj.get("is_late_entry"):
@@ -856,7 +893,13 @@ def _compute_pre_breakout_projections(
             "readiness_score": proj["readiness_score"],
             "quality_score": int(top_p.get("quality_score") or 80),
             "rsi_14": round(rsi_14, 1) if rsi_14 is not None else None,
+            "rvol": round(rvol, 2) if rvol is not None else None,
             "up_down_vol_ratio": round(ud_ratio, 2) if ud_ratio is not None else None,
+            "confirmation_status": proj.get("confirmation_status"),
+            "daily_close_confirmed": proj.get("daily_close_confirmed"),
+            "volume_confirmed": proj.get("volume_confirmed"),
+            "retest_hold_confirmed": proj.get("retest_hold_confirmed"),
+            "regime_ok": proj.get("regime_ok"),
             "action_verdict": verdict,
             "confidence_score": conf_score,
             "entry_range": f"Buy above Rs. {trigger:.2f}",
@@ -935,6 +978,36 @@ def _compute_top_pattern_picks(cache_mgr, tech_engine, min_upside: float = 0.0) 
         else {}
     )
 
+    # Compute deterministic market & sector breadth regime from cached candles/SMA50
+    _mkt_total = 0
+    _mkt_healthy = 0
+    _sec_stats: Dict[str, List[int]] = {}  # sector -> [healthy, total]
+    for s_k, s_meta in sym_meta.items():
+        cs = candle_summaries.get(s_k)
+        sp = cs["sparkline"] if cs else []
+        if not sp:
+            continue
+        lp_s = _extract_numeric_val((quotes.get(s_k) or {}).get("ltp")) or _extract_numeric_val(cs.get("latest_close"))
+        if not lp_s:
+            continue
+        ri = ((bulk_outputs.get(s_k, {}).get(TECH_AGENT) or {}).get("output") or {}).get("raw_indicators") or {}
+        s50 = _extract_numeric_val(ri.get("sma_50"))
+        healthy = (lp_s >= s50 * 0.98) if (s50 and s50 > 0) else (len(sp) >= 11 and lp_s >= sp[-11])
+        _mkt_total += 1
+        if healthy:
+            _mkt_healthy += 1
+        sec_name = s_meta.get("sector") or "Indian Equities"
+        st = _sec_stats.setdefault(sec_name, [0, 0])
+        st[1] += 1
+        if healthy:
+            st[0] += 1
+
+    market_ok = (_mkt_healthy / _mkt_total >= 0.40) if _mkt_total >= 10 else None
+    sector_ok_map = {
+        sec: (vals[0] / vals[1] >= 0.40) if vals[1] >= 3 else None
+        for sec, vals in _sec_stats.items()
+    }
+
     picks: List[Dict[str, Any]] = []
     for sym, agents in bulk_outputs.items():
         synth_rec = agents.get(SYNTH_AGENT)
@@ -988,16 +1061,21 @@ def _compute_top_pattern_picks(cache_mgr, tech_engine, min_upside: float = 0.0) 
         ret_10d = None
         if len(sparkline) >= 11 and sparkline[-11] > 0:
             ret_10d = ((float(last_price) - float(sparkline[-11])) / float(sparkline[-11])) * 100.0
+        rvol_val = _extract_numeric_val(raw_ind.get("rvol"))
+        rsi_val = _extract_numeric_val(raw_ind.get("rsi_14"))
+        ud_val = _extract_numeric_val(raw_ind.get("up_down_vol_ratio"))
         proj = compute_pattern_projection(
             top_p,
             curr_close=float(last_price),
             atr_14=_extract_numeric_val(raw_ind.get("atr_14")),
-            rsi_14=_extract_numeric_val(raw_ind.get("rsi_14")),
-            rvol=_extract_numeric_val(raw_ind.get("rvol")),
-            ud_ratio=_extract_numeric_val(raw_ind.get("up_down_vol_ratio")),
+            rsi_14=rsi_val,
+            rvol=rvol_val,
+            ud_ratio=ud_val,
             ret_10d=ret_10d,
             sma_50=_extract_numeric_val(raw_ind.get("sma_50")),
             symbol=sym_clean,
+            daily_close=float(sparkline[-1]) if len(sparkline) >= 1 else None,
+            prev_close=float(sparkline[-2]) if len(sparkline) >= 2 else None,
         )
 
         upside_pct = round(((target_price - last_price) / last_price) * 100, 2) if (target_price and target_price > last_price) else 0.0
@@ -1047,6 +1125,14 @@ def _compute_top_pattern_picks(cache_mgr, tech_engine, min_upside: float = 0.0) 
             "week4_target_low": proj["week4_target_low"],
             "week4_upside_pct": proj["week4_upside_pct"],
             "readiness_score": proj["readiness_score"],
+            "rsi_14": round(rsi_val, 1) if rsi_val is not None else None,
+            "rvol": round(rvol_val, 2) if rvol_val is not None else None,
+            "up_down_vol_ratio": round(ud_val, 2) if ud_val is not None else None,
+            "confirmation_status": proj.get("confirmation_status"),
+            "daily_close_confirmed": proj.get("daily_close_confirmed"),
+            "volume_confirmed": proj.get("volume_confirmed"),
+            "retest_hold_confirmed": proj.get("retest_hold_confirmed"),
+            "regime_ok": proj.get("regime_ok"),
             "projection_summary": proj["projection_summary"],
             "forming_evidence": proj["forming_evidence"],
             "sparkline": sparkline,
@@ -1099,6 +1185,36 @@ def _compute_fundamental_picks(cache_mgr, universe: str) -> Dict[str, Any]:
         if hasattr(cache_mgr, "get_candles_bulk_summary")
         else {}
     )
+    # Compute deterministic market & sector breadth regime from cached candles/SMA50
+    _mkt_total = 0
+    _mkt_healthy = 0
+    _sec_stats: Dict[str, List[int]] = {}  # sector -> [healthy, total]
+    for s_k, s_meta in sym_meta.items():
+        cs = candle_summaries.get(s_k)
+        sp = cs["sparkline"] if cs else []
+        if not sp:
+            continue
+        lp_s = _extract_numeric_val((quotes.get(s_k) or {}).get("ltp")) or _extract_numeric_val(cs.get("latest_close"))
+        if not lp_s:
+            continue
+        ri = ((bulk_outputs.get(s_k, {}).get(TECH_AGENT) or {}).get("output") or {}).get("raw_indicators") or {}
+        s50 = _extract_numeric_val(ri.get("sma_50"))
+        healthy = (lp_s >= s50 * 0.98) if (s50 and s50 > 0) else (len(sp) >= 11 and lp_s >= sp[-11])
+        _mkt_total += 1
+        if healthy:
+            _mkt_healthy += 1
+        sec_name = s_meta.get("sector") or "Indian Equities"
+        st = _sec_stats.setdefault(sec_name, [0, 0])
+        st[1] += 1
+        if healthy:
+            st[0] += 1
+
+    market_ok = (_mkt_healthy / _mkt_total >= 0.40) if _mkt_total >= 10 else None
+    sector_ok_map = {
+        sec: (vals[0] / vals[1] >= 0.40) if vals[1] >= 3 else None
+        for sec, vals in _sec_stats.items()
+    }
+
     picks: List[Dict[str, Any]] = []
 
     for item in symbols_list:

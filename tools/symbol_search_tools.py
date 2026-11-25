@@ -338,6 +338,17 @@ def add_symbol_to_json(
     except Exception as e:
         print(f"Notice: Could not insert {clean_sym} into queue: {e}")
 
+    try:
+        from tools import events_bus
+        events_bus.publish("symbol_added", {
+            "symbol": clean_sym,
+            "name": clean_name,
+            "sector": clean_sector,
+            "message": f"Added {clean_sym} ({clean_name}) to Watchlist [{clean_sector}].",
+        })
+    except Exception:
+        pass
+
     return {
         "status": "added",
         "symbol": clean_sym,
@@ -383,6 +394,15 @@ def remove_symbol_from_json(
         from storage.queue_manager import ValkeyQueueManager
         qm = ValkeyQueueManager(db_path=db_path)
         qm.remove_symbol(clean_sym)
+    except Exception:
+        pass
+
+    try:
+        from tools import events_bus
+        events_bus.publish("symbol_removed", {
+            "symbol": clean_sym,
+            "message": f"Removed {clean_sym} from Watchlist.",
+        })
     except Exception:
         pass
 

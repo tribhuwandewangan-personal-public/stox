@@ -1,12 +1,13 @@
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnInit, TemplateRef, ViewChild, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { apiService } from '../../core/services/api.service';
 import { stocksStore } from '../../core/stores/stocks.store';
+import { StoxGridComponent, StoxGridColumn } from '../../shared/data-grid/stox-grid.component';
 
 @Component({
   selector: 'app-sector-research',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, StoxGridComponent],
   template: `
     <div class="sector-page">
       <!-- Top Search & Action Bar -->
@@ -160,45 +161,32 @@ import { stocksStore } from '../../core/stores/stocks.store';
           <div class="section-title" *ngIf="run.stocks?.length">
             Best Stocks Ranked by Stox Fundamental &amp; Technical Engines
           </div>
-          <div class="table-wrap" *ngIf="run.stocks?.length">
-            <table class="stocks-table">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Symbol</th>
-                  <th>Component</th>
-                  <th>Role</th>
-                  <th>Verdict</th>
-                  <th>Composite</th>
-                  <th>Fundamental</th>
-                  <th>Technical</th>
-                  <th>Price</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let st of run.stocks; let i = index" (click)="openStock(st.symbol)" class="clickable-row">
-                  <td>{{ i + 1 }}</td>
-                  <td>
-                    <strong>{{ st.symbol }}</strong>
-                    <div class="sub-name">{{ st.company_name }}</div>
-                  </td>
-                  <td>{{ st.component_name }}</td>
-                  <td><span class="role-badge" [ngClass]="'role-' + st.role_tag">{{ roleLabel(st.role_tag) }}</span></td>
-                  <td><span class="verdict-pill">{{ st.verdict }}</span></td>
-                  <td><strong>{{ st.composite_score != null ? (st.composite_score | number:'1.1-1') : 'N/A' }}</strong></td>
-                  <td>{{ st.fundamental_score != null ? (st.fundamental_score | number:'1.1-1') : 'N/A' }}</td>
-                  <td>{{ st.technical_score != null ? (st.technical_score | number:'1.1-1') : 'N/A' }}</td>
-                  <td>{{ st.quant_snapshot?.last_price != null ? ('Rs.' + st.quant_snapshot.last_price) : 'N/A' }}</td>
-                </tr>
-              </tbody>
-            </table>
+          <div *ngIf="run.stocks?.length">
+            <app-stox-grid
+              [data]="run.stocks"
+              [columns]="stockGridColumns()"
+              (rowClick)="openStock($event.symbol)"
+            ></app-stox-grid>
           </div>
         </section>
       </div>
     </div>
+    <ng-template #srIdxTpl let-i="index">{{ i + 1 }}</ng-template>
+    <ng-template #srSymTpl let-st>
+      <strong>{{ st.symbol }}</strong>
+      <div class="sub-name">{{ st.company_name }}</div>
+    </ng-template>
+    <ng-template #srRoleTpl let-st>
+      <span class="role-badge" [ngClass]="'role-' + st.role_tag">{{ roleLabel(st.role_tag) }}</span>
+    </ng-template>
+    <ng-template #srVerdTpl let-st><span class="verdict-pill">{{ st.verdict }}</span></ng-template>
+    <ng-template #srCompTpl let-st><strong>{{ st.composite_score != null ? (st.composite_score | number:'1.1-1') : 'N/A' }}</strong></ng-template>
+    <ng-template #srFundTpl let-st>{{ st.fundamental_score != null ? (st.fundamental_score | number:'1.1-1') : 'N/A' }}</ng-template>
+    <ng-template #srTechTpl let-st>{{ st.technical_score != null ? (st.technical_score | number:'1.1-1') : 'N/A' }}</ng-template>
+    <ng-template #srPriceTpl let-st>{{ st.quant_snapshot?.last_price != null ? ('Rs.' + st.quant_snapshot.last_price) : 'N/A' }}</ng-template>
   `,
   styles: [`
-    .sector-page { padding: 18px 24px; color: #e2e8f0; max-width: 1480px; margin: 0 auto; }
+    .sector-page { padding: 18px 24px; color: #e2e8f0; width: 100%; box-sizing: border-box; }
     .sector-hero {
       display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 16px;
       background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(56, 189, 248, 0.2);
@@ -293,14 +281,54 @@ import { stocksStore } from '../../core/stores/stocks.store';
     .role-critical_beneficiary { background: rgba(168, 85, 247, 0.2); color: #d8b4fe; }
     .role-market_leader { background: rgba(16, 185, 129, 0.2); color: #34d399; }
     .role-challenger { background: rgba(56, 189, 248, 0.2); color: #7dd3fc; }
-    .table-wrap { overflow-x: auto; }
-    .stocks-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
-    .stocks-table th, .stocks-table td { padding: 8px 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); text-align: left; }
-    .stocks-table th { color: #94a3b8; font-size: 0.72rem; text-transform: uppercase; }
-    .clickable-row { cursor: pointer; }
-    .clickable-row:hover { background: rgba(56, 189, 248, 0.08); }
-    .sub-name { font-size: 0.68rem; color: #94a3b8; }
-    .verdict-pill { padding: 2px 7px; border-radius: 4px; background: rgba(56, 189, 248, 0.15); color: #7dd3fc; font-weight: 600; font-size: 0.7rem; }
+
+    :host-context([data-theme='light']) .sector-page { color: #0f172a; }
+    :host-context([data-theme='light']) .sector-hero,
+    :host-context([data-theme='light']) .runs-sidebar,
+    :host-context([data-theme='light']) .run-detail {
+      background: #ffffff;
+      border-color: #cbd5e1;
+      box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+    }
+    :host-context([data-theme='light']) .hero-title,
+    :host-context([data-theme='light']) .detail-head h3,
+    :host-context([data-theme='light']) .run-title,
+    :host-context([data-theme='light']) .comp-head strong { color: #0f172a; }
+    :host-context([data-theme='light']) .hero-sub,
+    :host-context([data-theme='light']) .sidebar-head,
+    :host-context([data-theme='light']) .detail-meta,
+    :host-context([data-theme='light']) .run-meta,
+    :host-context([data-theme='light']) .comp-desc,
+    :host-context([data-theme='light']) .ov-grid,
+    :host-context([data-theme='light']) .co-rat,
+    :host-context([data-theme='light']) .sub-name,
+    :host-context([data-theme='light']) .empty-runs { color: #475569; }
+    :host-context([data-theme='light']) .sector-input {
+      background: #f8fafc;
+      border-color: #cbd5e1;
+      color: #0f172a;
+    }
+    :host-context([data-theme='light']) .overview-card,
+    :host-context([data-theme='light']) .comp-card,
+    :host-context([data-theme='light']) .co-chip,
+    :host-context([data-theme='light']) .comp-meta {
+      background: #f8fafc;
+      border-color: #e2e8f0;
+      color: #334155;
+    }
+    :host-context([data-theme='light']) .ov-thesis,
+    :host-context([data-theme='light']) .co-name { color: #1e293b; }
+    :host-context([data-theme='light']) .ov-label,
+    :host-context([data-theme='light']) .section-title,
+    :host-context([data-theme='light']) .co-sym { color: #0284c7; }
+    :host-context([data-theme='light']) .bn-callout {
+      background: #fef3c7;
+      border-color: #f59e0b;
+      color: #92400e;
+    }
+    :host-context([data-theme='light']) .run-item { background: #f8fafc; }
+    :host-context([data-theme='light']) .run-item.active,
+    :host-context([data-theme='light']) .run-item:hover { background: #e0f2fe; border-color: #38bdf8; }
   `]
 })
 export class SectorResearchComponent implements OnInit {
@@ -310,6 +338,27 @@ export class SectorResearchComponent implements OnInit {
   isRunning = signal<boolean>(false);
   isRescoring = signal<boolean>(false);
   errorMsg = signal<string>('');
+
+  @ViewChild('srIdxTpl', { static: true }) srIdxTpl!: TemplateRef<any>;
+  @ViewChild('srSymTpl', { static: true }) srSymTpl!: TemplateRef<any>;
+  @ViewChild('srRoleTpl', { static: true }) srRoleTpl!: TemplateRef<any>;
+  @ViewChild('srVerdTpl', { static: true }) srVerdTpl!: TemplateRef<any>;
+  @ViewChild('srCompTpl', { static: true }) srCompTpl!: TemplateRef<any>;
+  @ViewChild('srFundTpl', { static: true }) srFundTpl!: TemplateRef<any>;
+  @ViewChild('srTechTpl', { static: true }) srTechTpl!: TemplateRef<any>;
+  @ViewChild('srPriceTpl', { static: true }) srPriceTpl!: TemplateRef<any>;
+
+  stockGridColumns = computed<StoxGridColumn<any>[]>(() => [
+    { id: 'idx', header: '#', sortable: false, cellTemplate: this.srIdxTpl },
+    { id: 'symbol', header: 'Symbol', accessorFn: r => r.symbol ?? '', cellTemplate: this.srSymTpl },
+    { id: 'component_name', header: 'Component', accessorFn: r => r.component_name ?? '' },
+    { id: 'role_tag', header: 'Role', accessorFn: r => r.role_tag ?? '', cellTemplate: this.srRoleTpl },
+    { id: 'verdict', header: 'Verdict', accessorFn: r => r.verdict ?? '', cellTemplate: this.srVerdTpl },
+    { id: 'composite_score', header: 'Composite', accessorFn: r => r.composite_score ?? -999, cellTemplate: this.srCompTpl },
+    { id: 'fundamental_score', header: 'Fundamental', accessorFn: r => r.fundamental_score ?? -999, cellTemplate: this.srFundTpl },
+    { id: 'technical_score', header: 'Technical', accessorFn: r => r.technical_score ?? -999, cellTemplate: this.srTechTpl },
+    { id: 'price', header: 'Price', accessorFn: r => Number(r.quant_snapshot?.last_price ?? 0), cellTemplate: this.srPriceTpl },
+  ]);
 
   ngOnInit(): void {
     this.loadRuns();

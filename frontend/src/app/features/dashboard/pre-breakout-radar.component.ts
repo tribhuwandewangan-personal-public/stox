@@ -6,11 +6,12 @@
  * ⚠️ ADVISORY ONLY — No order placement, no investment advice.
  */
 
-import { Component, OnInit, computed, effect, signal } from '@angular/core';
+import { Component, OnInit, TemplateRef, ViewChild, computed, effect, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ApiService } from '../../core/services/api.service';
 import { PatternPick, Stock } from '../../core/models/stock.model';
 import { stocksStore } from '../../core/stores/stocks.store';
+import { StoxGridComponent, StoxGridColumn } from '../../shared/data-grid/stox-grid.component';
 
 type ScopeMode = 'universe' | 'monitored';
 type StageFilter = 'ALL' | 'IMMINENT_BREAKOUT' | 'FORMING_PRE_BREAKOUT' | 'FRESH_BREAKOUT';
@@ -18,25 +19,25 @@ type StageFilter = 'ALL' | 'IMMINENT_BREAKOUT' | 'FORMING_PRE_BREAKOUT' | 'FRESH
 @Component({
   selector: 'app-pre-breakout-radar',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, StoxGridComponent],
   template: `
-    <div class="pb-wrapper">
-      <div class="pb-card">
-        <div class="pb-header">
-          <div class="pb-title-block">
-            <span class="pb-icon">🚀</span>
+    <div class="stox-banner-wrap">
+      <div class="stox-banner-card stox-banner-card--emerald">
+        <div class="stox-banner-header">
+          <div class="stox-banner-title-block">
+            <span class="stox-banner-icon">🚀</span>
             <div>
-              <div class="pb-heading">
+              <div class="stox-banner-heading">
                 Pre-Breakout Bullish Radar (4-Week Projections)
                 <span class="pb-count" *ngIf="!loading()">{{ filteredPicks().length }} forming setups</span>
               </div>
-              <div class="pb-sub">
+              <div class="stox-banner-sub">
                 Stocks forming patterns <strong>before</strong> breakout &bull; Extended/late rallies excluded &bull; Buy-above trigger &amp; 4-week price projection
               </div>
             </div>
           </div>
 
-          <div class="pb-controls">
+          <div class="stox-banner-controls">
             <button class="pb-pill" [class.active]="highConviction()" (click)="toggleHighConviction()" title="Show only positive-expectancy patterns (Darvas Box, Double Bottom, Falling Wedge, VCP, Inverse H&S Forming, Saucer)">
               🎯 High-Conviction Only
             </button>
@@ -51,14 +52,14 @@ type StageFilter = 'ALL' | 'IMMINENT_BREAKOUT' | 'FORMING_PRE_BREAKOUT' | 'FRESH
             <button class="pb-btn-refresh" (click)="refresh()" [disabled]="loading()">
               {{ loading() ? '⏳' : '↻' }} Refresh
             </button>
-            <button class="pb-toggle-btn" (click)="collapsed.update(v => !v)">
+            <button class="stox-banner-toggle" (click)="collapsed.update(v => !v)">
               {{ collapsed() ? '▼ Show' : '▲ Hide' }}
             </button>
           </div>
         </div>
 
-        <div class="pb-body" *ngIf="!collapsed()">
-          <!-- Stage Filter Bar -->
+        <div class="stox-banner-body" *ngIf="!collapsed()">
+          <!-- Stage Filter + Search Bar -->
           <div class="stage-bar">
             <button class="stage-pill" [class.active]="stageFilter() === 'ALL'" (click)="stageFilter.set('ALL')">
               All Pre-Breakout ({{ allPicks().length }})
@@ -72,6 +73,17 @@ type StageFilter = 'ALL' | 'IMMINENT_BREAKOUT' | 'FORMING_PRE_BREAKOUT' | 'FRESH
             <button class="stage-pill fresh" [class.active]="stageFilter() === 'FRESH_BREAKOUT'" (click)="stageFilter.set('FRESH_BREAKOUT')">
               ✅ Confirmed Close &gt; Pivot ({{ countStage('FRESH_BREAKOUT') }})
             </button>
+
+            <div class="pb-search-wrap">
+              <input
+                type="text"
+                class="pb-search-input"
+                [value]="searchQuery()"
+                (input)="onSearch($event)"
+                placeholder="Filter symbol / pattern…"
+              />
+              <button class="pb-search-clear" *ngIf="searchQuery()" (click)="searchQuery.set('')" title="Clear search">✕</button>
+            </div>
           </div>
 
           <div class="pb-loading" *ngIf="loading() && allPicks().length === 0">
@@ -82,115 +94,92 @@ type StageFilter = 'ALL' | 'IMMINENT_BREAKOUT' | 'FORMING_PRE_BREAKOUT' | 'FRESH
             No unextended pre-breakout bullish setups match this filter right now. Try switching to <strong>All NSE Monitored</strong>.
           </div>
 
-          <div class="table-wrap" *ngIf="filteredPicks().length > 0">
-            <table class="pb-table">
-              <thead>
-                <tr>
-                  <th class="col-num">#</th>
-                  <th>SYMBOL</th>
-                  <th>LTP</th>
-                  <th>FORMING PATTERN &amp; STAGE</th>
-                  <th>CLOSE ABOVE (TRIGGER)</th>
-                  <th>4-WEEK TARGET</th>
-                  <th>STOP LOSS</th>
-                  <th>R:R</th>
-                  <th>ACTIONABLE PROJECTION</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (p of filteredPicks().slice(0, 20); track p.symbol; let i = $index) {
-                  <tr (click)="openDetail(p)">
-                    <td class="col-num">{{ i + 1 }}</td>
-                    <td>
-                      <button class="sym-pill">{{ p.symbol }} ↗</button>
-                    </td>
-                    <td class="col-mono">Rs. {{ p.last_price | number:'1.2-2' }}</td>
-                    <td>
-                      <div class="pat-cell">
-                        <span class="pat-name">{{ p.pattern_name }}</span>
-                        <span class="stage-badge" [ngClass]="stageClass(p.setup_stage)">
-                          {{ stageLabel(p.setup_stage, p.entry_window) }}
-                        </span>
-                      </div>
-                    </td>
-                    <td class="col-mono">
-                      <div class="trigger-cell">
-                        <strong class="accent-sky">Rs. {{ (p.breakout_trigger ?? p.last_price) | number:'1.2-2' }}</strong>
-                        <small class="dist-sub" *ngIf="p.distance_to_breakout_pct !== undefined && p.distance_to_breakout_pct !== null">
-                          {{ p.distance_to_breakout_pct > 0 ? ('+' + p.distance_to_breakout_pct.toFixed(1) + '% to trigger') : (p.distance_to_breakout_pct.toFixed(1) + '% vs pivot') }}
-                        </small>
-                      </div>
-                    </td>
-                    <td class="col-mono">
-                      <div class="target-cell">
-                        <strong class="accent-green">Rs. {{ (p.week4_target ?? p.target_price ?? 0) | number:'1.2-2' }}</strong>
-                        <small class="upside-sub" *ngIf="p.week4_upside_pct !== undefined && p.week4_upside_pct !== null">
-                          +{{ p.week4_upside_pct | number:'1.1-1' }}% in 4W
-                        </small>
-                      </div>
-                    </td>
-                    <td class="col-mono accent-red">
-                      Rs. {{ (p.stop_loss ?? 0) | number:'1.2-2' }}
-                    </td>
-                    <td>
-                      <span class="rr-pill">{{ p.risk_reward | number:'1.1-1' }}x</span>
-                    </td>
-                    <td class="col-proj">
-                      {{ p.projection_summary || 'Forming setup — watch breakout trigger.' }}
-                    </td>
-                  </tr>
-                }
-              </tbody>
-            </table>
+          <div *ngIf="filteredPicks().length > 0">
+            <app-stox-grid
+              [data]="filteredPicks().slice(0, 50)"
+              [columns]="gridColumns()"
+              (rowClick)="openDetail($event)"
+            ></app-stox-grid>
+            <div class="pb-limit-note" *ngIf="filteredPicks().length > 50">
+              Showing top 50 of {{ filteredPicks().length }} matching setups. Open <strong>Pattern Screener</strong> for the full list.
+            </div>
           </div>
 
-          <div class="pb-tip">
+          <div class="stox-banner-tip stox-banner-tip--emerald">
             💡 <strong>Methodology:</strong> Conditional algorithmic setups — bullish confirmation requires a <em>daily close above</em> the Pivot/Trigger level with volume; invalidation is below Stop Loss. ATR-bounded 4-week projections are quantitative research estimates, not investment advice.
           </div>
         </div>
       </div>
     </div>
+
+    <ng-template #idxTpl let-i="index"><span class="col-num">{{ i + 1 }}</span></ng-template>
+    <ng-template #symTpl let-p><button class="sym-pill sym-pill--green">{{ p.symbol }} ↗</button></ng-template>
+    <ng-template #ltpTpl let-p><span class="col-mono ltp-bold">Rs. {{ p.last_price | number:'1.2-2' }}</span></ng-template>
+    <ng-template #patTpl let-p>
+      <div class="pat-cell">
+        <span class="pat-name">{{ p.pattern_name }}</span>
+        <span class="stage-badge" [ngClass]="stageClass(p.setup_stage)">
+          {{ stageLabel(p.setup_stage, p.entry_window) }}
+        </span>
+      </div>
+    </ng-template>
+    <ng-template #scoreTpl let-p>
+      <span class="score-pill" [class.high-score]="pickScore(p) >= 75" [title]="(p.forming_evidence || []).join(' • ')">
+        {{ pickScore(p) | number:'1.0-0' }}
+      </span>
+    </ng-template>
+    <ng-template #trigTpl let-p>
+      <div class="trigger-cell col-mono">
+        <span class="trig-chip">Rs. {{ (p.breakout_trigger ?? p.last_price) | number:'1.2-2' }}</span>
+        <small class="dist-sub"
+               [class.dist-imminent]="p.distance_to_breakout_pct !== undefined && p.distance_to_breakout_pct !== null && p.distance_to_breakout_pct > 0 && p.distance_to_breakout_pct <= 1.5"
+               *ngIf="p.distance_to_breakout_pct !== undefined && p.distance_to_breakout_pct !== null">
+          {{ p.distance_to_breakout_pct > 0 ? ('+' + p.distance_to_breakout_pct.toFixed(1) + '% to trigger') : (p.distance_to_breakout_pct.toFixed(1) + '% vs pivot') }}
+        </small>
+      </div>
+    </ng-template>
+    <ng-template #tgtTpl let-p>
+      <div class="target-cell col-mono" [title]="p.full_pattern_target ? ('Full Pattern Target: Rs. ' + p.full_pattern_target.toFixed(2)) : ''">
+        <strong class="accent-green">Rs. {{ (p.week4_target ?? p.target_price ?? 0) | number:'1.2-2' }}</strong>
+        <span class="upside-pill" *ngIf="p.week4_upside_pct !== undefined && p.week4_upside_pct !== null">
+          +{{ p.week4_upside_pct | number:'1.1-1' }}% in 4W
+        </span>
+      </div>
+    </ng-template>
+    <ng-template #slTpl let-p><span class="col-mono sl-chip">Rs. {{ (p.stop_loss ?? 0) | number:'1.2-2' }}</span></ng-template>
+    <ng-template #rrTpl let-p><span class="rr-pill">{{ p.risk_reward | number:'1.1-1' }}x</span></ng-template>
+    <ng-template #projTpl let-p>
+      <div class="proj-note" [title]="p.projection_summary || ''">
+        <div class="proj-clamp">{{ p.projection_summary || 'Forming setup — watch breakout trigger.' }}</div>
+        <div class="micro-tags" *ngIf="p.rsi_14 != null || p.rvol != null || p.up_down_vol_ratio != null || p.retest_hold_confirmed || p.confirmation_status === 'INTRADAY_CROSS' || p.regime_ok === false">
+          <span class="micro-tag" *ngIf="p.rsi_14 != null">RSI {{ p.rsi_14 | number:'1.0-0' }}</span>
+          <span class="micro-tag" [class.micro-tag--good]="(p.rvol ?? 0) >= 1.5" *ngIf="p.rvol != null">
+            Vol {{ p.rvol | number:'1.1-1' }}x
+          </span>
+          <span class="micro-tag" [class.micro-tag--good]="(p.up_down_vol_ratio ?? 0) >= 1.2" *ngIf="p.up_down_vol_ratio != null">
+            U/D {{ p.up_down_vol_ratio | number:'1.1-1' }}x
+          </span>
+          <span class="micro-tag micro-tag--good" *ngIf="p.retest_hold_confirmed">
+            {{ p.confirmation_status === 'RETEST_HOLD' ? '✓ Retest Hold' : '✓ 2D Hold' }}
+          </span>
+          <span class="micro-tag micro-tag--warn" *ngIf="p.confirmation_status === 'INTRADAY_CROSS'">Await Close</span>
+          <span class="micro-tag micro-tag--warn" *ngIf="p.regime_ok === false">⚠ Weak Sector/Mkt</span>
+        </div>
+      </div>
+    </ng-template>
+    <ng-template #sparkTpl let-p>
+      <svg class="mini-spark" viewBox="0 0 60 24" preserveAspectRatio="none" *ngIf="p.sparkline?.length >= 2">
+        <polyline
+          [attr.points]="sparkPoints(p.sparkline)"
+          fill="none"
+          stroke="#10b981"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"/>
+      </svg>
+    </ng-template>
   `,
   styles: [`
-    .pb-wrapper {
-      padding: 12px 20px 0 20px;
-    }
-
-    .pb-card {
-      background: linear-gradient(155deg, rgba(16, 28, 48, 0.85), rgba(13, 20, 36, 0.9));
-      border: 1px solid rgba(16, 185, 129, 0.35);
-      border-radius: 12px;
-      padding: 14px 18px;
-      backdrop-filter: blur(12px);
-    }
-
-    .pb-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 12px;
-    }
-
-    .pb-title-block {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .pb-icon { font-size: 1.4rem; }
-
-    .pb-heading {
-      font-family: 'Outfit', sans-serif;
-      font-size: 0.98rem;
-      font-weight: 700;
-      color: #fff;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
     .pb-count {
       background: rgba(16, 185, 129, 0.16);
       border: 1px solid rgba(16, 185, 129, 0.35);
@@ -199,18 +188,6 @@ type StageFilter = 'ALL' | 'IMMINENT_BREAKOUT' | 'FORMING_PRE_BREAKOUT' | 'FRESH
       border-radius: 999px;
       font-size: 0.7rem;
       font-weight: 700;
-    }
-
-    .pb-sub {
-      font-size: 0.72rem;
-      color: #94a3b8;
-    }
-
-    .pb-controls {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
     }
 
     .pill-group {
@@ -238,7 +215,7 @@ type StageFilter = 'ALL' | 'IMMINENT_BREAKOUT' | 'FORMING_PRE_BREAKOUT' | 'FRESH
       color: #38bdf8;
     }
 
-    .pb-btn-refresh, .pb-toggle-btn {
+    .pb-btn-refresh {
       background: rgba(255, 255, 255, 0.05);
       border: 1px solid rgba(255, 255, 255, 0.12);
       color: #38bdf8;
@@ -249,17 +226,46 @@ type StageFilter = 'ALL' | 'IMMINENT_BREAKOUT' | 'FORMING_PRE_BREAKOUT' | 'FRESH
       cursor: pointer;
     }
 
-    .pb-body {
-      margin-top: 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
     .stage-bar {
       display: flex;
       flex-wrap: wrap;
+      align-items: center;
       gap: 6px;
+    }
+
+    .pb-search-wrap {
+      margin-left: auto;
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .pb-search-input {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #e2e8f0;
+      padding: 4px 24px 4px 10px;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      width: 190px;
+    }
+
+    .pb-search-clear {
+      position: absolute;
+      right: 6px;
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      font-size: 0.7rem;
+      padding: 0 4px;
+      cursor: pointer;
+    }
+
+    .pb-limit-note {
+      margin-top: 6px;
+      font-size: 0.7rem;
+      color: #94a3b8;
+      text-align: right;
     }
 
     .stage-pill {
@@ -288,122 +294,39 @@ type StageFilter = 'ALL' | 'IMMINENT_BREAKOUT' | 'FORMING_PRE_BREAKOUT' | 'FRESH
       border-radius: 8px;
     }
 
-    .table-wrap { overflow-x: auto; }
-
-    .pb-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.77rem;
+    :host-context([data-theme='light']) .pill-group {
+      background: #f1f5f9;
+      border-color: #cbd5e1;
     }
-
-    .pb-table th {
-      text-align: left;
-      padding: 8px 10px;
-      color: #64748b;
-      font-size: 0.67rem;
-      font-weight: 700;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      white-space: nowrap;
+    :host-context([data-theme='light']) .pb-pill,
+    :host-context([data-theme='light']) .stage-pill {
+      color: #475569;
+      background: #f8fafc;
+      border-color: #cbd5e1;
     }
-
-    .pb-table td {
-      padding: 9px 10px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-      vertical-align: middle;
-      color: #e2e8f0;
+    :host-context([data-theme='light']) .pb-pill.active {
+      background: #e0f2fe;
+      color: #0284c7;
     }
-
-    .pb-table tr:hover td {
-      background: rgba(16, 185, 129, 0.06);
-      cursor: pointer;
+    :host-context([data-theme='light']) .stage-pill.active {
+      background: #dcfce7;
+      border-color: #10b981;
+      color: #047857;
     }
-
-    .col-num { color: #64748b; font-size: 0.7rem; width: 28px; }
-    .col-mono { font-family: 'JetBrains Mono', monospace; white-space: nowrap; }
-    .accent-sky { color: #38bdf8; }
-    .accent-green { color: #34d399; }
-    .accent-red { color: #f87171; }
-
-    .sym-pill {
-      background: rgba(16, 185, 129, 0.12);
-      border: 1px solid rgba(16, 185, 129, 0.35);
-      color: #34d399;
-      padding: 3px 8px;
-      border-radius: 6px;
-      font-weight: 700;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.74rem;
-      cursor: pointer;
+    :host-context([data-theme='light']) .pb-btn-refresh {
+      background: #f8fafc;
+      border-color: #cbd5e1;
+      color: #0284c7;
     }
-
-    .pat-cell, .trigger-cell, .target-cell {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
+    :host-context([data-theme='light']) .pb-loading,
+    :host-context([data-theme='light']) .pb-empty {
+      background: #f8fafc;
+      color: #475569;
     }
-
-    .pat-name { font-weight: 600; color: #e2e8f0; font-size: 0.74rem; }
-    .dist-sub { color: #94a3b8; font-size: 0.66rem; }
-    .upside-sub { color: #10b981; font-size: 0.67rem; font-weight: 700; }
-
-    .stage-badge {
-      display: inline-block;
-      width: fit-content;
-      padding: 1px 7px;
-      border-radius: 999px;
-      font-size: 0.63rem;
-      font-weight: 700;
-    }
-
-    .stage-imminent {
-      background: rgba(245, 158, 11, 0.18);
-      border: 1px solid rgba(245, 158, 11, 0.45);
-      color: #fbbf24;
-    }
-
-    .stage-forming {
-      background: rgba(56, 189, 248, 0.15);
-      border: 1px solid rgba(56, 189, 248, 0.35);
-      color: #38bdf8;
-    }
-
-    .stage-fresh {
-      background: rgba(16, 185, 129, 0.16);
-      border: 1px solid rgba(16, 185, 129, 0.38);
-      color: #34d399;
-    }
-
-    .rr-pill {
-      background: rgba(16, 185, 129, 0.15);
-      color: #34d399;
-      border: 1px solid rgba(16, 185, 129, 0.35);
-      padding: 2px 8px;
-      border-radius: 10px;
-      font-weight: 700;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.71rem;
-    }
-
-    .col-proj {
-      min-width: 260px;
-      max-width: 420px;
-      font-size: 0.72rem;
-      color: #cbd5e1;
-      line-height: 1.4;
-    }
-
-    .pb-tip {
-      font-size: 0.71rem;
-      color: #94a3b8;
-      background: rgba(16, 185, 129, 0.06);
-      border-left: 2px solid #10b981;
-      padding: 6px 10px;
-      border-radius: 4px;
-      line-height: 1.4;
-    }
-
-    @media (max-width: 768px) {
-      .pb-wrapper { padding: 8px 12px 0 12px; }
+    :host-context([data-theme='light']) .pb-search-input {
+      background: #ffffff;
+      border-color: #cbd5e1;
+      color: #0f172a;
     }
   `]
 })
@@ -412,14 +335,51 @@ export class PreBreakoutRadarComponent implements OnInit {
   scope = signal<ScopeMode>('universe');
   highConviction = signal<boolean>(true);
   stageFilter = signal<StageFilter>('ALL');
+  searchQuery = signal<string>('');
   allPicks = signal<PatternPick[]>([]);
   loading = signal<boolean>(false);
 
+  @ViewChild('idxTpl', { static: true }) idxTpl!: TemplateRef<any>;
+  @ViewChild('symTpl', { static: true }) symTpl!: TemplateRef<any>;
+  @ViewChild('ltpTpl', { static: true }) ltpTpl!: TemplateRef<any>;
+  @ViewChild('patTpl', { static: true }) patTpl!: TemplateRef<any>;
+  @ViewChild('scoreTpl', { static: true }) scoreTpl!: TemplateRef<any>;
+  @ViewChild('trigTpl', { static: true }) trigTpl!: TemplateRef<any>;
+  @ViewChild('tgtTpl', { static: true }) tgtTpl!: TemplateRef<any>;
+  @ViewChild('slTpl', { static: true }) slTpl!: TemplateRef<any>;
+  @ViewChild('rrTpl', { static: true }) rrTpl!: TemplateRef<any>;
+  @ViewChild('projTpl', { static: true }) projTpl!: TemplateRef<any>;
+  @ViewChild('sparkTpl', { static: true }) sparkTpl!: TemplateRef<any>;
+
+  gridColumns = computed<StoxGridColumn<PatternPick>[]>(() => [
+    { id: 'idx', header: '#', sortable: false, cellTemplate: this.idxTpl, cellClass: 'col-num' },
+    { id: 'symbol', header: 'Symbol', accessorFn: r => r.symbol, cellTemplate: this.symTpl },
+    { id: 'last_price', header: 'LTP', accessorFn: r => r.last_price ?? 0, cellTemplate: this.ltpTpl, cellClass: 'col-mono' },
+    { id: 'pattern_name', header: 'Forming Pattern & Stage', accessorFn: r => r.pattern_name ?? '', cellTemplate: this.patTpl },
+    { id: 'readiness_score', header: 'Score', accessorFn: r => this.pickScore(r), cellTemplate: this.scoreTpl },
+    { id: 'breakout_trigger', header: 'Close Above (Trigger)', accessorFn: r => r.breakout_trigger ?? r.last_price ?? 0, cellTemplate: this.trigTpl, cellClass: 'col-mono' },
+    { id: 'week4_upside_pct', header: '4-Week Target', accessorFn: r => r.week4_upside_pct ?? 0, cellTemplate: this.tgtTpl, cellClass: 'col-mono' },
+    { id: 'stop_loss', header: 'Stop Loss', accessorFn: r => r.stop_loss ?? 0, cellTemplate: this.slTpl, cellClass: 'col-mono' },
+    { id: 'risk_reward', header: 'R:R', accessorFn: r => r.risk_reward ?? 0, cellTemplate: this.rrTpl },
+    { id: 'projection_summary', header: 'Actionable Projection', accessorFn: r => r.projection_summary ?? '', cellTemplate: this.projTpl, cellClass: 'col-proj' },
+    { id: 'sparkline', header: 'Trend', sortable: false, cellTemplate: this.sparkTpl, headerClass: 'col-sparkline', cellClass: 'col-sparkline' },
+  ]);
+
   filteredPicks = computed(() => {
     const sf = this.stageFilter();
-    const list = this.allPicks();
-    if (sf === 'ALL') return list;
-    return list.filter(p => p.setup_stage === sf);
+    const q = this.searchQuery().trim().toLowerCase();
+    let list = this.allPicks();
+    if (sf !== 'ALL') {
+      list = list.filter(p => p.setup_stage === sf);
+    }
+    if (q) {
+      list = list.filter(p =>
+        p.symbol.toLowerCase().includes(q) ||
+        (p.name || '').toLowerCase().includes(q) ||
+        (p.pattern_name || '').toLowerCase().includes(q)
+      );
+    }
+    return list;
   });
 
   constructor() {
@@ -465,6 +425,27 @@ export class PreBreakoutRadarComponent implements OnInit {
 
   countStage(stage: string): number {
     return this.allPicks().filter(p => p.setup_stage === stage).length;
+  }
+
+  onSearch(e: Event): void {
+    this.searchQuery.set((e.target as HTMLInputElement).value);
+  }
+
+  pickScore(p: PatternPick): number {
+    return p.readiness_score ?? p.quality_score ?? p.confidence_score ?? 0;
+  }
+
+  sparkPoints(prices?: number[]): string {
+    if (!prices || prices.length < 2) return '';
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    const range = max - min || 1;
+    const W = 60, H = 22;
+    return prices.map((p, i) => {
+      const x = (i / (prices.length - 1)) * W;
+      const y = H - ((p - min) / range) * H;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
   }
 
   stageClass(stage?: string): string {

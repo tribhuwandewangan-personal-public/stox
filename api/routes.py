@@ -710,6 +710,19 @@ async def catalyst_backtest(request: Request) -> Response:
         return _json_response({"error": str(e)}, status_code=500)
 
 
+async def activity_feed(request: Request) -> Response:
+    """GET /api/activity-feed?since_id=0&limit=60: Recent change-feed events."""
+    try:
+        qp = request.query_params
+        since_id = int(qp.get("since_id", "0") or 0)
+        limit = max(1, min(int(qp.get("limit", "60") or 60), 200))
+        events = events_bus.get_recent_events(since_id=since_id, limit=limit)
+        latest_id = events[-1]["id"] if events else since_id
+        return _json_response({"events": events, "latest_id": latest_id})
+    except Exception as e:
+        return _json_response({"error": str(e), "events": []}, status_code=500)
+
+
 # Route definitions
 routes = [
     Route("/api/status", endpoint=status, methods=["GET"]),
@@ -745,5 +758,6 @@ routes = [
     Route("/api/catalysts/scan", endpoint=catalyst_scan, methods=["POST"]),
     Route("/api/catalysts/analyze", endpoint=catalyst_analyze, methods=["POST"]),
     Route("/api/catalysts/backtest", endpoint=catalyst_backtest, methods=["GET"]),
+    Route("/api/activity-feed", endpoint=activity_feed, methods=["GET"]),
     Route("/favicon.ico", endpoint=favicon, methods=["GET"]),
 ]

@@ -483,6 +483,18 @@ def _cache_scan_results(results: List[Dict[str, Any]]):
     except Exception as e:
         print(f"⚠️ Failed to cache market scanner results: {e}")
 
+    try:
+        from tools import events_bus
+        top_syms = [r.get("symbol") for r in results[:3] if r.get("symbol")]
+        events_bus.publish("market_scan_done", {
+            "symbol": top_syms[0] if top_syms else None,
+            "count": len(results),
+            "top_symbols": top_syms,
+            "message": f"Market scanner found {len(results)} strength leaders" + (f" (Top: {', '.join(top_syms)})." if top_syms else "."),
+        })
+    except Exception:
+        pass
+
 
 def get_latest_cached_scan() -> Dict[str, Any]:
     """Retrieves the most recent market scanner results from SQLite."""

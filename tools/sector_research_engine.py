@@ -413,7 +413,21 @@ class SectorResearchEngine:
                 })
 
         self.cache_manager.save_sector_value_chain_stocks(run_id, scored_rows)
-        return self.cache_manager.get_sector_research_run(run_id) or {"id": run_id, "status": "ready"}
+        out = self.cache_manager.get_sector_research_run(run_id) or {"id": run_id, "status": "ready"}
+        try:
+            from tools import events_bus
+            stocks = out.get("stocks") or []
+            top = stocks[0] if stocks else None
+            top_txt = f" Top pick: {top['symbol']} ({top['verdict']}, {top['composite_score']})" if top else ""
+            events_bus.publish("sector_research_done", {
+                "symbol": top["symbol"] if top else None,
+                "sector": normalized_sector,
+                "count": len(stocks),
+                "message": f"Sector research ready for '{normalized_sector}' ({len(stocks)} stocks).{top_txt}",
+            })
+        except Exception:
+            pass
+        return out
 
     def rescore_run(self, run_id: int, force_refresh: bool = True) -> Optional[Dict[str, Any]]:
         """

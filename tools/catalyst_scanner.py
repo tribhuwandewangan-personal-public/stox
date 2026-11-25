@@ -153,15 +153,16 @@ class CatalystScannerEngine:
         }
         self.cache_manager.save_catalyst_events([event])
 
-        if event["tier"] == "A":
+        if event["tier"] in ("A", "B") or event["pre_breakout_match"]:
             try:
                 events_bus.publish("catalyst_early_warning", {
                     "symbol": sym,
-                    "tier": "A",
+                    "tier": event["tier"],
                     "score": event["total_score"],
                     "category": event["category"],
                     "title": event["title"],
                     "pre_breakout_match": event["pre_breakout_match"],
+                    "message": f"[Tier {event['tier']} • {event['total_score']}/100] {sym}: {event['title']}",
                 })
             except Exception:
                 pass
@@ -194,6 +195,17 @@ class CatalystScannerEngine:
             elif saved_ev["tier"] == "B":
                 tier_b += 1
 
+        try:
+            events_bus.publish("catalyst_scan_done", {
+                "scanned_raw": len(raw_events),
+                "saved_catalysts": len(scored_events),
+                "tier_a_count": tier_a,
+                "tier_b_count": tier_b,
+                "message": f"Catalyst scan checked {len(raw_events)} disclosures -> {len(scored_events)} catalysts ({tier_a} Tier A, {tier_b} Tier B).",
+            })
+        except Exception:
+            pass
+
         return {
             "scanned_raw": len(raw_events),
             "saved_catalysts": len(scored_events),
@@ -201,3 +213,45 @@ class CatalystScannerEngine:
             "tier_b_count": tier_b,
             "events": scored_events[:50],
         }
+
+
+class CatalystPoller:
+    """Background daemon that periodically scans primary NSE/BSE/PIB feeds for catalysts."""
+
+    def __init__(self, cache_manager: CacheManager, poll_seconds: int = 900):
+        import threading
+        self.cache_manager = cache_manager
+        self.poll_seconds = max(60, int(poll_seconds or 900))
+        self._stop = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+        self.last_run_at: Optional[str] = None
+        self.last_summary: Optional[Dict[str, Any]] = None
+
+    def start(self) -> None:
+        import threading
+        if self._thread is None or not self._thread.is_alive():
+            self._stop.clear()
+            self._thread = threading.Thread(target=self._run, daemon=True, name="CatalystPollerThread")
+            self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=2.0)
+
+    def _run(self) -> None:
+        from datetime import datetime
+        engine = CatalystScannerEngine(cache_manager=self.cache_manager)
+        while not self._stop.is_set():
+            try:
+                res = engine.run_live_scan(limit_per_source=40)
+                self.last_run_at = datetime.now().isoformat()
+                self.last_summary = {
+                    "scanned_raw": res.get("scanned_raw", 0),
+                    "saved_catalysts": res.get("saved_catalysts", 0),
+                    "tier_a_count": res.get("tier_a_count", 0),
+                    "tier_b_count": res.get("tier_b_count", 0),
+                }
+            except Exception as e:
+                print(f"⚠️ [CatalystPoller] scan error: {e}", flush=True)
+            self._stop.wait(self.poll_seconds)

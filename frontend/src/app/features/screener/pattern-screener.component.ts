@@ -6,12 +6,13 @@
  * ⚠️ ADVISORY ONLY — No order placement, no investment advice.
  */
 
-import { Component, OnInit, OnDestroy, signal, computed } from '@angular/core';
+import { Component, OnInit, OnDestroy, TemplateRef, ViewChild, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/services/api.service';
 import { PatternPick, Stock } from '../../core/models/stock.model';
 import { stocksStore } from '../../core/stores/stocks.store';
+import { StoxGridComponent, StoxGridColumn } from '../../shared/data-grid/stox-grid.component';
 
 type SortKey = 'readiness_score' | 'upside_pct' | 'risk_reward' | 'confidence_score' | 'timestamp';
 type ScreenerMode = 'pre_breakout' | 'all_patterns';
@@ -23,7 +24,7 @@ type CategoryFilter = 'ALL' | 'Moving Average' | 'Reversal' | 'Breakout' | 'Accu
 @Component({
   selector: 'app-pattern-screener',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, StoxGridComponent],
   template: `
     <div class="screener-wrapper">
 
@@ -40,6 +41,15 @@ type CategoryFilter = 'ALL' | 'Moving Average' | 'Reversal' | 'Breakout' | 'Accu
           </div>
         </div>
         <div class="header-right">
+          <button
+            *ngIf="mode() === 'pre_breakout'"
+            class="pill hc-toggle"
+            [class.active]="highConviction()"
+            (click)="toggleHighConviction()"
+            title="Show only positive-expectancy patterns (Darvas Box, Double Bottom, Falling Wedge, VCP, Inverse H&S Forming, Saucer)"
+          >
+            🎯 High-Conviction Only
+          </button>
           <div class="mode-switch">
             <button class="mode-btn" [class.active]="mode() === 'pre_breakout'" (click)="setMode('pre_breakout')">
               🚀 About to Turn Bullish
@@ -63,15 +73,65 @@ type CategoryFilter = 'ALL' | 'Moving Average' | 'Reversal' | 'Breakout' | 'Accu
         Breakout triggers and 4-week targets are algorithmic projections, not investment advice. Wait for price confirmation above the trigger level.
       </div>
 
+      <!-- Summary KPI Strip -->
+      <div class="kpi-strip" *ngIf="!loading() && allPicks().length > 0">
+        <button class="kpi-chip" [class.active]="stageFilter() === 'IMMINENT_BREAKOUT'" (click)="stageFilter.set('IMMINENT_BREAKOUT')">
+          <span class="kpi-label">⚡ Near Pivot</span>
+          <strong class="kpi-val accent-amber">{{ countStage('IMMINENT_BREAKOUT') }}</strong>
+        </button>
+        <button class="kpi-chip" [class.active]="stageFilter() === 'FORMING_PRE_BREAKOUT'" (click)="stageFilter.set('FORMING_PRE_BREAKOUT')">
+          <span class="kpi-label">⏳ Forming</span>
+          <strong class="kpi-val accent-sky">{{ countStage('FORMING_PRE_BREAKOUT') }}</strong>
+        </button>
+        <button class="kpi-chip" [class.active]="stageFilter() === 'FRESH_BREAKOUT'" (click)="stageFilter.set('FRESH_BREAKOUT')">
+          <span class="kpi-label">✅ Fresh Breakout</span>
+          <strong class="kpi-val accent-green">{{ countStage('FRESH_BREAKOUT') }}</strong>
+        </button>
+        <div class="kpi-chip kpi-stat">
+          <span class="kpi-label">Avg 4W Upside</span>
+          <strong class="kpi-val accent-green">+{{ avgUpside() | number:'1.1-1' }}%</strong>
+        </div>
+        <div class="kpi-chip kpi-stat">
+          <span class="kpi-label">Avg R:R</span>
+          <strong class="kpi-val accent-sky">{{ avgRr() | number:'1.1-1' }}x</strong>
+        </div>
+      </div>
+
       <!-- Filter Bar -->
       <div class="filter-bar">
+        <!-- Search -->
+        <div class="filter-group">
+          <label class="filter-label">Search</label>
+          <div class="search-wrap">
+            <input
+              type="text"
+              class="search-input"
+              [value]="searchQuery()"
+              (input)="onSearch($event)"
+              placeholder="Symbol, name, pattern…"
+            />
+            <button class="search-clear" *ngIf="searchQuery()" (click)="searchQuery.set('')" title="Clear">✕</button>
+          </div>
+        </div>
+
+        <!-- Sector -->
+        <div class="filter-group">
+          <label class="filter-label">Sector</label>
+          <select class="sort-select" [value]="sectorFilter()" (change)="setSectorFilter($event)">
+            <option value="ALL">All Sectors</option>
+            <option *ngFor="let sec of availableSectors()" [value]="sec">{{ sec }}</option>
+          </select>
+        </div>
+
         <!-- Stage -->
         <div class="filter-group">
           <label class="filter-label">Entry Timing / Stage</label>
           <div class="pill-group">
             <button *ngFor="let st of stages" class="pill"
                     [class.active]="stageFilter() === st.key"
-                    (click)="stageFilter.set(st.key)">{{ st.label }}</button>
+                    (click)="stageFilter.set(st.key)">
+              {{ st.label }} ({{ stageCount(st.key) }})
+            </button>
           </div>
         </div>
 
@@ -153,150 +213,111 @@ type CategoryFilter = 'ALL' | 'Moving Average' | 'Reversal' | 'Breakout' | 'Accu
       </div>
 
       <!-- Pattern Table -->
-      <div class="table-wrapper" *ngIf="!loading() && !error() && filteredPicks().length > 0">
-        <table class="pattern-table">
-          <thead>
-            <tr>
-              <th class="col-rank">#</th>
-              <th class="col-symbol">Symbol</th>
-              <th class="col-name">Name / Sector</th>
-              <th class="col-ltp">LTP</th>
-              <th class="col-pattern">Pattern &amp; Projection</th>
-              <th class="col-stage">Timing / Stage</th>
-              <th class="col-trigger">Buy Above</th>
-              <th class="col-verdict">Verdict</th>
-              <th class="col-target">4W Target</th>
-              <th class="col-sl">Stop Loss</th>
-              <th class="col-upside" (click)="toggleSort('upside_pct')" style="cursor:pointer">
-                4W Upside% {{ sortKey()==='upside_pct' ? '▼' : '' }}
-              </th>
-              <th class="col-rr" (click)="toggleSort('risk_reward')" style="cursor:pointer">
-                R:R {{ sortKey()==='risk_reward' ? '▼' : '' }}
-              </th>
-              <th class="col-sparkline">Trend</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let pick of filteredPicks(); let i = index"
-                class="pattern-row"
-                [class.bullish]="pick.direction === 'Bullish'"
-                [class.bearish]="pick.direction === 'Bearish'"
-                (click)="openDetail(pick)">
-
-              <!-- Rank -->
-              <td class="col-rank">
-                <span class="rank-num">{{ i + 1 }}</span>
-              </td>
-
-              <!-- Symbol -->
-              <td class="col-symbol">
-                <div class="symbol-block">
-                  <span class="symbol-ticker">{{ pick.symbol }}</span>
-                  <span class="dir-dot" [class.bull]="pick.direction==='Bullish'" [class.bear]="pick.direction==='Bearish'">
-                    {{ pick.direction === 'Bullish' ? '▲' : '▼' }}
-                  </span>
-                </div>
-              </td>
-
-              <!-- Name / Sector -->
-              <td class="col-name">
-                <div class="name-block">
-                  <span class="stock-name">{{ pick.name }}</span>
-                  <span class="stock-sector">{{ pick.sector }}</span>
-                </div>
-              </td>
-
-              <!-- LTP -->
-              <td class="col-ltp">
-                <span class="ltp-val">₹{{ pick.last_price | number:'1.2-2' }}</span>
-              </td>
-
-              <!-- Pattern + Actionable Projection -->
-              <td class="col-pattern">
-                <div class="pattern-block">
-                  <div class="pattern-top-line">
-                    <span class="pattern-name">{{ pick.pattern_name }}</span>
-                    <span class="category-badge" [class]="'cat-' + categoryClass(pick.pattern_category)">
-                      {{ pick.pattern_category }}
-                    </span>
-                  </div>
-                  <span class="proj-line" *ngIf="pick.projection_summary">{{ pick.projection_summary }}</span>
-                </div>
-              </td>
-
-              <!-- Timing / Stage -->
-              <td class="col-stage">
-                <span class="stage-pill" [ngClass]="stageClass(pick.setup_stage)">
-                  {{ stageLabel(pick.setup_stage, pick.entry_window) }}
-                </span>
-              </td>
-
-              <!-- Buy Above Trigger -->
-              <td class="col-trigger">
-                <div class="trigger-block" *ngIf="pick.breakout_trigger; else noTrigger">
-                  <span class="trigger-val">₹{{ pick.breakout_trigger | number:'1.2-2' }}</span>
-                  <span class="trigger-dist" *ngIf="pick.distance_to_breakout_pct !== undefined && pick.distance_to_breakout_pct !== null">
-                    {{ pick.distance_to_breakout_pct > 0 ? ('+' + pick.distance_to_breakout_pct.toFixed(1) + '% away') : (pick.distance_to_breakout_pct.toFixed(1) + '% vs pivot') }}
-                  </span>
-                </div>
-                <ng-template #noTrigger><span class="na-val">—</span></ng-template>
-              </td>
-
-              <!-- Verdict -->
-              <td class="col-verdict">
-                <span class="verdict-badge" [class]="'verdict-' + pick.action_verdict">
-                  {{ pick.action_verdict }}
-                </span>
-              </td>
-
-              <!-- 4W Target -->
-              <td class="col-target">
-                <span class="target-val" *ngIf="pick.week4_target || pick.target_price">
-                  ₹{{ (pick.week4_target || pick.target_price) | number:'1.2-2' }}
-                </span>
-                <span class="na-val" *ngIf="!pick.week4_target && !pick.target_price">—</span>
-              </td>
-
-              <!-- Stop Loss -->
-              <td class="col-sl">
-                <span class="sl-val" *ngIf="pick.stop_loss">
-                  ₹{{ pick.stop_loss | number:'1.2-2' }}
-                </span>
-                <span class="na-val" *ngIf="!pick.stop_loss">—</span>
-              </td>
-
-              <!-- 4W Upside % -->
-              <td class="col-upside">
-                <span class="upside-val"
-                      [class.positive]="(pick.week4_upside_pct ?? pick.upside_pct) > 0"
-                      [class.negative]="(pick.week4_upside_pct ?? pick.upside_pct) < 0">
-                  {{ (pick.week4_upside_pct ?? pick.upside_pct) > 0 ? '+' : '' }}{{ (pick.week4_upside_pct ?? pick.upside_pct) | number:'1.1-1' }}%
-                </span>
-              </td>
-
-              <!-- R:R -->
-              <td class="col-rr">
-                <span class="rr-val" [class.good-rr]="pick.risk_reward >= 2">
-                  {{ pick.risk_reward | number:'1.1-1' }}x
-                </span>
-              </td>
-
-              <!-- Mini Sparkline -->
-              <td class="col-sparkline">
-                <svg class="mini-spark" viewBox="0 0 60 24" preserveAspectRatio="none">
-                  <polyline
-                    [attr.points]="sparkPoints(pick.sparkline)"
-                    fill="none"
-                    [attr.stroke]="pick.direction === 'Bullish' ? '#10b981' : '#ef4444'"
-                    stroke-width="1.5"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"/>
-                </svg>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <div *ngIf="!loading() && !error() && filteredPicks().length > 0">
+        <app-stox-grid
+          [data]="filteredPicks()"
+          [columns]="gridColumns()"
+          [rowClass]="rowClassFn"
+          (rowClick)="openDetail($event)"
+        ></app-stox-grid>
       </div>
+
+      <ng-template #psIdxTpl let-i="index"><span class="col-num">{{ i + 1 }}</span></ng-template>
+      <ng-template #psSymTpl let-pick>
+        <button class="sym-pill" [class.sym-pill--green]="pick.direction === 'Bullish'">
+          {{ pick.symbol }}
+          <span class="dir-dot" [class.bull]="pick.direction==='Bullish'" [class.bear]="pick.direction==='Bearish'">
+            {{ pick.direction === 'Bullish' ? '▲' : '▼' }}
+          </span>
+        </button>
+      </ng-template>
+      <ng-template #psNameTpl let-pick>
+        <div class="name-block">
+          <span class="stock-name">{{ pick.name }}</span>
+          <span class="stock-sector">{{ pick.sector }}</span>
+        </div>
+      </ng-template>
+      <ng-template #psLtpTpl let-pick><span class="col-mono ltp-bold">Rs. {{ pick.last_price | number:'1.2-2' }}</span></ng-template>
+      <ng-template #psPatTpl let-pick>
+        <div class="pattern-block">
+          <div class="pattern-top-line">
+            <span class="pattern-name">{{ pick.pattern_name }}</span>
+            <span class="category-badge" [class]="'cat-' + categoryClass(pick.pattern_category)">
+              {{ pick.pattern_category }}
+            </span>
+          </div>
+          <span class="proj-line" *ngIf="pick.projection_summary" [title]="pick.projection_summary">{{ pick.projection_summary }}</span>
+          <div class="micro-tags" *ngIf="pick.rsi_14 != null || pick.rvol != null || pick.up_down_vol_ratio != null || pick.retest_hold_confirmed || pick.confirmation_status === 'INTRADAY_CROSS' || pick.regime_ok === false">
+            <span class="micro-tag" *ngIf="pick.rsi_14 != null">RSI {{ pick.rsi_14 | number:'1.0-0' }}</span>
+            <span class="micro-tag" [class.micro-tag--good]="(pick.rvol ?? 0) >= 1.5" *ngIf="pick.rvol != null">
+              Vol {{ pick.rvol | number:'1.1-1' }}x
+            </span>
+            <span class="micro-tag" [class.micro-tag--good]="(pick.up_down_vol_ratio ?? 0) >= 1.2" *ngIf="pick.up_down_vol_ratio != null">
+              U/D {{ pick.up_down_vol_ratio | number:'1.1-1' }}x
+            </span>
+            <span class="micro-tag micro-tag--good" *ngIf="pick.retest_hold_confirmed">
+              {{ pick.confirmation_status === 'RETEST_HOLD' ? '✓ Retest Hold' : '✓ 2D Hold' }}
+            </span>
+            <span class="micro-tag micro-tag--warn" *ngIf="pick.confirmation_status === 'INTRADAY_CROSS'">Await Close</span>
+            <span class="micro-tag micro-tag--warn" *ngIf="pick.regime_ok === false">⚠ Weak Sector/Mkt</span>
+          </div>
+        </div>
+      </ng-template>
+      <ng-template #psScoreTpl let-pick>
+        <span class="score-pill" [class.high-score]="pickScore(pick) >= 75" [title]="(pick.forming_evidence || []).join(' • ')">
+          {{ pickScore(pick) | number:'1.0-0' }}
+        </span>
+      </ng-template>
+      <ng-template #psStageTpl let-pick>
+        <span class="stage-badge" [ngClass]="stageClass(pick.setup_stage)">
+          {{ stageLabel(pick.setup_stage, pick.entry_window) }}
+        </span>
+      </ng-template>
+      <ng-template #psTrigTpl let-pick>
+        <div class="trigger-block col-mono" *ngIf="pick.breakout_trigger; else noTrigger">
+          <span class="trig-chip">Rs. {{ pick.breakout_trigger | number:'1.2-2' }}</span>
+          <span class="trigger-dist"
+                [class.dist-imminent]="pick.distance_to_breakout_pct !== undefined && pick.distance_to_breakout_pct !== null && pick.distance_to_breakout_pct > 0 && pick.distance_to_breakout_pct <= 1.5"
+                *ngIf="pick.distance_to_breakout_pct !== undefined && pick.distance_to_breakout_pct !== null">
+            {{ pick.distance_to_breakout_pct > 0 ? ('+' + pick.distance_to_breakout_pct.toFixed(1) + '% away') : (pick.distance_to_breakout_pct.toFixed(1) + '% vs pivot') }}
+          </span>
+        </div>
+        <ng-template #noTrigger><span class="na-val">—</span></ng-template>
+      </ng-template>
+      <ng-template #psVerdTpl let-pick>
+        <span class="verdict-badge" [class]="'verdict-' + pick.action_verdict">
+          {{ pick.action_verdict }}
+        </span>
+      </ng-template>
+      <ng-template #psTgtTpl let-pick>
+        <strong class="col-mono accent-green" *ngIf="pick.week4_target || pick.target_price">
+          Rs. {{ (pick.week4_target || pick.target_price) | number:'1.2-2' }}
+        </strong>
+        <span class="na-val" *ngIf="!pick.week4_target && !pick.target_price">—</span>
+      </ng-template>
+      <ng-template #psSlTpl let-pick>
+        <span class="col-mono sl-chip" *ngIf="pick.stop_loss">Rs. {{ pick.stop_loss | number:'1.2-2' }}</span>
+        <span class="na-val" *ngIf="!pick.stop_loss">—</span>
+      </ng-template>
+      <ng-template #psUpTpl let-pick>
+        <span class="upside-pill" [class.upside-pill--neg]="(pick.week4_upside_pct ?? pick.upside_pct) < 0">
+          {{ (pick.week4_upside_pct ?? pick.upside_pct) > 0 ? '+' : '' }}{{ (pick.week4_upside_pct ?? pick.upside_pct) | number:'1.1-1' }}%
+        </span>
+      </ng-template>
+      <ng-template #psRrTpl let-pick>
+        <span class="rr-pill">{{ pick.risk_reward | number:'1.1-1' }}x</span>
+      </ng-template>
+      <ng-template #psSparkTpl let-pick>
+        <svg class="mini-spark" viewBox="0 0 60 24" preserveAspectRatio="none">
+          <polyline
+            [attr.points]="sparkPoints(pick.sparkline)"
+            fill="none"
+            [attr.stroke]="pick.direction === 'Bullish' ? '#10b981' : '#ef4444'"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"/>
+        </svg>
+      </ng-template>
 
       <!-- Footer note -->
       <div class="screener-footer" *ngIf="!loading() && filteredPicks().length > 0">
@@ -317,8 +338,8 @@ type CategoryFilter = 'ALL' | 'Moving Average' | 'Reversal' | 'Breakout' | 'Accu
     }
 
     .screener-wrapper {
-      max-width: 1400px;
-      margin: 0 auto;
+      width: 100%;
+      max-width: none;
     }
 
     /* ---- Page Header ---- */
@@ -374,7 +395,7 @@ type CategoryFilter = 'ALL' | 'Moving Average' | 'Reversal' | 'Breakout' | 'Accu
       border: 1px solid rgba(16,185,129,0.35);
     }
     .pattern-top-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-    .proj-line { font-size: 0.69rem; color: #94a3b8; max-width: 340px; line-height: 1.35; }
+    .proj-line { font-size: 0.69rem; color: #94a3b8; line-height: 1.35; }
     .stage-pill {
       display: inline-block; padding: 2px 8px; border-radius: 999px;
       font-size: 0.66rem; font-weight: 700; white-space: nowrap;
@@ -475,109 +496,7 @@ type CategoryFilter = 'ALL' | 'Moving Average' | 'Reversal' | 'Breakout' | 'Accu
     .state-empty p { font-size: 0.8rem; color: #64748b; margin: 0; line-height: 1.6; }
     .state-empty code { background: rgba(255,255,255,0.08); padding: 1px 6px; border-radius: 4px; font-size: 0.75rem; }
 
-    /* ---- Table ---- */
-    .table-wrapper {
-      overflow-x: auto;
-      border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.07);
-    }
-    .pattern-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.8rem;
-    }
-    .pattern-table thead th {
-      background: rgba(255,255,255,0.04);
-      color: #64748b;
-      font-size: 0.68rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      padding: 10px 12px;
-      text-align: left;
-      border-bottom: 1px solid rgba(255,255,255,0.07);
-      white-space: nowrap;
-    }
-    .pattern-row {
-      border-bottom: 1px solid rgba(255,255,255,0.04);
-      cursor: pointer;
-      transition: background 0.15s;
-    }
-    .pattern-row:hover { background: rgba(56,189,248,0.06); }
-    .pattern-row.bullish { border-left: 2px solid rgba(16,185,129,0.4); }
-    .pattern-row.bearish { border-left: 2px solid rgba(239,68,68,0.4); }
-    .pattern-row td { padding: 10px 12px; vertical-align: middle; }
-
-    /* Rank */
-    .rank-num { color: #475569; font-size: 0.72rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-
-    /* Symbol */
-    .symbol-block { display: flex; align-items: center; gap: 5px; }
-    .symbol-ticker { font-family: 'JetBrains Mono', monospace; color: #e2e8f0; font-weight: 700; font-size: 0.82rem; }
-    .dir-dot { font-size: 0.65rem; }
-    .dir-dot.bull { color: #10b981; }
-    .dir-dot.bear { color: #ef4444; }
-
-    /* Name/sector */
-    .name-block { display: flex; flex-direction: column; gap: 2px; }
-    .stock-name { color: #cbd5e1; font-size: 0.75rem; white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
-    .stock-sector { color: #475569; font-size: 0.65rem; }
-
-    /* LTP */
-    .ltp-val { font-family: 'JetBrains Mono', monospace; color: #e2e8f0; font-weight: 600; }
-
-    /* Pattern */
-    .pattern-block { display: flex; flex-direction: column; gap: 4px; }
-    .pattern-name { color: #cbd5e1; font-size: 0.75rem; }
-    .category-badge {
-      display: inline-block;
-      padding: 1px 7px;
-      border-radius: 999px;
-      font-size: 0.62rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-    }
-    .cat-ma { background: rgba(56,189,248,0.15); color: #38bdf8; }
-    .cat-reversal { background: rgba(139,92,246,0.15); color: #a78bfa; }
-    .cat-breakout { background: rgba(245,158,11,0.15); color: #fbbf24; }
-    .cat-accumulation { background: rgba(16,185,129,0.15); color: #10b981; }
-    .cat-candlestick { background: rgba(236,72,153,0.15); color: #f472b6; }
-    .cat-other { background: rgba(100,116,139,0.15); color: #94a3b8; }
-
-    /* Verdict */
-    .verdict-badge {
-      display: inline-block;
-      padding: 3px 9px;
-      border-radius: 999px;
-      font-size: 0.68rem;
-      font-weight: 700;
-      text-transform: uppercase;
-    }
-    .verdict-BUY { background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.3); }
-    .verdict-ACCUMULATE { background: rgba(56,189,248,0.15); color: #38bdf8; border: 1px solid rgba(56,189,248,0.3); }
-    .verdict-HOLD { background: rgba(100,116,139,0.15); color: #94a3b8; border: 1px solid rgba(100,116,139,0.3); }
-    .verdict-REDUCE { background: rgba(245,158,11,0.15); color: #fbbf24; border: 1px solid rgba(245,158,11,0.3); }
-    .verdict-SELL { background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); }
-
-    /* Target / SL */
-    .target-val { font-family: 'JetBrains Mono', monospace; color: #10b981; font-size: 0.75rem; }
-    .sl-val { font-family: 'JetBrains Mono', monospace; color: #ef4444; font-size: 0.75rem; }
-    .na-val { color: #334155; }
-
-    /* Upside */
-    .upside-val { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 0.8rem; }
-    .upside-val.positive { color: #10b981; }
-    .upside-val.negative { color: #ef4444; }
-
-    /* R:R */
-    .rr-val { font-family: 'JetBrains Mono', monospace; color: #94a3b8; font-size: 0.78rem; }
-    .rr-val.good-rr { color: #10b981; }
-
-    /* Sparkline */
-    .mini-spark { width: 60px; height: 24px; display: block; }
-
-    /* Footer */
+    /* ---- Footer ---- */
     .screener-footer {
       display: flex;
       justify-content: space-between;
@@ -596,23 +515,124 @@ type CategoryFilter = 'ALL' | 'Moving Average' | 'Reversal' | 'Breakout' | 'Accu
       .col-rr, .col-target, .col-sl { display: none; }
       .filter-bar { gap: 10px; padding: 10px; }
     }
+
+    /* KPI Strip & Search */
+    .kpi-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .kpi-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      padding: 6px 12px;
+      cursor: pointer;
+      color: #cbd5e1;
+      font-size: 0.74rem;
+    }
+    .kpi-chip.kpi-stat { cursor: default; }
+    .kpi-chip.active {
+      border-color: #38bdf8;
+      background: rgba(56, 189, 248, 0.14);
+    }
+    .kpi-label { color: #94a3b8; font-size: 0.7rem; font-weight: 600; }
+    .kpi-val { font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; }
+    .accent-amber { color: #fbbf24; }
+
+    .search-wrap { position: relative; display: flex; align-items: center; }
+    .search-input {
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #e2e8f0;
+      padding: 4px 24px 4px 10px;
+      border-radius: 6px;
+      font-size: 0.74rem;
+      width: 185px;
+    }
+    .search-clear {
+      position: absolute;
+      right: 5px;
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      font-size: 0.7rem;
+      padding: 0 4px;
+      cursor: pointer;
+    }
+    .hc-toggle { font-size: 0.72rem; }
+    :host-context([data-theme='light']) .kpi-chip {
+      background: #ffffff;
+      border-color: #cbd5e1;
+      color: #0f172a;
+    }
+    :host-context([data-theme='light']) .kpi-label { color: #475569; }
+    :host-context([data-theme='light']) .accent-amber { color: #b45309; }
+    :host-context([data-theme='light']) .search-input {
+      background: #ffffff;
+      border-color: #cbd5e1;
+      color: #0f172a;
+    }
   `]
 })
 export class PatternScreenerComponent implements OnInit, OnDestroy {
 
   // ---- Signals ----
-  mode       = signal<ScreenerMode>('pre_breakout');
-  allPicks   = signal<PatternPick[]>([]);
-  loading    = signal<boolean>(false);
-  error      = signal<string | null>(null);
-  lastUpdated = signal<string | null>(null);
+  mode          = signal<ScreenerMode>('pre_breakout');
+  highConviction = signal<boolean>(true);
+  allPicks      = signal<PatternPick[]>([]);
+  loading       = signal<boolean>(false);
+  error         = signal<string | null>(null);
+  lastUpdated   = signal<string | null>(null);
 
+  searchQuery     = signal<string>('');
+  sectorFilter    = signal<string>('ALL');
   stageFilter     = signal<StageFilter>('ALL');
   verdictFilter   = signal<VerdictFilter>('ALL');
   directionFilter = signal<DirectionFilter>('ALL');
   categoryFilter  = signal<CategoryFilter>('ALL');
   minUpside       = signal<number>(0);
   sortKey         = signal<SortKey>('readiness_score');
+
+  @ViewChild(StoxGridComponent) stoxGrid?: StoxGridComponent<PatternPick>;
+  @ViewChild('psIdxTpl', { static: true }) psIdxTpl!: TemplateRef<any>;
+  @ViewChild('psSymTpl', { static: true }) psSymTpl!: TemplateRef<any>;
+  @ViewChild('psNameTpl', { static: true }) psNameTpl!: TemplateRef<any>;
+  @ViewChild('psLtpTpl', { static: true }) psLtpTpl!: TemplateRef<any>;
+  @ViewChild('psPatTpl', { static: true }) psPatTpl!: TemplateRef<any>;
+  @ViewChild('psScoreTpl', { static: true }) psScoreTpl!: TemplateRef<any>;
+  @ViewChild('psStageTpl', { static: true }) psStageTpl!: TemplateRef<any>;
+  @ViewChild('psTrigTpl', { static: true }) psTrigTpl!: TemplateRef<any>;
+  @ViewChild('psVerdTpl', { static: true }) psVerdTpl!: TemplateRef<any>;
+  @ViewChild('psTgtTpl', { static: true }) psTgtTpl!: TemplateRef<any>;
+  @ViewChild('psSlTpl', { static: true }) psSlTpl!: TemplateRef<any>;
+  @ViewChild('psUpTpl', { static: true }) psUpTpl!: TemplateRef<any>;
+  @ViewChild('psRrTpl', { static: true }) psRrTpl!: TemplateRef<any>;
+  @ViewChild('psSparkTpl', { static: true }) psSparkTpl!: TemplateRef<any>;
+
+  rowClassFn = (p: PatternPick) =>
+    p.direction === 'Bullish' ? 'row-bullish' : (p.direction === 'Bearish' ? 'row-bearish' : '');
+
+  gridColumns = computed<StoxGridColumn<PatternPick>[]>(() => [
+    { id: 'idx', header: '#', sortable: false, cellTemplate: this.psIdxTpl, headerClass: 'col-num', cellClass: 'col-num' },
+    { id: 'symbol', header: 'Symbol', accessorFn: r => r.symbol, cellTemplate: this.psSymTpl },
+    { id: 'name', header: 'Name / Sector', accessorFn: r => r.name, cellTemplate: this.psNameTpl, headerClass: 'col-name', cellClass: 'col-name' },
+    { id: 'last_price', header: 'LTP', accessorFn: r => r.last_price ?? 0, cellTemplate: this.psLtpTpl, cellClass: 'col-mono' },
+    { id: 'pattern_name', header: 'Pattern & Projection', accessorFn: r => r.pattern_name ?? '', cellTemplate: this.psPatTpl, headerClass: 'col-pattern', cellClass: 'col-pattern' },
+    { id: 'readiness_score', header: 'Score', accessorFn: r => this.pickScore(r), cellTemplate: this.psScoreTpl },
+    { id: 'setup_stage', header: 'Timing / Stage', accessorFn: r => r.setup_stage ?? '', cellTemplate: this.psStageTpl },
+    { id: 'breakout_trigger', header: 'Buy Above', accessorFn: r => r.breakout_trigger ?? 0, cellTemplate: this.psTrigTpl, cellClass: 'col-mono' },
+    { id: 'action_verdict', header: 'Verdict', accessorFn: r => r.action_verdict ?? '', cellTemplate: this.psVerdTpl },
+    { id: 'target_price', header: '4W Target', accessorFn: r => r.week4_target ?? r.target_price ?? 0, cellTemplate: this.psTgtTpl, headerClass: 'col-target', cellClass: 'col-target col-mono' },
+    { id: 'stop_loss', header: 'Stop Loss', accessorFn: r => r.stop_loss ?? 0, cellTemplate: this.psSlTpl, headerClass: 'col-sl', cellClass: 'col-sl col-mono' },
+    { id: 'upside_pct', header: '4W Upside%', accessorFn: r => r.week4_upside_pct ?? r.upside_pct ?? 0, cellTemplate: this.psUpTpl, cellClass: 'col-mono' },
+    { id: 'risk_reward', header: 'R:R', accessorFn: r => r.risk_reward ?? 0, cellTemplate: this.psRrTpl, headerClass: 'col-rr', cellClass: 'col-rr col-mono' },
+    { id: 'sparkline', header: 'Trend', sortable: false, cellTemplate: this.psSparkTpl, headerClass: 'col-sparkline', cellClass: 'col-sparkline' },
+  ]);
 
   // ---- Filter options ----
   stages: { key: StageFilter; label: string }[] = [
@@ -626,9 +646,45 @@ export class PatternScreenerComponent implements OnInit, OnDestroy {
   directions: DirectionFilter[] = ['ALL', 'Bullish', 'Bearish'];
   categories: CategoryFilter[]  = ['ALL', 'Moving Average', 'Reversal', 'Breakout', 'Accumulation', 'Candlestick', 'Classical Chart'];
 
-  // ---- Computed: filtered + sorted picks ----
+  // ---- Computed: sectors, KPIs, filtered + sorted picks ----
+  availableSectors = computed(() => {
+    const set = new Set<string>();
+    for (const p of this.allPicks()) {
+      if (p.sector && p.sector.trim()) set.add(p.sector.trim());
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  });
+
+  avgUpside = computed(() => {
+    const list = this.filteredPicks();
+    if (!list.length) return 0;
+    const sum = list.reduce((acc, p) => acc + (p.week4_upside_pct ?? p.upside_pct ?? 0), 0);
+    return sum / list.length;
+  });
+
+  avgRr = computed(() => {
+    const list = this.filteredPicks();
+    if (!list.length) return 0;
+    const sum = list.reduce((acc, p) => acc + (p.risk_reward ?? 0), 0);
+    return sum / list.length;
+  });
+
   filteredPicks = computed(() => {
     let picks = [...this.allPicks()];
+
+    const q = this.searchQuery().trim().toLowerCase();
+    if (q) {
+      picks = picks.filter(p =>
+        p.symbol.toLowerCase().includes(q) ||
+        (p.name || '').toLowerCase().includes(q) ||
+        (p.pattern_name || '').toLowerCase().includes(q)
+      );
+    }
+
+    const sec = this.sectorFilter();
+    if (sec !== 'ALL') {
+      picks = picks.filter(p => (p.sector || '').trim() === sec);
+    }
 
     const st = this.stageFilter();
     if (st === 'HIDE_LATE') {
@@ -654,7 +710,7 @@ export class PatternScreenerComponent implements OnInit, OnDestroy {
     const key = this.sortKey();
     picks.sort((a, b) => {
       if (key === 'timestamp') return b.timestamp.localeCompare(a.timestamp);
-      if (key === 'readiness_score') return (b.readiness_score ?? 0) - (a.readiness_score ?? 0);
+      if (key === 'readiness_score') return this.pickScore(b) - this.pickScore(a);
       if (key === 'upside_pct') return (b.week4_upside_pct ?? b.upside_pct) - (a.week4_upside_pct ?? a.upside_pct);
       return ((b[key] as number) ?? 0) - ((a[key] as number) ?? 0);
     });
@@ -681,24 +737,31 @@ export class PatternScreenerComponent implements OnInit, OnDestroy {
     this.loadPicks();
   }
 
+  toggleHighConviction(): void {
+    this.highConviction.update(v => !v);
+    this.loadPicks();
+  }
+
   async loadPicks(): Promise<void> {
     const activeMode = this.mode();
-    const cached = PatternScreenerComponent.cache[activeMode];
+    const hc = this.highConviction();
+    const cacheKey = activeMode === 'pre_breakout' ? `pre_${hc ? 'hc' : 'all'}` : 'all_patterns';
+    const cached = PatternScreenerComponent.cache[cacheKey];
     if (cached && this.allPicks().length === 0) {
       this.allPicks.set(cached.picks);
       this.lastUpdated.set(cached.at);
     }
-    const silent = (PatternScreenerComponent.cache[activeMode]?.picks?.length ?? 0) > 0;
+    const silent = (PatternScreenerComponent.cache[cacheKey]?.picks?.length ?? 0) > 0;
     if (!silent) this.loading.set(true);
     this.error.set(null);
     try {
       const resp = activeMode === 'pre_breakout'
-        ? await ApiService.getPreBreakoutPicks('monitored', 80, true)
+        ? await ApiService.getPreBreakoutPicks('monitored', 100, true, hc)
         : await ApiService.getPatternPicks(0);
       const picks = resp.picks ?? [];
       const at = new Date().toLocaleTimeString('en-IN');
-      PatternScreenerComponent.cache[activeMode] = { picks, at };
-      if (this.mode() === activeMode) {
+      PatternScreenerComponent.cache[cacheKey] = { picks, at };
+      if (this.mode() === activeMode && this.highConviction() === hc) {
         this.allPicks.set(picks);
         this.lastUpdated.set(at);
       }
@@ -709,10 +772,7 @@ export class PatternScreenerComponent implements OnInit, OnDestroy {
     }
   }
 
-  private static cache: Record<ScreenerMode, { picks: PatternPick[]; at: string } | null> = {
-    pre_breakout: null,
-    all_patterns: null,
-  };
+  private static cache: Record<string, { picks: PatternPick[]; at: string } | null> = {};
 
   refresh(): void { this.loadPicks(); }
 
@@ -772,6 +832,8 @@ export class PatternScreenerComponent implements OnInit, OnDestroy {
   }
 
   // ---- Filter setters ----
+  onSearch(e: Event): void { this.searchQuery.set((e.target as HTMLInputElement).value); }
+  setSectorFilter(e: Event): void { this.sectorFilter.set((e.target as HTMLSelectElement).value); }
   setVerdictFilter(v: VerdictFilter)     { this.verdictFilter.set(v); }
   setDirectionFilter(d: DirectionFilter) { this.directionFilter.set(d); }
   setCategoryFilter(c: CategoryFilter)   { this.categoryFilter.set(c); }
@@ -780,8 +842,27 @@ export class PatternScreenerComponent implements OnInit, OnDestroy {
   }
   setSortKey(event: Event): void {
     this.sortKey.set((event.target as HTMLSelectElement).value as SortKey);
+    this.stoxGrid?.sorting.set([]);
   }
-  toggleSort(key: SortKey): void { this.sortKey.set(key); }
+  toggleSort(key: SortKey): void {
+    this.sortKey.set(key);
+    this.stoxGrid?.sorting.set([]);
+  }
+
+  countStage(stage: string): number {
+    return this.allPicks().filter(p => p.setup_stage === stage).length;
+  }
+
+  stageCount(key: StageFilter): number {
+    const all = this.allPicks();
+    if (key === 'ALL') return all.length;
+    if (key === 'HIDE_LATE') return all.filter(p => !p.is_late_entry && p.setup_stage !== 'EXTENDED_LATE').length;
+    return all.filter(p => p.setup_stage === key).length;
+  }
+
+  pickScore(p: PatternPick): number {
+    return p.readiness_score ?? p.quality_score ?? p.confidence_score ?? 0;
+  }
 
   // ---- Helpers ----
   stageClass(stage?: string): string {

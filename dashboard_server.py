@@ -21,7 +21,8 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from config import (ENGINE_LABEL, SYMBOLS_FILE_PATH, CACHE_DB_PATH, MAX_CONCURRENT_TRIGGERS, DASHBOARD_HOST,
-                    QUOTE_SOURCES, QUOTE_POLL_SECONDS, AUTO_SCHEDULE, MAX_SYMBOL_WORKERS)
+                    QUOTE_SOURCES, QUOTE_POLL_SECONDS, AUTO_SCHEDULE, MAX_SYMBOL_WORKERS,
+                    CATALYST_AUTO_SCAN, CATALYST_POLL_SECONDS)
 from storage.cache_manager import CacheManager
 from storage.queue_manager import ValkeyQueueManager
 from graph import MultiAgentWorkflow
@@ -288,12 +289,23 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                 shared_bulletin = cache_mgr.get_latest_market_bulletin()
                 macro_items = cache_mgr.get_cached_macro(max_age_hours=24)
 
+                valkey_ok = bool(getattr(cache_mgr, "use_valkey", False))
+                system_alerts = []
+                if not valkey_ok:
+                    system_alerts.append({
+                        "level": "warning",
+                        "code": "VALKEY_UNAVAILABLE",
+                        "message": "Valkey server is not reachable on localhost:6379. Running in SQLite fallback mode.",
+                    })
                 resp_data = {
                     "model": ENGINE_LABEL,
                     "timestamp": datetime.now().isoformat(),
                     "queue_status": q_status,
                     "bulletin": shared_bulletin,
-                    "macro_items": macro_items
+                    "macro_items": macro_items,
+                    "valkey_available": valkey_ok,
+                    "catalyst_auto_scan": CATALYST_AUTO_SCAN,
+                    "system_alerts": system_alerts,
                 }
                 body = safe_json_dumps(resp_data)
                 self.send_response(200)
@@ -536,6 +548,21 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                 self._send_json(500, {"error": str(e)})
             return
 
+        elif path == "/api/activity-feed":
+            query = urllib.parse.parse_qs(parsed_path.query)
+            try:
+                since_id = int(query.get("since_id", ["0"])[0])
+            except Exception:
+                since_id = 0
+            try:
+                limit = max(1, min(int(query.get("limit", ["60"])[0]), 200))
+            except Exception:
+                limit = 60
+            events = events_bus.get_recent_events(since_id=since_id, limit=limit)
+            latest_id = events[-1]["id"] if events else since_id
+            self._send_json(200, {"events": events, "latest_id": latest_id})
+            return
+
         elif path == "/api/sector-research":
             try:
                 runs = cache_mgr.list_sector_research_runs()
@@ -678,13 +705,20 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
             return
 
         elif path == "/" or path == "/index.html":
-            # UI has been replaced by the Angular application.
-            # The backend now only serves API endpoints.
-            # Return 404 for the legacy dashboard page.
+            spa_index = os.path.join(PROJECT_ROOT, "frontend", "dist", "stox", "browser", "index.html")
+            if os.path.exists(spa_index):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                with open(spa_index, "rb") as f:
+                    raw = f.read()
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+                return
             self.send_response(404)
             self.send_header("Content-Type", "text/plain")
             self.end_headers()
-            self.wfile.write(b"Dashboard UI removed. Use the Angular frontend.")
+            self.wfile.write(b"Dashboard UI not built. Run 'cd frontend && npm run build'.")
             return
 
         elif path.startswith("/news_reports/") or path.startswith("/reports/") or path.startswith("/news/"):
@@ -742,7 +776,28 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                 with open(static_filepath, "rb") as f:
                     self.wfile.write(f.read())
             else:
-                self.send_error(404, "File Not Found")
+                spa_dir = os.path.join(PROJECT_ROOT, "frontend", "dist", "stox", "browser")
+                spa_asset = resolve_within(spa_dir, path.lstrip("/")) if os.path.isdir(spa_dir) and not path.startswith("/api/") else None
+                if spa_asset and os.path.isfile(spa_asset):
+                    import mimetypes
+                    ctype, _ = mimetypes.guess_type(spa_asset)
+                    self.send_response(200)
+                    self.send_header("Content-Type", ctype or "application/octet-stream")
+                    with open(spa_asset, "rb") as f:
+                        raw = f.read()
+                    self.send_header("Content-Length", str(len(raw)))
+                    self.end_headers()
+                    self.wfile.write(raw)
+                elif not path.startswith("/api/") and os.path.exists(os.path.join(spa_dir, "index.html")):
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    with open(os.path.join(spa_dir, "index.html"), "rb") as f:
+                        raw = f.read()
+                    self.send_header("Content-Length", str(len(raw)))
+                    self.end_headers()
+                    self.wfile.write(raw)
+                else:
+                    self.send_error(404, "File Not Found")
 
     def _read_json_body(self):
         """Parsed JSON object from the request body, or None (a 400 has then already been sent)."""
@@ -963,6 +1018,11 @@ def start_dashboard_server(port=None, open_browser=True):
     if port is None:
         port = PORT
     os.makedirs(os.path.join(PROJECT_ROOT, "static"), exist_ok=True)
+    if not getattr(cache_mgr, "use_valkey", False):
+        events_bus.publish("system_alert", {
+            "level": "warning",
+            "message": "Valkey is not available on localhost:6379. Running in SQLite fallback mode.",
+        })
     quote_poller.start()
     if AUTO_SCHEDULE:
         Scheduler(
@@ -975,6 +1035,10 @@ def start_dashboard_server(port=None, open_browser=True):
         BackgroundMacroSentinel(cache_mgr).start()
         print("🗓️ [Scheduler] Auto-schedule ON (pre-market refresh 08:45 IST, post-close analysis 16:00 IST) + MacroSentinel. "
               "Disable with AUTO_SCHEDULE=0.", flush=True)
+    if CATALYST_AUTO_SCAN:
+        from tools.catalyst_scanner import CatalystPoller
+        CatalystPoller(cache_mgr, poll_seconds=CATALYST_POLL_SECONDS).start()
+        print(f"⚡ [CatalystPoller] Scheduled NSE/BSE/PIB scan ON (every {CATALYST_POLL_SECONDS}s).", flush=True)
     for p in [port, port + 1, port + 2]:
         try:
             with ThreadedTCPServer((DASHBOARD_HOST, p), DashboardHandler) as httpd:
