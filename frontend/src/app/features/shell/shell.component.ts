@@ -11,6 +11,7 @@ import { BulletinComponent } from './bulletin.component';
 import { DashboardComponent } from '../dashboard/dashboard.component';
 import { PatternScreenerComponent } from '../screener/pattern-screener.component';
 import { SectorResearchComponent } from '../sector-research/sector-research.component';
+import { CatalystRadarComponent } from '../catalyst-radar/catalyst-radar.component';
 import { PortfolioModalComponent } from '../dashboard/portfolio-modal.component';
 import { StockDetailModalComponent } from '../dashboard/stock-detail-modal.component';
 import { stocksStore } from '../../core/stores/stocks.store';
@@ -26,6 +27,7 @@ import { stocksStore } from '../../core/stores/stocks.store';
     DashboardComponent,
     PatternScreenerComponent,
     SectorResearchComponent,
+    CatalystRadarComponent,
     PortfolioModalComponent,
     StockDetailModalComponent,
   ],
@@ -51,6 +53,9 @@ import { stocksStore } from '../../core/stores/stocks.store';
 
         <!-- Dynamic LLM Sector Research view -->
         <app-sector-research *ngIf="activeView() === 'sector'"></app-sector-research>
+
+        <!-- Stock Catalyst Early-Warning Radar -->
+        <app-catalyst-radar *ngIf="activeView() === 'catalysts'"></app-catalyst-radar>
       </main>
 
       <!-- Portfolio Diagnostics Modal -->
@@ -108,7 +113,8 @@ import { stocksStore } from '../../core/stores/stocks.store';
     }
 
     .main-content > app-pattern-screener,
-    .main-content > app-sector-research {
+    .main-content > app-sector-research,
+    .main-content > app-catalyst-radar {
       display: block;
       flex: 1;
       min-height: 0;

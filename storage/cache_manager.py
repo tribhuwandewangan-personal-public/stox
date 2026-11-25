@@ -502,6 +502,32 @@ class CacheManager:
                 )
             """)
 
+            # Stock Catalyst Early-Warning System
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS catalyst_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_hash TEXT UNIQUE NOT NULL,
+                    symbol TEXT NOT NULL,
+                    company_name TEXT,
+                    source TEXT NOT NULL,
+                    source_url TEXT,
+                    announced_at TEXT,
+                    title TEXT NOT NULL,
+                    summary TEXT,
+                    category TEXT NOT NULL,
+                    deal_value_cr REAL,
+                    annual_revenue_cr REAL,
+                    total_score REAL NOT NULL,
+                    tier TEXT NOT NULL,
+                    score_breakdown_json TEXT,
+                    pre_breakout_match INTEGER DEFAULT 0,
+                    pre_breakout_signals_json TEXT,
+                    created_at TEXT
+                )
+            """)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_catalyst_sym_date ON catalyst_events(symbol, announced_at)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_catalyst_tier_score ON catalyst_events(tier, total_score)")
+
             # Tiny key/value store (scheduler bookkeeping)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS kv_state (
@@ -2133,3 +2159,136 @@ class CacheManager:
                 ],
             )
             conn.commit()
+
+    # --- Stock Catalyst Early-Warning System ---
+    def _ensure_catalyst_table(self, conn: sqlite3.Connection) -> None:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS catalyst_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_hash TEXT UNIQUE NOT NULL,
+                symbol TEXT NOT NULL,
+                company_name TEXT,
+                source TEXT NOT NULL,
+                source_url TEXT,
+                announced_at TEXT,
+                title TEXT NOT NULL,
+                summary TEXT,
+                category TEXT NOT NULL,
+                deal_value_cr REAL,
+                annual_revenue_cr REAL,
+                total_score REAL NOT NULL,
+                tier TEXT NOT NULL,
+                score_breakdown_json TEXT,
+                pre_breakout_match INTEGER DEFAULT 0,
+                pre_breakout_signals_json TEXT,
+                created_at TEXT
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_catalyst_sym_date ON catalyst_events(symbol, announced_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_catalyst_tier_score ON catalyst_events(tier, total_score)")
+
+    def save_catalyst_events(self, events: List[Dict[str, Any]]) -> int:
+        if not events:
+            return 0
+        now = datetime.now().isoformat()
+        saved = 0
+        with self._sector_db_conn() as conn:
+            self._ensure_catalyst_table(conn)
+            for ev in events:
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO catalyst_events (
+                        event_hash, symbol, company_name, source, source_url, announced_at,
+                        title, summary, category, deal_value_cr, annual_revenue_cr,
+                        total_score, tier, score_breakdown_json,
+                        pre_breakout_match, pre_breakout_signals_json, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        ev["event_hash"],
+                        str(ev["symbol"]).upper().strip(),
+                        ev.get("company_name") or "",
+                        ev.get("source") or "NSE",
+                        ev.get("source_url") or "",
+                        ev.get("announced_at") or now[:10],
+                        ev["title"],
+                        ev.get("summary") or "",
+                        ev.get("category") or "ROUTINE",
+                        ev.get("deal_value_cr"),
+                        ev.get("annual_revenue_cr"),
+                        float(ev.get("total_score", 0.0)),
+                        ev.get("tier") or "C",
+                        self._safe_json_dumps(ev.get("score_breakdown") or {}),
+                        1 if ev.get("pre_breakout_match") else 0,
+                        self._safe_json_dumps(ev.get("pre_breakout_signals") or []),
+                        ev.get("created_at") or now,
+                    ),
+                )
+                saved += 1
+            conn.commit()
+        return saved
+
+    def get_catalyst_events(
+        self,
+        symbol: Optional[str] = None,
+        tier: Optional[str] = None,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        with self._sector_db_conn() as conn:
+            self._ensure_catalyst_table(conn)
+            clauses = []
+            params: List[Any] = []
+            if symbol:
+                clauses.append("symbol = ?")
+                params.append(symbol.upper().strip())
+            if tier and tier.upper() in ("A", "B", "C"):
+                clauses.append("tier = ?")
+                params.append(tier.upper())
+            where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+            params.append(max(1, min(int(limit or 100), 500)))
+            rows = conn.execute(
+                f"""
+                SELECT id, event_hash, symbol, company_name, source, source_url, announced_at,
+                       title, summary, category, deal_value_cr, annual_revenue_cr,
+                       total_score, tier, score_breakdown_json,
+                       pre_breakout_match, pre_breakout_signals_json, created_at
+                FROM catalyst_events
+                {where}
+                ORDER BY announced_at DESC, total_score DESC, id DESC
+                LIMIT ?
+                """,
+                params,
+            ).fetchall()
+        return [
+            {
+                "id": r[0],
+                "event_hash": r[1],
+                "symbol": r[2],
+                "company_name": r[3],
+                "source": r[4],
+                "source_url": r[5],
+                "announced_at": r[6],
+                "title": r[7],
+                "summary": r[8],
+                "category": r[9],
+                "deal_value_cr": r[10],
+                "annual_revenue_cr": r[11],
+                "total_score": r[12],
+                "tier": r[13],
+                "score_breakdown": json.loads(r[14]) if r[14] else {},
+                "pre_breakout_match": bool(r[15]),
+                "pre_breakout_signals": json.loads(r[16]) if r[16] else [],
+                "created_at": r[17],
+            }
+            for r in rows
+        ]
+
+    def get_recent_catalyst_count(self, symbol: str, days: int = 30) -> int:
+        cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+        with self._sector_db_conn() as conn:
+            self._ensure_catalyst_table(conn)
+            row = conn.execute(
+                "SELECT COUNT(*) FROM catalyst_events WHERE symbol = ? AND announced_at >= ?",
+                (symbol.upper().strip(), cutoff),
+            ).fetchone()
+        return int(row[0] or 0) if row else 0

@@ -513,6 +513,29 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                 self._send_json(500, {"error": str(e), "ticker": ticker})
             return
 
+        elif path == "/api/catalysts/early-warning":
+            query = urllib.parse.parse_qs(parsed_path.query)
+            tier = query.get("tier", [""])[0].strip() or None
+            sym = query.get("symbol", [""])[0].strip() or None
+            try:
+                limit = int(query.get("limit", ["100"])[0])
+            except Exception:
+                limit = 100
+            try:
+                events = cache_mgr.get_catalyst_events(symbol=sym, tier=tier, limit=limit)
+                self._send_json(200, {"events": events, "count": len(events)})
+            except Exception as e:
+                self._send_json(500, {"error": str(e), "events": []})
+            return
+
+        elif path == "/api/catalysts/backtest":
+            try:
+                from tools.catalyst_backtest import run_catalyst_backtest
+                self._send_json(200, run_catalyst_backtest(cache_manager=cache_mgr))
+            except Exception as e:
+                self._send_json(500, {"error": str(e)})
+            return
+
         elif path == "/api/sector-research":
             try:
                 runs = cache_mgr.list_sector_research_runs()
@@ -832,6 +855,42 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                 from tools.market_scanner import run_market_scan
                 threading.Thread(target=run_market_scan, kwargs={"max_scan_count": 50, "top_n": 15}, daemon=True).start()
                 self._send_json(200, {"status": "triggered", "message": "Market scan started in background"})
+            except Exception as e:
+                self._send_json(500, {"status": "error", "message": str(e)})
+            return
+
+        elif parsed_path.path == "/api/catalysts/scan":
+            try:
+                from tools.catalyst_scanner import CatalystScannerEngine
+                engine = CatalystScannerEngine(cache_manager=cache_mgr)
+                self._send_json(200, engine.run_live_scan())
+            except Exception as e:
+                self._send_json(500, {"status": "error", "message": str(e)})
+            return
+
+        elif parsed_path.path == "/api/catalysts/analyze":
+            req_data = self._read_json_body()
+            if req_data is None:
+                return
+            sym = str(req_data.get("symbol", "")).upper().strip()
+            title = str(req_data.get("title", "")).strip()
+            if not sym or not valid_symbol(sym) or not title:
+                self._send_json(400, {"status": "error", "message": "Valid symbol and title are required"})
+                return
+            try:
+                from tools.catalyst_scanner import CatalystScannerEngine
+                engine = CatalystScannerEngine(cache_manager=cache_mgr)
+                ev = engine.analyze_and_save_event(
+                    symbol=sym,
+                    title=title,
+                    summary=str(req_data.get("summary", "")),
+                    source=str(req_data.get("source", "NSE")),
+                    company_name=str(req_data.get("company_name", "")),
+                    announced_at=str(req_data.get("announced_at", "")),
+                    deal_value_cr=req_data.get("deal_value_cr"),
+                    annual_revenue_cr=req_data.get("annual_revenue_cr"),
+                )
+                self._send_json(200, ev)
             except Exception as e:
                 self._send_json(500, {"status": "error", "message": str(e)})
             return

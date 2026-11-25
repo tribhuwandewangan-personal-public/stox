@@ -298,6 +298,44 @@ export class ApiService {
       body: JSON.stringify({})
     }));
   }
+
+  /**
+   * GET /api/catalysts/early-warning: List scored corporate catalysts.
+   */
+  static getCatalystEarlyWarning(tier: string = '', symbol: string = ''): Promise<{ events: any[]; count: number }> {
+    const params = new URLSearchParams();
+    if (tier) params.set('tier', tier);
+    if (symbol) params.set('symbol', symbol);
+    const qs = params.toString();
+    return fetchJson<{ events: any[]; count: number }>(`/catalysts/early-warning${qs ? '?' + qs : ''}`);
+  }
+
+  /**
+   * POST /api/catalysts/scan: Fetch primary NSE/BSE/PIB feeds, score & fuse pre-breakout signals.
+   */
+  static scanCatalysts(): Promise<any> {
+    return fetchJson<any>('/catalysts/scan', withCsrfHeaders({
+      method: 'POST',
+      body: JSON.stringify({})
+    }));
+  }
+
+  /**
+   * POST /api/catalysts/analyze: Deterministically score a custom announcement.
+   */
+  static analyzeCatalyst(payload: { symbol: string; title: string; summary?: string; source?: string; annual_revenue_cr?: number | null }): Promise<any> {
+    return fetchJson<any>('/catalysts/analyze', withCsrfHeaders({
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }));
+  }
+
+  /**
+   * GET /api/catalysts/backtest: Historical catalyst backtest summary.
+   */
+  static getCatalystBacktest(): Promise<any> {
+    return fetchJson<any>('/catalysts/backtest');
+  }
 }
 
 export const apiService = ApiService;

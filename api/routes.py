@@ -646,6 +646,70 @@ async def sector_research_delete(request: Request) -> Response:
         return _json_response({"error": str(e)}, status_code=500)
 
 
+async def catalyst_early_warning(request: Request) -> Response:
+    """GET /api/catalysts/early-warning?tier=&symbol=&limit=: Scored corporate catalysts."""
+    try:
+        cache_mgr = _managers["cache_mgr"]
+        qp = request.query_params
+        tier = qp.get("tier", "").strip() or None
+        symbol = qp.get("symbol", "").strip() or None
+        limit = int(qp.get("limit", "100") or 100)
+        events = cache_mgr.get_catalyst_events(symbol=symbol, tier=tier, limit=limit)
+        return _json_response({"events": events, "count": len(events)})
+    except Exception as e:
+        return _json_response({"error": str(e), "events": []}, status_code=500)
+
+
+async def catalyst_scan(request: Request) -> Response:
+    """POST /api/catalysts/scan: Ingest NSE/BSE/PIB catalysts, score them, and fuse pre-breakout signals."""
+    try:
+        cache_mgr = _managers["cache_mgr"]
+        from tools.catalyst_scanner import CatalystScannerEngine
+        engine = CatalystScannerEngine(cache_manager=cache_mgr)
+        res = await asyncio.to_thread(engine.run_live_scan)
+        return _json_response(res)
+    except Exception as e:
+        return _json_response({"error": str(e)}, status_code=500)
+
+
+async def catalyst_analyze(request: Request) -> Response:
+    """POST /api/catalysts/analyze: Score a specific announcement deterministically and save to SQLite."""
+    try:
+        cache_mgr = _managers["cache_mgr"]
+        data = await request.json()
+        sym = str(data.get("symbol", "")).upper().strip()
+        title = str(data.get("title", "")).strip()
+        if not sym or not valid_symbol(sym) or not title:
+            return _json_response({"error": "Valid symbol and title are required"}, status_code=400)
+        from tools.catalyst_scanner import CatalystScannerEngine
+        engine = CatalystScannerEngine(cache_manager=cache_mgr)
+        ev = await asyncio.to_thread(
+            engine.analyze_and_save_event,
+            symbol=sym,
+            title=title,
+            summary=str(data.get("summary", "")),
+            source=str(data.get("source", "NSE")),
+            company_name=str(data.get("company_name", "")),
+            announced_at=str(data.get("announced_at", "")),
+            deal_value_cr=data.get("deal_value_cr"),
+            annual_revenue_cr=data.get("annual_revenue_cr"),
+        )
+        return _json_response(ev)
+    except Exception as e:
+        return _json_response({"error": str(e)}, status_code=500)
+
+
+async def catalyst_backtest(request: Request) -> Response:
+    """GET /api/catalysts/backtest: Historical catalyst backtest summary over stored events."""
+    try:
+        cache_mgr = _managers["cache_mgr"]
+        from tools.catalyst_backtest import run_catalyst_backtest
+        res = await asyncio.to_thread(run_catalyst_backtest, cache_manager=cache_mgr)
+        return _json_response(res)
+    except Exception as e:
+        return _json_response({"error": str(e)}, status_code=500)
+
+
 # Route definitions
 routes = [
     Route("/api/status", endpoint=status, methods=["GET"]),
@@ -677,5 +741,9 @@ routes = [
     Route("/api/sector-research/{run_id:int}", endpoint=sector_research_delete, methods=["DELETE"]),
     Route("/api/sector-research/{run_id:int}/rescore", endpoint=sector_research_rescore, methods=["POST"]),
     Route("/api/sector-research/{run_id:int}/delete", endpoint=sector_research_delete, methods=["POST"]),
+    Route("/api/catalysts/early-warning", endpoint=catalyst_early_warning, methods=["GET"]),
+    Route("/api/catalysts/scan", endpoint=catalyst_scan, methods=["POST"]),
+    Route("/api/catalysts/analyze", endpoint=catalyst_analyze, methods=["POST"]),
+    Route("/api/catalysts/backtest", endpoint=catalyst_backtest, methods=["GET"]),
     Route("/favicon.ico", endpoint=favicon, methods=["GET"]),
 ]
