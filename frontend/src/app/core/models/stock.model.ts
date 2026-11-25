@@ -71,6 +71,18 @@ export interface StructuredSignal {
   evidence_breakdown?: EvidenceBreakdownItem[];
   data_coverage_pct?: number;
   chart_patterns?: string;
+  pre_breakout_projection?: {
+    setup_stage?: string;
+    entry_window?: string;
+    breakout_trigger?: number;
+    distance_to_breakout_pct?: number;
+    week4_target?: number;
+    week4_target_low?: number;
+    week4_upside_pct?: number;
+    stop_loss?: number;
+    readiness_score?: number;
+    projection_summary?: string;
+  } | null;
   upcoming_events_note?: string;
   event_guardrail?: {
     earnings_guardrail_active?: boolean;
@@ -133,6 +145,20 @@ export interface PatternResult {
   stop_loss?: number;
   risk_reward_ratio?: number;
   description?: string;
+  setup_stage?: 'IMMINENT_BREAKOUT' | 'FORMING_PRE_BREAKOUT' | 'FRESH_BREAKOUT' | 'EXTENDED_LATE' | 'EARLY_BASE' | string;
+  is_pre_breakout?: boolean;
+  is_late_entry?: boolean;
+  entry_window?: string;
+  breakout_trigger?: number | null;
+  distance_to_breakout_pct?: number | null;
+  week4_target?: number | null;
+  week4_target_low?: number | null;
+  week4_upside_pct?: number | null;
+  week4_upside_from_ltp_pct?: number | null;
+  full_pattern_target?: number | null;
+  readiness_score?: number;
+  projection_summary?: string;
+  forming_evidence?: string[];
 }
 
 export interface PriceInfo {
@@ -460,6 +486,8 @@ export interface FinancialStatementRow {
 export interface ChartData {
   symbol: string;
   candles: Candle[];
+  patterns?: PatternResult[];
+  last_price?: number;
   indicators?: any;
 }
 
@@ -518,6 +546,7 @@ export interface PatternPick {
   last_price: number;
   pattern_name: string;
   pattern_category: string;
+  pattern_status?: string;
   direction: 'Bullish' | 'Bearish';
   action_verdict: 'BUY' | 'ACCUMULATE' | 'HOLD' | 'REDUCE' | 'SELL';
   confidence_score: number;
@@ -527,11 +556,38 @@ export interface PatternPick {
   upside_pct: number;
   downside_pct: number;
   risk_reward: number;
+  setup_stage?: 'IMMINENT_BREAKOUT' | 'FORMING_PRE_BREAKOUT' | 'FRESH_BREAKOUT' | 'EXTENDED_LATE' | 'EARLY_BASE' | string;
+  is_pre_breakout?: boolean;
+  is_late_entry?: boolean;
+  entry_window?: string;
+  breakout_trigger?: number | null;
+  distance_to_breakout_pct?: number | null;
+  week4_target?: number | null;
+  week4_target_low?: number | null;
+  week4_upside_pct?: number | null;
+  week4_upside_from_ltp_pct?: number | null;
+  full_pattern_target?: number | null;
+  readiness_score?: number;
+  quality_score?: number;
+  rsi_14?: number | null;
+  up_down_vol_ratio?: number | null;
+  projection_summary?: string;
+  forming_evidence?: string[];
   sparkline: number[];
   timestamp: string;
 }
 
 export interface PatternPicksResponse {
   count: number;
+  picks: PatternPick[];
+}
+
+export interface PreBreakoutResponse {
+  count: number;
+  total_matches?: number;
+  universe: string;
+  scanned_symbols: number;
+  as_of: string;
+  advisory_note?: string;
   picks: PatternPick[];
 }

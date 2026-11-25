@@ -9,6 +9,7 @@ import { SidebarComponent } from './sidebar.component';
 import { AddSymbolModalComponent } from './add-symbol-modal.component';
 import { MacroCatalystsBannerComponent } from './macro-catalysts-banner.component';
 import { QuickPicksTableComponent } from './quick-picks-table.component';
+import { PreBreakoutRadarComponent } from './pre-breakout-radar.component';
 import { FundamentalPicksTableComponent } from './fundamental-picks-table.component';
 import { Stock } from '../../core/models/stock.model';
 import { stocksStore } from '../../core/stores/stocks.store';
@@ -20,6 +21,7 @@ import { stocksStore } from '../../core/stores/stocks.store';
     CommonModule,
     SidebarComponent,
     MacroCatalystsBannerComponent,
+    PreBreakoutRadarComponent,
     QuickPicksTableComponent,
     FundamentalPicksTableComponent,
     StockGridComponent,
@@ -37,6 +39,9 @@ import { stocksStore } from '../../core/stores/stocks.store';
       <div class="dashboard-main-flow">
         <!-- Upcoming Macro Catalysts Banner -->
         <app-macro-catalysts-banner></app-macro-catalysts-banner>
+
+        <!-- Pre-Breakout Bullish Radar (4-Week Projections) -->
+        <app-pre-breakout-radar></app-pre-breakout-radar>
 
         <!-- Quick Picks Table -->
         <app-quick-picks-table></app-quick-picks-table>

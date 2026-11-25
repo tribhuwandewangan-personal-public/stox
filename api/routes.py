@@ -24,8 +24,10 @@ from tools.web_security import valid_symbol, resolve_within
 from tools.quote_tools import build_quotes_response
 from tools.outcome_tracker import compute_accuracy
 from tools.symbol_search_tools import search_internet_symbols, add_symbol_to_json, remove_symbol_from_json
-from api.services import safe_json_dumps, get_stocks_response_body, get_history_response_body, get_top_pattern_picks
-from api.services import _load_symbols_list
+from api.services import (
+    safe_json_dumps, get_stocks_response_body, get_history_response_body,
+    get_top_pattern_picks, get_pre_breakout_projections, _load_symbols_list,
+)
 from tools import events_bus
 
 _trigger_slots = threading.BoundedSemaphore(MAX_CONCURRENT_TRIGGERS)
@@ -77,6 +79,7 @@ async def status(request: Request) -> Response:
         resp_data = {
             "model": ENGINE_LABEL,
             "timestamp": datetime.now().isoformat(),
+            "ws_enabled": True,
             "queue_status": q_status,
             "bulletin": shared_bulletin,
             "macro_items": macro_items
@@ -370,6 +373,33 @@ async def top_patterns(request: Request) -> Response:
         return _json_response({"error": str(e), "picks": []}, status_code=500)
 
 
+async def pre_breakout_patterns(request: Request) -> Response:
+    """GET /api/patterns/pre-breakout: Forming bullish setups about to break out with 4-week projections."""
+    try:
+        cache_mgr = _managers["cache_mgr"]
+        tech_engine = _managers["tech_engine"]
+        universe = request.query_params.get("universe", "monitored").lower().strip()
+        if universe not in ("monitored", "curated", "midcap250", "all_nse", "all"):
+            universe = "monitored"
+        include_fresh = request.query_params.get("include_fresh", "1").strip() not in ("0", "false", "no")
+        high_conviction = request.query_params.get("high_conviction", "1").strip() not in ("0", "false", "no")
+        try:
+            limit = max(1, min(int(request.query_params.get("limit", "60")), 200))
+        except (ValueError, TypeError):
+            limit = 60
+        payload = get_pre_breakout_projections(
+            cache_mgr,
+            tech_engine,
+            universe=universe,
+            include_fresh=include_fresh,
+            limit=limit,
+            high_conviction_only=high_conviction,
+        )
+        return _json_response(payload)
+    except Exception as e:
+        return _json_response({"error": str(e), "count": 0, "picks": []}, status_code=500)
+
+
 async def favicon(request: Request) -> Response:
     """GET /favicon.ico: Empty response."""
     return Response(status_code=204)
@@ -546,6 +576,7 @@ routes = [
     Route("/api/accuracy", endpoint=accuracy, methods=["GET"]),
     Route("/api/history", endpoint=history, methods=["GET"]),
     Route("/api/patterns/top", endpoint=top_patterns, methods=["GET"]),
+    Route("/api/patterns/pre-breakout", endpoint=pre_breakout_patterns, methods=["GET"]),
     Route("/api/pattern-screener", endpoint=top_patterns, methods=["GET"]),
     Route("/api/events", endpoint=events, methods=["GET"]),
     Route("/api/search-symbol", endpoint=search_symbol, methods=["GET"]),

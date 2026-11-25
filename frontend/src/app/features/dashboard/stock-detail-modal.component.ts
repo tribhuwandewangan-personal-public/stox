@@ -17,10 +17,24 @@ import { Component, OnInit, OnDestroy, HostListener, signal, computed, ViewChild
 import { CommonModule } from '@angular/common';
 import { stocksStore } from '../../core/stores/stocks.store';
 import { apiService } from '../../core/services/api.service';
-import { Stock, Candle } from '../../core/models/stock.model';
+import { Stock, Candle, PatternResult } from '../../core/models/stock.model';
 import { verdictInfo, getStockBucket } from '../../core/utils/verdict';
 import { bestPrice, fmtPrice, fmtChg } from '../../core/utils/price';
 import { parseMarkdown } from '../../core/utils/markdown';
+
+interface ChartProjection {
+  patternName: string;
+  setupStage?: string;
+  entryWindow?: string;
+  direction: 'Bullish' | 'Bearish';
+  isPreBreakout: boolean;
+  triggerPrice: number;
+  targetPrice: number;
+  targetLow: number;
+  stopLoss: number;
+  upsidePct: number;
+  summary: string;
+}
 
 @Component({
   selector: 'app-stock-detail-modal',
@@ -57,12 +71,33 @@ import { parseMarkdown } from '../../core/utils/markdown';
               <span class="legend-item"><span class="legend-color sma-color"></span> SMA 50</span>
               <span class="legend-item"><span class="legend-color bull-color"></span> Bullish Candle</span>
               <span class="legend-item"><span class="legend-color bear-color"></span> Bearish Candle</span>
+              <span class="legend-item" *ngIf="showProjection() && activeProjection()"><span class="legend-dash trig-color"></span> Buy Trigger</span>
+              <span class="legend-item" *ngIf="showProjection() && activeProjection()"><span class="legend-dash proj-color"></span> 4W Projection</span>
+              <span class="legend-item" *ngIf="showProjection() && activeProjection()"><span class="legend-dash sl-color"></span> Stop Loss</span>
             </div>
             <div class="chart-time-tabs">
               <button class="tab-btn" [class.active]="chartDays() === 30" (click)="changeDays(30)">30D</button>
               <button class="tab-btn" [class.active]="chartDays() === 60" (click)="changeDays(60)">60D</button>
               <button class="tab-btn" [class.active]="chartDays() === 90" (click)="changeDays(90)">90D</button>
+              <button class="tab-btn proj-toggle" [class.active]="showProjection()" (click)="toggleProjection()" title="Toggle 4-Week Projection Overlay on Graph">
+                🚀 4W Projection
+              </button>
             </div>
+          </div>
+
+          <div class="chart-proj-banner" *ngIf="showProjection() && activeProjection() as proj" [class.bear]="proj.direction === 'Bearish'">
+            <div class="proj-banner-left">
+              <span class="proj-banner-tag" [ngClass]="patternStageClass(proj.setupStage)">
+                {{ proj.setupStage ? patternStageLabel(proj.setupStage, proj.entryWindow) : (proj.direction + ' Setup') }}
+              </span>
+              <strong class="proj-banner-name">{{ proj.patternName }}</strong>
+              <span class="proj-banner-levels">
+                {{ proj.direction === 'Bullish' ? 'Buy Above' : 'Breakdown <' }}: <b class="text-sky">Rs.{{ proj.triggerPrice | number:'1.2-2' }}</b>
+                &bull; 4W Target: <b [class.text-green]="proj.direction === 'Bullish'" [class.text-red]="proj.direction === 'Bearish'">Rs.{{ proj.targetPrice | number:'1.2-2' }} ({{ proj.upsidePct >= 0 ? '+' : '' }}{{ proj.upsidePct | number:'1.1-1' }}%)</b>
+                &bull; Stop: <b class="text-red">Rs.{{ proj.stopLoss | number:'1.2-2' }}</b>
+              </span>
+            </div>
+            <div class="proj-banner-summary" *ngIf="proj.summary">{{ proj.summary }}</div>
           </div>
 
           <div class="canvas-wrapper">
@@ -73,7 +108,7 @@ import { parseMarkdown } from '../../core/utils/markdown';
           </div>
 
           <div class="chart-tooltip-box">
-            {{ chartTooltip() || 'Hover cursor over chart to inspect candle OHLC & Bollinger Bands' }}
+            {{ chartTooltip() || 'Hover cursor over candles or the 4-week projection cone to inspect OHLC & projected levels' }}
           </div>
         </div>
 
@@ -92,13 +127,18 @@ import { parseMarkdown } from '../../core/utils/markdown';
                     <strong class="pattern-name">{{ p.name }}</strong>
                     <span class="score-pill" *ngIf="p.quality_score">Score: {{ p.quality_score }}/100</span>
                     <span class="status-pill" *ngIf="p.status">{{ p.status }}</span>
+                    <span class="stage-pill-modal" *ngIf="p.setup_stage" [ngClass]="patternStageClass(p.setup_stage)">
+                      {{ patternStageLabel(p.setup_stage, p.entry_window) }}
+                    </span>
                   </div>
                   <span class="dir-pill" [ngClass]="'pill-' + (p.direction || 'neutral').toLowerCase()">{{ p.type || p.direction }}</span>
                 </div>
+                <p class="pattern-proj-callout" *ngIf="p.projection_summary">🚀 {{ p.projection_summary }}</p>
                 <p class="pattern-desc" *ngIf="p.description">{{ p.description }}</p>
-                <div class="pattern-levels" *ngIf="p.entry_trigger || p.target_price || p.stop_loss || p.risk_reward_ratio">
-                  <span *ngIf="p.entry_trigger">Entry/Pivot: <b>Rs.{{ p.entry_trigger }}</b></span>
-                  <span *ngIf="p.target_price">Target: <b class="text-green">Rs.{{ p.target_price }}</b></span>
+                <div class="pattern-levels" *ngIf="p.breakout_trigger || p.entry_trigger || p.week4_target || p.target_price || p.stop_loss || p.risk_reward_ratio">
+                  <span *ngIf="p.breakout_trigger || p.entry_trigger">Buy Above: <b class="text-sky">Rs.{{ p.breakout_trigger ?? p.entry_trigger }}</b></span>
+                  <span *ngIf="p.week4_target">4W Target: <b class="text-green">Rs.{{ p.week4_target }}<ng-container *ngIf="p.week4_upside_pct"> (+{{ p.week4_upside_pct }}%)</ng-container></b></span>
+                  <span *ngIf="p.target_price && p.target_price !== p.week4_target">Pattern Target: <b class="text-green">Rs.{{ p.target_price }}</b></span>
                   <span *ngIf="p.stop_loss">Stop Loss: <b class="text-red">Rs.{{ p.stop_loss }}</b></span>
                   <span *ngIf="p.risk_reward_ratio">R:R: <b class="text-sky">{{ p.risk_reward_ratio }}</b></span>
                 </div>
@@ -454,7 +494,8 @@ import { parseMarkdown } from '../../core/utils/markdown';
 
     .chart-legend {
       display: flex;
-      gap: 14px;
+      flex-wrap: wrap;
+      gap: 12px;
       font-size: 0.72rem;
       color: #94a3b8;
       align-items: center;
@@ -462,12 +503,16 @@ import { parseMarkdown } from '../../core/utils/markdown';
 
     .legend-item { display: inline-flex; align-items: center; gap: 5px; }
     .legend-color { width: 12px; height: 3px; border-radius: 2px; }
+    .legend-dash { width: 14px; height: 0; border-top: 2px dashed #38bdf8; }
+    .trig-color { border-top-color: #38bdf8; }
+    .proj-color { border-top-color: #34d399; }
+    .sl-color { border-top-color: #ef4444; }
     .bb-color { background: #38bdf8; }
     .sma-color { background: #f59e0b; }
     .bull-color { background: #10b981; }
     .bear-color { background: #ef4444; }
 
-    .chart-time-tabs { display: flex; gap: 6px; }
+    .chart-time-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
     .tab-btn {
       background: rgba(255, 255, 255, 0.05);
       border: 1px solid rgba(255, 255, 255, 0.1);
@@ -483,6 +528,42 @@ import { parseMarkdown } from '../../core/utils/markdown';
       border-color: #38bdf8;
       color: #fff;
     }
+    .proj-toggle.active {
+      background: rgba(16, 185, 129, 0.18);
+      border-color: #10b981;
+      color: #6ee7b7;
+    }
+
+    .chart-proj-banner {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 7px 11px;
+      border-radius: 8px;
+      background: rgba(16, 185, 129, 0.08);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      font-size: 0.74rem;
+    }
+    .chart-proj-banner.bear {
+      background: rgba(239, 68, 68, 0.08);
+      border-color: rgba(239, 68, 68, 0.25);
+    }
+    .proj-banner-left {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .proj-banner-tag {
+      padding: 1px 7px;
+      border-radius: 999px;
+      font-size: 0.65rem;
+      font-weight: 700;
+    }
+    .proj-banner-name { color: #e2e8f0; font-size: 0.77rem; }
+    .proj-banner-levels { color: #94a3b8; font-family: 'JetBrains Mono', monospace; font-size: 0.71rem; }
+    .proj-banner-summary { color: #a7f3d0; font-size: 0.72rem; line-height: 1.35; }
+    .chart-proj-banner.bear .proj-banner-summary { color: #fca5a5; }
 
     .canvas-wrapper {
       position: relative;
@@ -610,6 +691,29 @@ import { parseMarkdown } from '../../core/utils/markdown';
       line-height: 1.4;
       margin: 0;
     }
+
+    .pattern-proj-callout {
+      font-size: 0.77rem;
+      color: #6ee7b7;
+      background: rgba(16, 185, 129, 0.1);
+      border-left: 2px solid #10b981;
+      padding: 5px 8px;
+      border-radius: 4px;
+      margin: 0;
+      line-height: 1.4;
+    }
+
+    .stage-pill-modal {
+      padding: 1px 7px;
+      border-radius: 999px;
+      font-size: 0.65rem;
+      font-weight: 700;
+    }
+    .stage-imminent { background: rgba(245, 158, 11, 0.18); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
+    .stage-forming { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.35); }
+    .stage-fresh { background: rgba(16, 185, 129, 0.16); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.38); }
+    .stage-late { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.35); }
+    .stage-neutral { background: rgba(100, 116, 139, 0.16); color: #94a3b8; }
 
     .pattern-levels {
       display: flex;
@@ -810,10 +914,141 @@ export class StockDetailModalComponent implements OnInit, AfterViewInit, OnDestr
   stocksStore = stocksStore;
   chartDays = signal<number>(90);
   candles = signal<Candle[]>([]);
+  historyPatterns = signal<PatternResult[]>([]);
+  showProjection = signal<boolean>(true);
   isLoadingChart = signal<boolean>(false);
   isAnalyzing = signal<boolean>(false);
   chartTooltip = signal<string>('');
   activeFinTab = signal<'income' | 'balance' | 'cashflow'>('income');
+
+  private lastChartLayout = {
+    padLeft: 10,
+    padRight: 82,
+    plotW: 600,
+    n: 0,
+    totalSlots: 1,
+    projBars: 0,
+    lastClose: 0,
+  };
+
+  activeProjection = computed<ChartProjection | null>(() => {
+    const s = this.selectedStock;
+    if (!s) return null;
+
+    const cands = this.candles();
+    const lastCandleClose = cands.length > 0 ? Number(cands[cands.length - 1].close ?? cands[cands.length - 1].CLOSE_PRICE ?? 0) : 0;
+    const lastClose = Number(s.price_info?.price || s.tech_output?.raw_indicators?.last_price || lastCandleClose || 0);
+    if (!isFinite(lastClose) || lastClose <= 0) return null;
+
+    const mergedPatterns: PatternResult[] = [
+      ...(s.patterns || []),
+      ...this.historyPatterns().filter(hp => !(s.patterns || []).some(sp => sp.name === hp.name)),
+    ];
+
+    const chosen =
+      mergedPatterns.find(p => p.direction === 'Bullish' && p.is_pre_breakout && (p.week4_target || p.target_price)) ||
+      mergedPatterns.find(p => (p.week4_target || p.target_price) && (p.breakout_trigger || p.entry_trigger || p.stop_loss));
+
+    const parseRs = (val: any): number => {
+      if (val == null) return 0;
+      if (typeof val === 'number') return isFinite(val) ? val : 0;
+      const m = String(val).replace(/,/g, '').match(/([0-9]+(?:\.[0-9]+)?)/);
+      return m ? parseFloat(m[1]) : 0;
+    };
+
+    if (chosen) {
+      const dir: 'Bullish' | 'Bearish' = String(chosen.direction || '').toLowerCase().includes('bearish') ? 'Bearish' : 'Bullish';
+      const rawTarget = Number(chosen.week4_target ?? chosen.target_price ?? 0);
+      const rawTrigger = Number(chosen.breakout_trigger ?? chosen.entry_trigger ?? lastClose);
+      let rawStop = Number(chosen.stop_loss ?? 0);
+
+      if (dir === 'Bullish' && rawTarget > lastClose) {
+        const trigger = rawTrigger > 0 ? rawTrigger : lastClose;
+        if (!rawStop || rawStop <= 0 || rawStop >= Math.min(lastClose, trigger)) {
+          rawStop = Number((Math.min(lastClose, trigger) * 0.95).toFixed(2));
+        }
+        const targetLow = Number(chosen.week4_target_low ?? (trigger + (rawTarget - trigger) * 0.7));
+        const upsidePct = Number(chosen.week4_upside_pct ?? (((rawTarget - trigger) / Math.max(trigger, 1e-6)) * 100));
+        return {
+          patternName: chosen.name,
+          setupStage: chosen.setup_stage,
+          entryWindow: chosen.entry_window,
+          direction: 'Bullish',
+          isPreBreakout: Boolean(chosen.is_pre_breakout),
+          triggerPrice: trigger,
+          targetPrice: rawTarget,
+          targetLow: targetLow > trigger ? targetLow : Number((trigger + (rawTarget - trigger) * 0.7).toFixed(2)),
+          stopLoss: rawStop,
+          upsidePct,
+          summary: chosen.projection_summary || '',
+        };
+      }
+      if (dir === 'Bearish' && rawTarget > 0 && rawTarget < lastClose) {
+        const trigger = rawTrigger > 0 ? rawTrigger : lastClose;
+        if (!rawStop || rawStop <= Math.max(lastClose, trigger)) {
+          rawStop = Number((Math.max(lastClose, trigger) * 1.05).toFixed(2));
+        }
+        const targetLow = Number((trigger - (trigger - rawTarget) * 0.7).toFixed(2));
+        const upsidePct = Number((((rawTarget - trigger) / Math.max(trigger, 1e-6)) * 100).toFixed(2));
+        return {
+          patternName: chosen.name,
+          setupStage: chosen.setup_stage,
+          entryWindow: chosen.entry_window,
+          direction: 'Bearish',
+          isPreBreakout: false,
+          triggerPrice: trigger,
+          targetPrice: rawTarget,
+          targetLow,
+          stopLoss: rawStop,
+          upsidePct,
+          summary: chosen.projection_summary || '',
+        };
+      }
+    }
+
+    // Fallback to synthesizer structured signal levels if no pattern has projection levels
+    const sig = s.synth_output?.structured_signal;
+    if (!sig) return null;
+    const verdict = String(sig.action_verdict || '').toUpperCase();
+    const tgt = Number(sig.target_num || parseRs(sig.when_to_sell_target));
+    const sl = Number(sig.stop_num || parseRs(sig.stop_loss));
+    const entryNum = parseRs(sig.when_to_buy_entry) || lastClose;
+
+    if (verdict !== 'SELL' && tgt > lastClose && sl > 0 && sl < lastClose) {
+      const trig = entryNum > 0 && entryNum < tgt ? entryNum : lastClose;
+      const upsidePct = Number((((tgt - lastClose) / lastClose) * 100).toFixed(2));
+      return {
+        patternName: sig.chart_patterns && sig.chart_patterns !== 'N/A' ? sig.chart_patterns : 'Quantitative Swing Target',
+        setupStage: sig.pre_breakout_projection?.setup_stage,
+        entryWindow: sig.pre_breakout_projection?.entry_window || '1–3 Weeks',
+        direction: 'Bullish',
+        isPreBreakout: Boolean(sig.pre_breakout_projection),
+        triggerPrice: trig,
+        targetPrice: tgt,
+        targetLow: Number((trig + (tgt - trig) * 0.7).toFixed(2)),
+        stopLoss: sl,
+        upsidePct,
+        summary: sig.pre_breakout_projection?.projection_summary || sig.actionable_recommendation || '',
+      };
+    }
+
+    if (verdict === 'SELL' && tgt > 0 && tgt < lastClose && sl > lastClose) {
+      const upsidePct = Number((((tgt - lastClose) / lastClose) * 100).toFixed(2));
+      return {
+        patternName: sig.chart_patterns && sig.chart_patterns !== 'N/A' ? sig.chart_patterns : 'Bearish Risk Projection',
+        direction: 'Bearish',
+        isPreBreakout: false,
+        triggerPrice: lastClose,
+        targetPrice: tgt,
+        targetLow: Number((lastClose - (lastClose - tgt) * 0.7).toFixed(2)),
+        stopLoss: sl,
+        upsidePct,
+        summary: sig.actionable_recommendation || '',
+      };
+    }
+
+    return null;
+  });
 
   constructor() {
     // Whenever selectedStock changes or modal opens, trigger chart load
@@ -843,6 +1078,22 @@ export class StockDetailModalComponent implements OnInit, AfterViewInit, OnDestr
     if (v.includes('ACCUMULATE')) return 'verdict-accumulate';
     if (v.includes('SELL')) return 'verdict-sell';
     return 'verdict-hold';
+  }
+
+  patternStageClass(stage?: string): string {
+    if (stage === 'IMMINENT_BREAKOUT') return 'stage-imminent';
+    if (stage === 'FORMING_PRE_BREAKOUT') return 'stage-forming';
+    if (stage === 'FRESH_BREAKOUT') return 'stage-fresh';
+    if (stage === 'EXTENDED_LATE') return 'stage-late';
+    return 'stage-neutral';
+  }
+
+  patternStageLabel(stage?: string, win?: string): string {
+    if (stage === 'IMMINENT_BREAKOUT') return '⚡ Near Pivot (Watch Close)';
+    if (stage === 'FORMING_PRE_BREAKOUT') return '⏳ Forming Setup (2–5d)';
+    if (stage === 'FRESH_BREAKOUT') return '✅ Confirmed Close > Pivot';
+    if (stage === 'EXTENDED_LATE') return '⚠️ Extended (Wait Pullback)';
+    return win || stage || '';
   }
 
   fundData = computed(() => {
@@ -948,6 +1199,11 @@ export class StockDetailModalComponent implements OnInit, AfterViewInit, OnDestr
     this.loadCandles();
   }
 
+  toggleProjection(): void {
+    this.showProjection.update(v => !v);
+    setTimeout(() => this.drawChart(), 10);
+  }
+
   closeModal(): void {
     this.stocksStore.selectSymbol(null);
   }
@@ -988,11 +1244,13 @@ export class StockDetailModalComponent implements OnInit, AfterViewInit, OnDestr
     apiService.getHistory(s.symbol, this.chartDays())
       .then(res => {
         this.candles.set(res.candles || []);
+        this.historyPatterns.set(res.patterns || []);
         this.isLoadingChart.set(false);
         setTimeout(() => this.drawChart(), 20);
       })
       .catch(() => {
         this.candles.set([]);
+        this.historyPatterns.set([]);
         this.isLoadingChart.set(false);
         setTimeout(() => this.drawChart(), 20);
       });
@@ -1030,6 +1288,12 @@ export class StockDetailModalComponent implements OnInit, AfterViewInit, OnDestr
     }
 
     const n = candles.length;
+    const proj = this.showProjection() ? this.activeProjection() : null;
+    const projBars = proj ? Math.max(14, Math.min(22, Math.round(n * 0.25))) : 0;
+    const totalSlots = Math.max(1, (n - 1) + projBars);
+    const lastCandle = candles[n - 1];
+    const lastClose = Number(lastCandle.close ?? lastCandle.CLOSE_PRICE ?? 0);
+
     let minP = Infinity;
     let maxP = -Infinity;
 
@@ -1042,6 +1306,15 @@ export class StockDetailModalComponent implements OnInit, AfterViewInit, OnDestr
       if (c.bb_upper != null && c.bb_upper > maxP) maxP = Number(c.bb_upper);
     });
 
+    if (proj && lastClose > 0) {
+      for (const lvl of [proj.triggerPrice, proj.targetPrice, proj.targetLow, proj.stopLoss]) {
+        if (isFinite(lvl) && lvl > lastClose * 0.5 && lvl < lastClose * 1.8) {
+          if (lvl < minP) minP = lvl;
+          if (lvl > maxP) maxP = lvl;
+        }
+      }
+    }
+
     if (!isFinite(minP) || minP <= 0) minP = 100;
     if (!isFinite(maxP) || maxP <= minP) maxP = minP * 1.1;
 
@@ -1050,15 +1323,51 @@ export class StockDetailModalComponent implements OnInit, AfterViewInit, OnDestr
     maxP += pad;
     const rangeP = Math.max(maxP - minP, 0.01);
 
-    const padTop = 15;
-    const padBottom = 20;
+    const padTop = 18;
+    const padBottom = 22;
     const padLeft = 10;
-    const padRight = 55;
+    const padRight = proj ? 84 : 55;
     const plotW = width - padLeft - padRight;
     const plotH = height - padTop - padBottom;
 
+    this.lastChartLayout = { padLeft, padRight, plotW, n, totalSlots, projBars, lastClose };
+
     const priceToY = (p: number) => padTop + plotH - ((p - minP) / rangeP) * plotH;
-    const idxToX = (i: number) => padLeft + (i / Math.max(1, n - 1)) * plotW;
+    const idxToX = (i: number) => padLeft + (i / totalSlots) * plotW;
+
+    // 0. Future 4-Week Projection Zone Backdrop
+    const todayX = idxToX(n - 1);
+    const endX = idxToX(totalSlots);
+    if (proj && projBars > 0) {
+      const isBull = proj.direction === 'Bullish';
+      ctx.fillStyle = isBull ? 'rgba(16, 185, 129, 0.045)' : 'rgba(239, 68, 68, 0.045)';
+      ctx.fillRect(todayX, padTop, endX - todayX, plotH);
+
+      // Vertical TODAY divider
+      ctx.save();
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.4)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(todayX, padTop);
+      ctx.lineTo(todayX, padTop + plotH);
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '600 9px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('TODAY', todayX, padTop + plotH + 14);
+      ctx.fillStyle = isBull ? '#34d399' : '#f87171';
+      ctx.fillText('4-WEEK PROJECTION', (todayX + endX) / 2, padTop + 10);
+
+      for (let w = 1; w <= 4; w++) {
+        const wx = todayX + ((endX - todayX) * w) / 4;
+        ctx.fillStyle = '#64748b';
+        ctx.font = '9px JetBrains Mono, monospace';
+        ctx.fillText(`W${w}`, wx - (w === 4 ? 8 : 0), padTop + plotH + 14);
+      }
+    }
 
     // 1. Grid Lines
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
@@ -1146,7 +1455,7 @@ export class StockDetailModalComponent implements OnInit, AfterViewInit, OnDestr
     ctx.stroke();
 
     // 5. Candlesticks
-    const candleWidth = Math.max(3, (plotW / n) * 0.65);
+    const candleWidth = Math.max(2.5, (plotW / (totalSlots + 1)) * 0.65);
     for (let i = 0; i < n; i++) {
       const c = candles[i];
       const open = Number(c.open ?? c.OPEN_PRICE ?? 0);
@@ -1177,23 +1486,147 @@ export class StockDetailModalComponent implements OnInit, AfterViewInit, OnDestr
       const bodyH = Math.max(2, Math.abs(openY - closeY));
       ctx.fillRect(x - candleWidth / 2, topY, candleWidth, bodyH);
     }
+
+    // 6. 4-Week Target Cone, Trigger, Stop Loss & Trajectory Curve
+    if (proj && projBars > 0 && lastClose > 0) {
+      const isBull = proj.direction === 'Bullish';
+      const lastCloseY = priceToY(lastClose);
+      const trigY = priceToY(proj.triggerPrice);
+      const targetY = priceToY(proj.targetPrice);
+      const targetLowY = priceToY(proj.targetLow);
+      const stopY = priceToY(proj.stopLoss);
+
+      // Shaded Reward & Risk Bands in projection zone
+      ctx.fillStyle = isBull ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)';
+      ctx.fillRect(todayX, Math.min(trigY, targetY), endX - todayX, Math.abs(targetY - trigY));
+
+      const riskAnchorY = isBull ? priceToY(Math.min(lastClose, proj.triggerPrice)) : priceToY(Math.max(lastClose, proj.triggerPrice));
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.06)';
+      ctx.fillRect(todayX, Math.min(riskAnchorY, stopY), endX - todayX, Math.abs(stopY - riskAnchorY));
+
+      // Horizontal dashed reference lines (Trigger, 4W Target, Stop Loss)
+      const histAnchorX = idxToX(Math.max(0, n - 18));
+      ctx.save();
+      ctx.lineWidth = 1.3;
+      ctx.setLineDash([5, 4]);
+
+      ctx.strokeStyle = '#38bdf8';
+      ctx.beginPath();
+      ctx.moveTo(histAnchorX, trigY);
+      ctx.lineTo(endX, trigY);
+      ctx.stroke();
+
+      ctx.strokeStyle = isBull ? '#10b981' : '#ef4444';
+      ctx.beginPath();
+      ctx.moveTo(todayX, targetY);
+      ctx.lineTo(endX, targetY);
+      ctx.stroke();
+
+      ctx.strokeStyle = '#ef4444';
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(histAnchorX, stopY);
+      ctx.lineTo(endX, stopY);
+      ctx.stroke();
+      ctx.restore();
+
+      // Forecast cone polygon from breakout point to [targetLow, targetPrice] at W4
+      const trigX = todayX + (endX - todayX) * (proj.isPreBreakout ? 0.14 : 0.05);
+      ctx.beginPath();
+      ctx.moveTo(trigX, trigY);
+      ctx.lineTo(endX, targetY);
+      ctx.lineTo(endX, targetLowY);
+      ctx.closePath();
+      ctx.fillStyle = isBull ? 'rgba(16, 185, 129, 0.18)' : 'rgba(239, 68, 68, 0.16)';
+      ctx.fill();
+
+      // Primary 4W projected trajectory curve
+      ctx.save();
+      ctx.strokeStyle = isBull ? '#34d399' : '#f87171';
+      ctx.lineWidth = 2.3;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(todayX, lastCloseY);
+      ctx.lineTo(trigX, trigY);
+      const ctrlX = (trigX + endX) / 2;
+      const ctrlY = trigY + (targetY - trigY) * 0.62;
+      ctx.quadraticCurveTo(ctrlX, ctrlY, endX, targetY);
+      ctx.stroke();
+      ctx.restore();
+
+      // Key milestone dots (Trigger & W4 Target)
+      ctx.fillStyle = '#38bdf8';
+      ctx.beginPath();
+      ctx.arc(trigX, trigY, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = isBull ? '#10b981' : '#ef4444';
+      ctx.beginPath();
+      ctx.arc(endX, targetY, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Endpoint callout label inside chart
+      const pctLabel = `${proj.upsidePct >= 0 ? '+' : ''}${proj.upsidePct.toFixed(1)}% (W4)`;
+      ctx.font = '700 10px JetBrains Mono, monospace';
+      ctx.fillStyle = isBull ? '#6ee7b7' : '#fca5a5';
+      ctx.textAlign = 'right';
+      const labelY = Math.max(padTop + 22, Math.min(padTop + plotH - 8, targetY + (isBull ? -8 : 14)));
+      ctx.fillText(pctLabel, endX - 6, labelY);
+
+      // Right-axis price pills with Y-overlap nudging
+      const axisPills = [
+        { y: targetY, text: `4W ${proj.targetPrice.toFixed(1)}`, bg: isBull ? '#065f46' : '#7f1d1d', fg: '#ecfdf5' },
+        { y: trigY, text: `${isBull ? 'BUY>' : 'TRIG'} ${proj.triggerPrice.toFixed(1)}`, bg: '#075985', fg: '#e0f2fe' },
+        { y: stopY, text: `SL ${proj.stopLoss.toFixed(1)}`, bg: '#7f1d1d', fg: '#fee2e2' },
+      ].sort((a, b) => a.y - b.y);
+
+      for (let i = 1; i < axisPills.length; i++) {
+        if (axisPills[i].y - axisPills[i - 1].y < 15) {
+          axisPills[i].y = axisPills[i - 1].y + 15;
+        }
+      }
+
+      ctx.font = '700 9px JetBrains Mono, monospace';
+      ctx.textAlign = 'left';
+      for (const pill of axisPills) {
+        const py = Math.max(padTop + 7, Math.min(padTop + plotH - 7, pill.y));
+        const px = padLeft + plotW + 3;
+        ctx.fillStyle = pill.bg;
+        ctx.fillRect(px, py - 7, padRight - 6, 14);
+        ctx.fillStyle = pill.fg;
+        ctx.fillText(pill.text, px + 3, py + 3);
+      }
+    }
   }
 
   private drawSparklineFallback(ctx: CanvasRenderingContext2D, width: number, height: number, sparkline: number[]): void {
     const n = sparkline.length;
+    const proj = this.showProjection() ? this.activeProjection() : null;
+    const projBars = proj ? 8 : 0;
+    const totalSlots = Math.max(1, (n - 1) + projBars);
+    const lastClose = sparkline[n - 1];
+
     let minP = Math.min(...sparkline);
     let maxP = Math.max(...sparkline);
+    if (proj) {
+      for (const lvl of [proj.triggerPrice, proj.targetPrice, proj.stopLoss]) {
+        if (isFinite(lvl) && lvl > lastClose * 0.5 && lvl < lastClose * 1.8) {
+          minP = Math.min(minP, lvl);
+          maxP = Math.max(maxP, lvl);
+        }
+      }
+    }
     const pad = (maxP - minP) * 0.1 || 5;
     minP -= pad;
     maxP += pad;
     const rangeP = Math.max(maxP - minP, 0.01);
 
     const padLeft = 15;
-    const padRight = 55;
+    const padRight = proj ? 82 : 55;
     const plotW = width - padLeft - padRight;
     const plotH = height - 40;
 
-    const toX = (i: number) => padLeft + (i / Math.max(1, n - 1)) * plotW;
+    const toX = (i: number) => padLeft + (i / totalSlots) * plotW;
     const toY = (p: number) => 20 + plotH - ((p - minP) / rangeP) * plotH;
 
     const isUp = sparkline[n - 1] >= sparkline[0];
@@ -1209,6 +1642,21 @@ export class StockDetailModalComponent implements OnInit, AfterViewInit, OnDestr
       else ctx.lineTo(x, y);
     }
     ctx.stroke();
+
+    if (proj) {
+      const todayX = toX(n - 1);
+      const endX = toX(totalSlots);
+      const isBull = proj.direction === 'Bullish';
+      ctx.save();
+      ctx.setLineDash([5, 4]);
+      ctx.strokeStyle = isBull ? '#34d399' : '#f87171';
+      ctx.beginPath();
+      ctx.moveTo(todayX, toY(lastClose));
+      ctx.lineTo(todayX + (endX - todayX) * 0.2, toY(proj.triggerPrice));
+      ctx.lineTo(endX, toY(proj.targetPrice));
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   onChartMouseMove(e: MouseEvent): void {
@@ -1218,24 +1666,43 @@ export class StockDetailModalComponent implements OnInit, AfterViewInit, OnDestr
     const rect = canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
 
-    const padLeft = 10;
-    const padRight = 55;
-    const plotW = rect.width - padLeft - padRight;
-    const n = candles.length;
+    const { padLeft, plotW, n, totalSlots, projBars, lastClose } = this.lastChartLayout;
+    if (n <= 0 || plotW <= 0) return;
 
-    const idx = Math.min(n - 1, Math.max(0, Math.round(((mouseX - padLeft) / plotW) * (n - 1))));
-    const c = candles[idx];
-    if (c) {
-      const dt = c.date || c.DATE || '';
-      const o = c.open ?? c.OPEN_PRICE ?? '';
-      const h = c.high ?? c.HIGH_PRICE ?? '';
-      const l = c.low ?? c.LOW_PRICE ?? '';
-      const cl = c.close ?? c.CLOSE_PRICE ?? '';
-      const bbu = c.bb_upper ? Number(c.bb_upper).toFixed(2) : 'N/A';
-      const bbl = c.bb_lower ? Number(c.bb_lower).toFixed(2) : 'N/A';
-      const rsi = c.rsi ? Number(c.rsi).toFixed(1) : 'N/A';
+    const slotIdx = Math.min(totalSlots, Math.max(0, Math.round(((mouseX - padLeft) / plotW) * totalSlots)));
+    if (slotIdx < n) {
+      const c = candles[slotIdx];
+      if (c) {
+        const dt = c.date || c.DATE || '';
+        const o = c.open ?? c.OPEN_PRICE ?? '';
+        const h = c.high ?? c.HIGH_PRICE ?? '';
+        const l = c.low ?? c.LOW_PRICE ?? '';
+        const cl = c.close ?? c.CLOSE_PRICE ?? '';
+        const bbu = c.bb_upper ? Number(c.bb_upper).toFixed(2) : 'N/A';
+        const bbl = c.bb_lower ? Number(c.bb_lower).toFixed(2) : 'N/A';
+        const rsi = c.rsi ? Number(c.rsi).toFixed(1) : 'N/A';
 
-      this.chartTooltip.set(`[${dt}]  O: ${o}  H: ${h}  L: ${l}  C: ${cl}  BB Upper: ${bbu}  BB Lower: ${bbl}  RSI: ${rsi}`);
+        this.chartTooltip.set(`[${dt}]  O: ${o}  H: ${h}  L: ${l}  C: ${cl}  BB Upper: ${bbu}  BB Lower: ${bbl}  RSI: ${rsi}`);
+      }
+      return;
+    }
+
+    const proj = this.showProjection() ? this.activeProjection() : null;
+    if (proj && projBars > 0) {
+      const t = Math.min(1, Math.max(0, (slotIdx - (n - 1)) / projBars));
+      const weekNum = Math.max(1, Math.min(4, Math.ceil(t * 4)));
+      const trigFrac = proj.isPreBreakout ? 0.14 : 0.05;
+      let estPrice: number;
+      if (t <= trigFrac) {
+        estPrice = lastClose + (proj.triggerPrice - lastClose) * (t / Math.max(trigFrac, 0.01));
+      } else {
+        const u = (t - trigFrac) / Math.max(1e-6, 1 - trigFrac);
+        estPrice = proj.triggerPrice + (proj.targetPrice - proj.triggerPrice) * u;
+      }
+      const actWord = proj.direction === 'Bullish' ? 'Buy Above' : 'Breakdown <';
+      this.chartTooltip.set(
+        `[4W Projection • Week ${weekNum}]  Est: Rs.${estPrice.toFixed(2)}  |  ${actWord}: Rs.${proj.triggerPrice.toFixed(2)}  |  4W Target: Rs.${proj.targetPrice.toFixed(2)} (${proj.upsidePct >= 0 ? '+' : ''}${proj.upsidePct.toFixed(1)}%)  |  SL: Rs.${proj.stopLoss.toFixed(2)}`
+      );
     }
   }
 

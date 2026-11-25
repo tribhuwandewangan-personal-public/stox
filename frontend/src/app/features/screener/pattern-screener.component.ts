@@ -13,7 +13,9 @@ import { ApiService } from '../../core/services/api.service';
 import { PatternPick, Stock } from '../../core/models/stock.model';
 import { stocksStore } from '../../core/stores/stocks.store';
 
-type SortKey = 'upside_pct' | 'risk_reward' | 'confidence_score' | 'timestamp';
+type SortKey = 'readiness_score' | 'upside_pct' | 'risk_reward' | 'confidence_score' | 'timestamp';
+type ScreenerMode = 'pre_breakout' | 'all_patterns';
+type StageFilter = 'ALL' | 'IMMINENT_BREAKOUT' | 'FORMING_PRE_BREAKOUT' | 'FRESH_BREAKOUT' | 'HIDE_LATE';
 type VerdictFilter = 'ALL' | 'BUY' | 'ACCUMULATE' | 'HOLD' | 'REDUCE' | 'SELL';
 type DirectionFilter = 'ALL' | 'Bullish' | 'Bearish';
 type CategoryFilter = 'ALL' | 'Moving Average' | 'Reversal' | 'Breakout' | 'Accumulation' | 'Candlestick' | 'Classical Chart';
@@ -30,14 +32,22 @@ type CategoryFilter = 'ALL' | 'Moving Average' | 'Reversal' | 'Breakout' | 'Accu
         <div class="header-left">
           <div class="page-icon">📡</div>
           <div>
-            <h1 class="page-title">Pattern Screener</h1>
+            <h1 class="page-title">Pattern Screener &amp; Pre-Breakout Radar</h1>
             <p class="page-subtitle">
-              High-conviction technical signals across all analyzed NSE stocks
-              <span class="count-badge" *ngIf="!loading()">{{ filteredPicks().length }} patterns</span>
+              {{ mode() === 'pre_breakout' ? 'Stocks forming bullish patterns BEFORE breakout (4-week projections)' : 'All detected technical signals across analyzed NSE stocks' }}
+              <span class="count-badge" *ngIf="!loading()">{{ filteredPicks().length }} setups</span>
             </p>
           </div>
         </div>
         <div class="header-right">
+          <div class="mode-switch">
+            <button class="mode-btn" [class.active]="mode() === 'pre_breakout'" (click)="setMode('pre_breakout')">
+              🚀 About to Turn Bullish
+            </button>
+            <button class="mode-btn" [class.active]="mode() === 'all_patterns'" (click)="setMode('all_patterns')">
+              📡 All Detected Patterns
+            </button>
+          </div>
           <span class="last-updated" *ngIf="lastUpdated()">
             Updated {{ lastUpdated() }}
           </span>
@@ -50,11 +60,21 @@ type CategoryFilter = 'ALL' | 'Moving Average' | 'Reversal' | 'Breakout' | 'Accu
       <!-- Disclaimer Banner -->
       <div class="disclaimer-banner">
         ⚠️ <strong>Educational &amp; Research Use Only</strong> — Not SEBI registered.
-        Patterns shown are algorithmic signals, not investment advice. Always do your own research.
+        Breakout triggers and 4-week targets are algorithmic projections, not investment advice. Wait for price confirmation above the trigger level.
       </div>
 
       <!-- Filter Bar -->
       <div class="filter-bar">
+        <!-- Stage -->
+        <div class="filter-group">
+          <label class="filter-label">Entry Timing / Stage</label>
+          <div class="pill-group">
+            <button *ngFor="let st of stages" class="pill"
+                    [class.active]="stageFilter() === st.key"
+                    (click)="stageFilter.set(st.key)">{{ st.label }}</button>
+          </div>
+        </div>
+
         <!-- Verdict -->
         <div class="filter-group">
           <label class="filter-label">Verdict</label>
@@ -66,7 +86,7 @@ type CategoryFilter = 'ALL' | 'Moving Average' | 'Reversal' | 'Breakout' | 'Accu
         </div>
 
         <!-- Direction -->
-        <div class="filter-group">
+        <div class="filter-group" *ngIf="mode() === 'all_patterns'">
           <label class="filter-label">Direction</label>
           <div class="pill-group">
             <button *ngFor="let d of directions" class="pill"
@@ -80,7 +100,7 @@ type CategoryFilter = 'ALL' | 'Moving Average' | 'Reversal' | 'Breakout' | 'Accu
         </div>
 
         <!-- Category -->
-        <div class="filter-group">
+        <div class="filter-group" *ngIf="mode() === 'all_patterns'">
           <label class="filter-label">Category</label>
           <div class="pill-group">
             <button *ngFor="let c of categories" class="pill"
@@ -91,7 +111,7 @@ type CategoryFilter = 'ALL' | 'Moving Average' | 'Reversal' | 'Breakout' | 'Accu
 
         <!-- Min Upside -->
         <div class="filter-group">
-          <label class="filter-label">Min Upside: <strong>{{ minUpside() }}%</strong></label>
+          <label class="filter-label">Min 4W Upside: <strong>{{ minUpside() }}%</strong></label>
           <input type="range" min="0" max="30" step="1"
                  [value]="minUpside()"
                  (input)="setMinUpside($event)"
@@ -102,7 +122,8 @@ type CategoryFilter = 'ALL' | 'Moving Average' | 'Reversal' | 'Breakout' | 'Accu
         <div class="filter-group">
           <label class="filter-label">Sort By</label>
           <select class="sort-select" [value]="sortKey()" (change)="setSortKey($event)">
-            <option value="upside_pct">Upside %</option>
+            <option value="readiness_score">Readiness Score</option>
+            <option value="upside_pct">4W Upside %</option>
             <option value="risk_reward">R:R Ratio</option>
             <option value="confidence_score">Confidence</option>
             <option value="timestamp">Latest First</option>
@@ -140,12 +161,14 @@ type CategoryFilter = 'ALL' | 'Moving Average' | 'Reversal' | 'Breakout' | 'Accu
               <th class="col-symbol">Symbol</th>
               <th class="col-name">Name / Sector</th>
               <th class="col-ltp">LTP</th>
-              <th class="col-pattern">Pattern</th>
+              <th class="col-pattern">Pattern &amp; Projection</th>
+              <th class="col-stage">Timing / Stage</th>
+              <th class="col-trigger">Buy Above</th>
               <th class="col-verdict">Verdict</th>
-              <th class="col-target">Target</th>
+              <th class="col-target">4W Target</th>
               <th class="col-sl">Stop Loss</th>
               <th class="col-upside" (click)="toggleSort('upside_pct')" style="cursor:pointer">
-                Upside% {{ sortKey()==='upside_pct' ? '▼' : '' }}
+                4W Upside% {{ sortKey()==='upside_pct' ? '▼' : '' }}
               </th>
               <th class="col-rr" (click)="toggleSort('risk_reward')" style="cursor:pointer">
                 R:R {{ sortKey()==='risk_reward' ? '▼' : '' }}
@@ -188,14 +211,35 @@ type CategoryFilter = 'ALL' | 'Moving Average' | 'Reversal' | 'Breakout' | 'Accu
                 <span class="ltp-val">₹{{ pick.last_price | number:'1.2-2' }}</span>
               </td>
 
-              <!-- Pattern -->
+              <!-- Pattern + Actionable Projection -->
               <td class="col-pattern">
                 <div class="pattern-block">
-                  <span class="pattern-name">{{ pick.pattern_name }}</span>
-                  <span class="category-badge" [class]="'cat-' + categoryClass(pick.pattern_category)">
-                    {{ pick.pattern_category }}
+                  <div class="pattern-top-line">
+                    <span class="pattern-name">{{ pick.pattern_name }}</span>
+                    <span class="category-badge" [class]="'cat-' + categoryClass(pick.pattern_category)">
+                      {{ pick.pattern_category }}
+                    </span>
+                  </div>
+                  <span class="proj-line" *ngIf="pick.projection_summary">{{ pick.projection_summary }}</span>
+                </div>
+              </td>
+
+              <!-- Timing / Stage -->
+              <td class="col-stage">
+                <span class="stage-pill" [ngClass]="stageClass(pick.setup_stage)">
+                  {{ stageLabel(pick.setup_stage, pick.entry_window) }}
+                </span>
+              </td>
+
+              <!-- Buy Above Trigger -->
+              <td class="col-trigger">
+                <div class="trigger-block" *ngIf="pick.breakout_trigger; else noTrigger">
+                  <span class="trigger-val">₹{{ pick.breakout_trigger | number:'1.2-2' }}</span>
+                  <span class="trigger-dist" *ngIf="pick.distance_to_breakout_pct !== undefined && pick.distance_to_breakout_pct !== null">
+                    {{ pick.distance_to_breakout_pct > 0 ? ('+' + pick.distance_to_breakout_pct.toFixed(1) + '% away') : (pick.distance_to_breakout_pct.toFixed(1) + '% vs pivot') }}
                   </span>
                 </div>
+                <ng-template #noTrigger><span class="na-val">—</span></ng-template>
               </td>
 
               <!-- Verdict -->
@@ -205,12 +249,12 @@ type CategoryFilter = 'ALL' | 'Moving Average' | 'Reversal' | 'Breakout' | 'Accu
                 </span>
               </td>
 
-              <!-- Target -->
+              <!-- 4W Target -->
               <td class="col-target">
-                <span class="target-val" *ngIf="pick.target_price">
-                  ₹{{ pick.target_price | number:'1.2-2' }}
+                <span class="target-val" *ngIf="pick.week4_target || pick.target_price">
+                  ₹{{ (pick.week4_target || pick.target_price) | number:'1.2-2' }}
                 </span>
-                <span class="na-val" *ngIf="!pick.target_price">—</span>
+                <span class="na-val" *ngIf="!pick.week4_target && !pick.target_price">—</span>
               </td>
 
               <!-- Stop Loss -->
@@ -221,10 +265,12 @@ type CategoryFilter = 'ALL' | 'Moving Average' | 'Reversal' | 'Breakout' | 'Accu
                 <span class="na-val" *ngIf="!pick.stop_loss">—</span>
               </td>
 
-              <!-- Upside % -->
+              <!-- 4W Upside % -->
               <td class="col-upside">
-                <span class="upside-val" [class.positive]="pick.upside_pct > 0" [class.negative]="pick.upside_pct < 0">
-                  {{ pick.upside_pct > 0 ? '+' : '' }}{{ pick.upside_pct | number:'1.1-1' }}%
+                <span class="upside-val"
+                      [class.positive]="(pick.week4_upside_pct ?? pick.upside_pct) > 0"
+                      [class.negative]="(pick.week4_upside_pct ?? pick.upside_pct) < 0">
+                  {{ (pick.week4_upside_pct ?? pick.upside_pct) > 0 ? '+' : '' }}{{ (pick.week4_upside_pct ?? pick.upside_pct) | number:'1.1-1' }}%
                 </span>
               </td>
 
@@ -302,7 +348,45 @@ type CategoryFilter = 'ALL' | 'Moving Average' | 'Reversal' | 'Breakout' | 'Accu
       font-size: 0.7rem;
       font-weight: 600;
     }
-    .header-right { display: flex; align-items: center; gap: 10px; }
+    .header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .mode-switch {
+      display: flex;
+      gap: 4px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.1);
+      padding: 3px;
+      border-radius: 9px;
+    }
+    .mode-btn {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-size: 0.76rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .mode-btn.active {
+      background: rgba(16,185,129,0.18);
+      color: #34d399;
+      border: 1px solid rgba(16,185,129,0.35);
+    }
+    .pattern-top-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .proj-line { font-size: 0.69rem; color: #94a3b8; max-width: 340px; line-height: 1.35; }
+    .stage-pill {
+      display: inline-block; padding: 2px 8px; border-radius: 999px;
+      font-size: 0.66rem; font-weight: 700; white-space: nowrap;
+    }
+    .stage-imminent { background: rgba(245,158,11,0.18); color: #fbbf24; border: 1px solid rgba(245,158,11,0.4); }
+    .stage-forming { background: rgba(56,189,248,0.15); color: #38bdf8; border: 1px solid rgba(56,189,248,0.35); }
+    .stage-fresh { background: rgba(16,185,129,0.16); color: #34d399; border: 1px solid rgba(16,185,129,0.38); }
+    .stage-late { background: rgba(239,68,68,0.14); color: #f87171; border: 1px solid rgba(239,68,68,0.35); }
+    .stage-neutral { background: rgba(100,116,139,0.15); color: #94a3b8; border: 1px solid rgba(100,116,139,0.3); }
+    .trigger-block { display: flex; flex-direction: column; gap: 2px; }
+    .trigger-val { font-family: 'JetBrains Mono', monospace; color: #38bdf8; font-weight: 700; font-size: 0.76rem; }
+    .trigger-dist { font-size: 0.64rem; color: #94a3b8; white-space: nowrap; }
     .last-updated { font-size: 0.72rem; color: #64748b; }
     .btn-refresh {
       background: rgba(56,189,248,0.1);
@@ -517,18 +601,27 @@ type CategoryFilter = 'ALL' | 'Moving Average' | 'Reversal' | 'Breakout' | 'Accu
 export class PatternScreenerComponent implements OnInit, OnDestroy {
 
   // ---- Signals ----
+  mode       = signal<ScreenerMode>('pre_breakout');
   allPicks   = signal<PatternPick[]>([]);
   loading    = signal<boolean>(false);
   error      = signal<string | null>(null);
   lastUpdated = signal<string | null>(null);
 
+  stageFilter     = signal<StageFilter>('ALL');
   verdictFilter   = signal<VerdictFilter>('ALL');
   directionFilter = signal<DirectionFilter>('ALL');
   categoryFilter  = signal<CategoryFilter>('ALL');
   minUpside       = signal<number>(0);
-  sortKey         = signal<SortKey>('upside_pct');
+  sortKey         = signal<SortKey>('readiness_score');
 
   // ---- Filter options ----
+  stages: { key: StageFilter; label: string }[] = [
+    { key: 'ALL', label: 'All Stages' },
+    { key: 'IMMINENT_BREAKOUT', label: '⚡ Near Pivot (Watch Close)' },
+    { key: 'FORMING_PRE_BREAKOUT', label: '⏳ Forming Setup (2–5d)' },
+    { key: 'FRESH_BREAKOUT', label: '✅ Confirmed Close > Pivot' },
+    { key: 'HIDE_LATE', label: '🚫 Hide Extended/Late' },
+  ];
   verdicts: VerdictFilter[]    = ['ALL', 'BUY', 'ACCUMULATE', 'HOLD', 'REDUCE', 'SELL'];
   directions: DirectionFilter[] = ['ALL', 'Bullish', 'Bearish'];
   categories: CategoryFilter[]  = ['ALL', 'Moving Average', 'Reversal', 'Breakout', 'Accumulation', 'Candlestick', 'Classical Chart'];
@@ -536,6 +629,13 @@ export class PatternScreenerComponent implements OnInit, OnDestroy {
   // ---- Computed: filtered + sorted picks ----
   filteredPicks = computed(() => {
     let picks = [...this.allPicks()];
+
+    const st = this.stageFilter();
+    if (st === 'HIDE_LATE') {
+      picks = picks.filter(p => !p.is_late_entry && p.setup_stage !== 'EXTENDED_LATE');
+    } else if (st !== 'ALL') {
+      picks = picks.filter(p => p.setup_stage === st);
+    }
 
     if (this.verdictFilter() !== 'ALL') {
       picks = picks.filter(p => p.action_verdict === this.verdictFilter());
@@ -548,13 +648,15 @@ export class PatternScreenerComponent implements OnInit, OnDestroy {
       picks = picks.filter(p => (p.pattern_category || '') === cat || (p.pattern_category || '').startsWith(cat));
     }
     if (this.minUpside() > 0) {
-      picks = picks.filter(p => p.upside_pct >= this.minUpside());
+      picks = picks.filter(p => (p.week4_upside_pct ?? p.upside_pct) >= this.minUpside());
     }
 
     const key = this.sortKey();
     picks.sort((a, b) => {
       if (key === 'timestamp') return b.timestamp.localeCompare(a.timestamp);
-      return (b[key] as number) - (a[key] as number);
+      if (key === 'readiness_score') return (b.readiness_score ?? 0) - (a.readiness_score ?? 0);
+      if (key === 'upside_pct') return (b.week4_upside_pct ?? b.upside_pct) - (a.week4_upside_pct ?? a.upside_pct);
+      return ((b[key] as number) ?? 0) - ((a[key] as number) ?? 0);
     });
 
     return picks;
@@ -572,23 +674,34 @@ export class PatternScreenerComponent implements OnInit, OnDestroy {
     if (this.refreshTimer) clearInterval(this.refreshTimer);
   }
 
+  setMode(m: ScreenerMode): void {
+    if (this.mode() === m) return;
+    this.mode.set(m);
+    this.stageFilter.set('ALL');
+    this.loadPicks();
+  }
+
   async loadPicks(): Promise<void> {
-    // Serve cached picks instantly (filters/sorts run client-side); refresh silently in background.
-    const cached = PatternScreenerComponent.cache;
+    const activeMode = this.mode();
+    const cached = PatternScreenerComponent.cache[activeMode];
     if (cached && this.allPicks().length === 0) {
       this.allPicks.set(cached.picks);
       this.lastUpdated.set(cached.at);
     }
-    const silent = this.allPicks().length > 0;
+    const silent = (PatternScreenerComponent.cache[activeMode]?.picks?.length ?? 0) > 0;
     if (!silent) this.loading.set(true);
     this.error.set(null);
     try {
-      const resp = await ApiService.getPatternPicks(0);
+      const resp = activeMode === 'pre_breakout'
+        ? await ApiService.getPreBreakoutPicks('monitored', 80, true)
+        : await ApiService.getPatternPicks(0);
       const picks = resp.picks ?? [];
       const at = new Date().toLocaleTimeString('en-IN');
-      PatternScreenerComponent.cache = { picks, at };
-      this.allPicks.set(picks);
-      this.lastUpdated.set(at);
+      PatternScreenerComponent.cache[activeMode] = { picks, at };
+      if (this.mode() === activeMode) {
+        this.allPicks.set(picks);
+        this.lastUpdated.set(at);
+      }
     } catch (err: any) {
       if (!silent) this.error.set(err?.message ?? 'Failed to load pattern data');
     } finally {
@@ -596,7 +709,10 @@ export class PatternScreenerComponent implements OnInit, OnDestroy {
     }
   }
 
-  private static cache: { picks: PatternPick[]; at: string } | null = null;
+  private static cache: Record<ScreenerMode, { picks: PatternPick[]; at: string } | null> = {
+    pre_breakout: null,
+    all_patterns: null,
+  };
 
   refresh(): void { this.loadPicks(); }
 
@@ -668,6 +784,23 @@ export class PatternScreenerComponent implements OnInit, OnDestroy {
   toggleSort(key: SortKey): void { this.sortKey.set(key); }
 
   // ---- Helpers ----
+  stageClass(stage?: string): string {
+    if (stage === 'IMMINENT_BREAKOUT') return 'stage-imminent';
+    if (stage === 'FORMING_PRE_BREAKOUT') return 'stage-forming';
+    if (stage === 'FRESH_BREAKOUT') return 'stage-fresh';
+    if (stage === 'EXTENDED_LATE') return 'stage-late';
+    return 'stage-neutral';
+  }
+
+  stageLabel(stage?: string, windowStr?: string): string {
+    if (stage === 'IMMINENT_BREAKOUT') return '⚡ Near Pivot (Watch Close)';
+    if (stage === 'FORMING_PRE_BREAKOUT') return '⏳ Forming Setup (2–5d)';
+    if (stage === 'FRESH_BREAKOUT') return '✅ Confirmed Close > Pivot';
+    if (stage === 'EXTENDED_LATE') return '⚠️ Extended (Wait Pullback)';
+    if (stage === 'EARLY_BASE') return '👀 Early Base';
+    return windowStr || 'Signal';
+  }
+
   categoryClass(cat: string): string {
     const c = (cat || '').trim();
     if (c.startsWith('Moving Average')) return 'ma';

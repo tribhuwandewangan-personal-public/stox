@@ -39,7 +39,7 @@ from tools.symbol_search_tools import search_internet_symbols, add_symbol_to_jso
 from agents.macro_sentinel import BackgroundMacroSentinel
 from api.services import (
     safe_json_dumps, get_all_stock_data, get_stocks_response_body, get_history_response_body,
-    get_top_pattern_picks, _load_symbols_list, load_active_monitored_symbols, NaNSafeEncoder,
+    get_top_pattern_picks, get_pre_breakout_projections, _load_symbols_list, load_active_monitored_symbols, NaNSafeEncoder,
     SYNTH_AGENT, TECH_AGENT, HIST_AGENT, NEWS_AGENT, RISK_AGENT, FUND_AGENT, STALE_SYNTH_HOURS,
     STOCKS_CACHE_SECONDS, _stocks_lock, _stocks_cache, _pattern_memo
 )
@@ -604,6 +604,31 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                 self._send_json(200, safe_json_dumps({"count": len(picks), "picks": picks}))
             except Exception as e:
                 self._send_json(500, {"error": str(e), "picks": []})
+            return
+
+        elif path == "/api/patterns/pre-breakout":
+            try:
+                query = urllib.parse.parse_qs(parsed_path.query)
+                universe = str(query.get("universe", ["monitored"])[0]).lower().strip()
+                if universe not in ("monitored", "curated", "midcap250", "all_nse", "all"):
+                    universe = "monitored"
+                include_fresh = str(query.get("include_fresh", ["1"])[0]).strip() not in ("0", "false", "no")
+                high_conviction = str(query.get("high_conviction", ["1"])[0]).strip() not in ("0", "false", "no")
+                try:
+                    limit = max(1, min(int(query.get("limit", ["60"])[0]), 200))
+                except (ValueError, TypeError):
+                    limit = 60
+                payload = get_pre_breakout_projections(
+                    cache_mgr,
+                    tech_engine,
+                    universe=universe,
+                    include_fresh=include_fresh,
+                    limit=limit,
+                    high_conviction_only=high_conviction,
+                )
+                self._send_json(200, safe_json_dumps(payload))
+            except Exception as e:
+                self._send_json(500, {"error": str(e), "count": 0, "picks": []})
             return
 
         elif path == "/" or path == "/index.html":

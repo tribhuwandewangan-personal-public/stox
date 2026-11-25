@@ -12,6 +12,7 @@ import {
   SearchResult,
   QueueStatus,
   PatternPicksResponse,
+  PreBreakoutResponse,
   MacroRiskShieldResponse,
   MarketScannerResponse,
   PortfolioResponse,
@@ -188,6 +189,24 @@ export class ApiService {
   static getPatternPicks(minUpside: number = 0): Promise<PatternPicksResponse> {
     const params = minUpside > 0 ? `?min_upside=${minUpside}` : '';
     return fetchJson<PatternPicksResponse>(`/patterns/top${params}`);
+  }
+
+  /**
+   * GET /api/patterns/pre-breakout: Forming bullish patterns before breakout with 4-week projections.
+   */
+  static getPreBreakoutPicks(
+    universe: string = 'monitored',
+    limit: number = 60,
+    includeFresh: boolean = true,
+    highConviction: boolean = true
+  ): Promise<PreBreakoutResponse> {
+    const params = new URLSearchParams({
+      universe,
+      limit: String(limit),
+      include_fresh: includeFresh ? '1' : '0',
+      high_conviction: highConviction ? '1' : '0',
+    });
+    return fetchJson<PreBreakoutResponse>(`/patterns/pre-breakout?${params}`);
   }
 
   /**

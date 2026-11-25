@@ -1272,6 +1272,65 @@ class CacheManager:
             ).fetchall()
         return self._aggregate_bulk_candle_rows(rows, lim, sparkline_days)
 
+    def get_candles_bulk_ohlcv(
+        self,
+        symbols: List[str],
+        limit_days: int = 120,
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Reads recent OHLCV candle dicts (oldest first) for a list of symbols in batched SQLite / Valkey queries.
+        """
+        clean_syms = sorted({str(s).upper().strip() for s in (symbols or []) if str(s).strip()})
+        if not clean_syms:
+            return {}
+        lim = max(1, int(limit_days))
+        out: Dict[str, List[Dict[str, Any]]] = {}
+
+        if self.use_valkey and self.valkey:
+            try:
+                vals = self.valkey.hmget("stox:candles", clean_syms)
+                missing = []
+                for sym, raw in zip(clean_syms, vals):
+                    if raw:
+                        candles = json.loads(self._dec(raw))[-lim:]
+                        out[sym] = candles
+                    else:
+                        missing.append(sym)
+                if not missing:
+                    return out
+                clean_syms = missing
+            except Exception:
+                pass
+
+        with self._get_connection() as conn:
+            for start in range(0, len(clean_syms), 400):
+                batch = clean_syms[start:start + 400]
+                placeholders = ",".join("?" for _ in batch)
+                rows = conn.execute(
+                    f"SELECT symbol, date, open, high, low, close, volume FROM historical_candles "
+                    f"WHERE symbol IN ({placeholders}) ORDER BY symbol, date DESC",
+                    tuple(batch),
+                ).fetchall()
+                grouped: Dict[str, List[tuple]] = {}
+                for sym, dt, o, h, l, c, v in rows:
+                    bucket = grouped.setdefault(sym, [])
+                    if len(bucket) < lim:
+                        bucket.append((dt, o, h, l, c, v))
+                for sym, desc_rows in grouped.items():
+                    desc_rows.reverse()
+                    out[sym] = [
+                        {
+                            "DATE": r[0],
+                            "OPEN_PRICE": float(r[1] or r[4] or 0.0),
+                            "HIGH_PRICE": float(r[2] or r[4] or 0.0),
+                            "LOW_PRICE": float(r[3] or r[4] or 0.0),
+                            "CLOSE_PRICE": float(r[4] or 0.0),
+                            "VOLUME": int(r[5] or 0),
+                        }
+                        for r in desc_rows
+                    ]
+        return out
+
     @staticmethod
     def _aggregate_bulk_candle_rows(rows, limit_days: int, sparkline_days: int) -> Dict[str, Dict[str, Any]]:
         summary: Dict[str, Dict[str, Any]] = {}

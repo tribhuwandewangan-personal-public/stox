@@ -27,6 +27,7 @@ from config import ENGINE_LABEL, SYMBOLS_FILE_PATH, ALL_NSE_SYMBOLS_FILE_PATH, M
 from tools.quote_tools import build_price_info
 from tools.long_term_strategy import long_term_engine
 from tools.forensic_financial_engine import ForensicFinancialEngine, _is_bfsi_sector
+from tools.pattern_engine import compute_pattern_projection, HIGH_CONVICTION_PRE_BREAKOUT_PATTERNS
 
 _forensic_recalc_engine = ForensicFinancialEngine()
 
@@ -180,8 +181,13 @@ def _patterns_from_cached_candles(sym, cache_mgr, tech_engine):
         if key in _pattern_memo:
             return _pattern_memo[key]
     try:
-        df = tech_engine._load_cached_df(sym).tail(90).reset_index(drop=True)
-        patterns = tech_engine.detect_chart_patterns(df) if not df.empty else []
+        rag = getattr(tech_engine, "rag_engine", None)
+        df = rag._load_cached_df(sym).tail(120).reset_index(drop=True) if rag else None
+        if df is not None and not df.empty and len(df) >= 20:
+            df = tech_engine._compute_indicators(df)
+            patterns = tech_engine.detect_chart_patterns(df)
+        else:
+            patterns = []
     except Exception:
         patterns = []
     with _pattern_memo_lock:
@@ -372,6 +378,42 @@ def get_all_stock_data(cache_mgr, queue_mgr, hist_engine, tech_engine, events_en
         )
         last_price = price_info["price"]
 
+        if patterns and last_price and last_price > 0:
+            raw_ind_p = (tech_output or {}).get("raw_indicators") or {}
+            ret_10d_p = None
+            if len(sparkline) >= 11 and sparkline[-11] > 0:
+                ret_10d_p = ((float(last_price) - float(sparkline[-11])) / float(sparkline[-11])) * 100.0
+            enriched_patterns = []
+            for p in patterns:
+                if isinstance(p, dict):
+                    p_copy = dict(p)
+                    if "setup_stage" not in p_copy:
+                        p_copy.update(compute_pattern_projection(
+                            p_copy,
+                            curr_close=float(last_price),
+                            atr_14=_extract_numeric_val(raw_ind_p.get("atr_14")),
+                            rsi_14=_extract_numeric_val(raw_ind_p.get("rsi_14")),
+                            rvol=_extract_numeric_val(raw_ind_p.get("rvol")),
+                            ud_ratio=_extract_numeric_val(raw_ind_p.get("up_down_vol_ratio")),
+                            ret_10d=ret_10d_p,
+                            sma_50=_extract_numeric_val(raw_ind_p.get("sma_50")),
+                            symbol=sym,
+                        ))
+                    elif not str(p_copy.get("projection_summary", "")).startswith(sym):
+                        p_copy.update(compute_pattern_projection(
+                            p_copy,
+                            curr_close=float(last_price),
+                            atr_14=_extract_numeric_val(raw_ind_p.get("atr_14")),
+                            rsi_14=_extract_numeric_val(raw_ind_p.get("rsi_14")),
+                            rvol=_extract_numeric_val(raw_ind_p.get("rvol")),
+                            ud_ratio=_extract_numeric_val(raw_ind_p.get("up_down_vol_ratio")),
+                            ret_10d=ret_10d_p,
+                            sma_50=_extract_numeric_val(raw_ind_p.get("sma_50")),
+                            symbol=sym,
+                        ))
+                    enriched_patterns.append(p_copy)
+            patterns = enriched_patterns
+
         if c_sum and c_sum.get("high_52w"):
             try:
                 h_52w_val = float(c_sum["high_52w"])
@@ -558,6 +600,293 @@ def _extract_numeric_val(val: Any) -> Optional[float]:
 _picks_cache: Dict[str, Any] = {}
 _picks_lock = threading.Lock()
 PICKS_CACHE_SECONDS = 45
+_pre_breakout_cache: Dict[str, Any] = {}
+_pre_breakout_lock = threading.Lock()
+
+
+def get_pre_breakout_projections(
+    cache_mgr,
+    tech_engine,
+    universe: str = "monitored",
+    include_fresh: bool = True,
+    limit: int = 60,
+    high_conviction_only: bool = True,
+) -> Dict[str, Any]:
+    """
+    Scans cached OHLCV history + live quotes for stocks forming bullish technical patterns
+    that are about to break out (pre-breakout or fresh at pivot), strictly excluding extended/late runs.
+    """
+    try:
+        marker = cache_mgr.get_agent_runs_marker()
+    except Exception:
+        marker = None
+    eff_limit = max(1, min(int(limit or 60), 200))
+    cache_key = (universe, bool(include_fresh), bool(high_conviction_only), eff_limit, marker, int(time.time() // PICKS_CACHE_SECONDS))
+    with _pre_breakout_lock:
+        hit = _pre_breakout_cache.get(universe)
+        if hit and hit.get("key") == cache_key:
+            return hit["data"]
+
+    result = _compute_pre_breakout_projections(
+        cache_mgr,
+        tech_engine,
+        universe=universe,
+        include_fresh=include_fresh,
+        limit=eff_limit,
+        high_conviction_only=high_conviction_only,
+    )
+    with _pre_breakout_lock:
+        _pre_breakout_cache[universe] = {"key": cache_key, "data": result}
+    return result
+
+
+def _compute_pre_breakout_projections(
+    cache_mgr,
+    tech_engine,
+    universe: str = "monitored",
+    include_fresh: bool = True,
+    limit: int = 60,
+    high_conviction_only: bool = True,
+) -> Dict[str, Any]:
+    sym_meta: Dict[str, Dict[str, str]] = {}
+    if universe in ("curated", "midcap250", "all_nse"):
+        symbols_list = _load_symbols_list(universe=universe)
+    else:
+        symbols_list = load_active_monitored_symbols()
+
+    for item in symbols_list:
+        k = str(item.get("symbol") or "").upper().strip()
+        if k and k not in sym_meta:
+            sym_meta[k] = {
+                "symbol": k,
+                "name": item.get("name") or k,
+                "sector": item.get("sector") or "Indian Equities",
+            }
+
+    bulk_outputs = cache_mgr.get_latest_agent_outputs_bulk()
+    if universe == "all":
+        for sym in bulk_outputs.keys():
+            k = str(sym or "").upper().strip()
+            if k and k not in sym_meta:
+                sym_meta[k] = {"symbol": k, "name": k, "sector": "Indian Equities"}
+
+    sym_names = list(sym_meta.keys())
+    quotes = cache_mgr.get_all_quotes()
+    candle_summaries = (
+        cache_mgr.get_candles_bulk_summary(sym_names, limit_days=60, sparkline_days=25)
+        if hasattr(cache_mgr, "get_candles_bulk_summary")
+        else {}
+    )
+
+    allowed_stages = {"IMMINENT_BREAKOUT", "FORMING_PRE_BREAKOUT"}
+    if include_fresh:
+        allowed_stages.add("FRESH_BREAKOUT")
+
+    stage_rank_map = {
+        "IMMINENT_BREAKOUT": 3,
+        "FORMING_PRE_BREAKOUT": 2,
+        "FRESH_BREAKOUT": 1,
+    }
+
+    # Bulk-resolve patterns using _pattern_memo + single batched SQLite/Valkey OHLCV fetch
+    patterns_by_sym: Dict[str, List[Dict[str, Any]]] = {}
+    missing_syms: List[str] = []
+    latest_dates: Dict[str, str] = {}
+    for sym_clean in sym_names:
+        c_sum = candle_summaries.get(sym_clean)
+        last_date = (c_sum or {}).get("latest_date") or ""
+        latest_dates[sym_clean] = last_date
+        if last_date:
+            with _pattern_memo_lock:
+                hit = _pattern_memo.get((sym_clean, last_date))
+            if hit is not None:
+                patterns_by_sym[sym_clean] = hit
+                continue
+        missing_syms.append(sym_clean)
+
+    if missing_syms:
+        if hasattr(cache_mgr, "get_candles_bulk_ohlcv"):
+            import pandas as pd
+            bulk_ohlcv = cache_mgr.get_candles_bulk_ohlcv(missing_syms, limit_days=120)
+            pat_engine = getattr(tech_engine, "pattern_engine", None)
+            new_memo_entries: Dict[tuple, List[Dict[str, Any]]] = {}
+            for sym_clean in missing_syms:
+                rows = bulk_ohlcv.get(sym_clean) or []
+                if len(rows) >= 20:
+                    try:
+                        df_b = pd.DataFrame(rows)
+                        if pat_engine is not None:
+                            pats = pat_engine.scan_all_patterns(df_b)
+                        else:
+                            pats = tech_engine.detect_chart_patterns(tech_engine._compute_indicators(df_b))
+                    except Exception:
+                        pats = []
+                else:
+                    pats = []
+                patterns_by_sym[sym_clean] = pats
+                ld = latest_dates.get(sym_clean) or (str(rows[-1].get("DATE", ""))[:10] if rows else "")
+                if ld:
+                    new_memo_entries[(sym_clean, ld)] = pats
+            if new_memo_entries:
+                with _pattern_memo_lock:
+                    target_syms_set = {k[0] for k in new_memo_entries}
+                    for stale_k in [k for k in _pattern_memo if k[0] in target_syms_set]:
+                        del _pattern_memo[stale_k]
+                    _pattern_memo.update(new_memo_entries)
+        else:
+            for sym_clean in missing_syms:
+                patterns_by_sym[sym_clean] = _patterns_from_cached_candles(sym_clean, cache_mgr, tech_engine)
+
+    picks: List[Dict[str, Any]] = []
+    for sym_clean, meta in sym_meta.items():
+        c_sum = candle_summaries.get(sym_clean)
+        sparkline = c_sum["sparkline"] if c_sum else []
+        quote_lp = _extract_numeric_val((quotes.get(sym_clean) or {}).get("ltp"))
+        close_lp = _extract_numeric_val((c_sum or {}).get("latest_close"))
+        last_price = quote_lp or close_lp
+        if not last_price or last_price <= 0:
+            continue
+
+        agents = bulk_outputs.get(sym_clean, {})
+        tech_out = (agents.get(TECH_AGENT) or {}).get("output") or {}
+        raw_ind = tech_out.get("raw_indicators") or {}
+        synth_out = (agents.get(SYNTH_AGENT) or {}).get("output") or {}
+        synth_sig = synth_out.get("structured_signal") or {}
+        ts = (agents.get(SYNTH_AGENT) or {}).get("timestamp") or (c_sum or {}).get("latest_date") or ""
+
+        patterns = patterns_by_sym.get(sym_clean, [])
+        if not patterns:
+            continue
+
+        ret_10d = None
+        if len(sparkline) >= 11 and sparkline[-11] > 0:
+            ret_10d = ((float(last_price) - float(sparkline[-11])) / float(sparkline[-11])) * 100.0
+
+        atr_14 = _extract_numeric_val(raw_ind.get("atr_14"))
+        rsi_14 = _extract_numeric_val(raw_ind.get("rsi_14"))
+        rvol = _extract_numeric_val(raw_ind.get("rvol"))
+        ud_ratio = _extract_numeric_val(raw_ind.get("up_down_vol_ratio"))
+        sma_50 = _extract_numeric_val(raw_ind.get("sma_50"))
+
+        best_candidate = None
+        best_sort_tuple = (-1, -1, -1.0)
+        for p in patterns:
+            if not isinstance(p, dict):
+                continue
+            if "bullish" not in str(p.get("direction", "")).lower():
+                continue
+            if high_conviction_only and p.get("name") not in HIGH_CONVICTION_PRE_BREAKOUT_PATTERNS:
+                continue
+            proj = compute_pattern_projection(
+                p,
+                curr_close=float(last_price),
+                atr_14=atr_14,
+                rsi_14=rsi_14,
+                rvol=rvol,
+                ud_ratio=ud_ratio,
+                ret_10d=ret_10d,
+                sma_50=sma_50,
+                symbol=sym_clean,
+            )
+            stage = proj.get("setup_stage")
+            if stage not in allowed_stages or proj.get("is_late_entry"):
+                continue
+            w4_tgt = proj.get("week4_target")
+            if not w4_tgt or w4_tgt <= float(last_price):
+                continue
+
+            cand_tuple = (
+                stage_rank_map.get(stage, 0),
+                int(proj.get("readiness_score") or 0),
+                float(proj.get("projected_rr") or 0.0),
+            )
+            if cand_tuple > best_sort_tuple:
+                best_sort_tuple = cand_tuple
+                best_candidate = (p, proj)
+
+        if not best_candidate:
+            continue
+
+        top_p, proj = best_candidate
+        bear_conflicts = [
+            bp for bp in patterns
+            if isinstance(bp, dict)
+            and "bearish" in str(bp.get("direction", "")).lower()
+            and float(bp.get("quality_score") or 0) >= 75
+        ]
+        if bear_conflicts:
+            b_name = bear_conflicts[0].get("name", "Bearish Pattern")
+            proj["projection_summary"] = f"{proj['projection_summary']} Caution: conflicting {b_name} overhead."
+            proj["forming_evidence"] = (list(proj.get("forming_evidence") or []) + [f"Caution: {b_name}"])[:4]
+        trigger = float(proj["breakout_trigger"])
+        w4_tgt = float(proj["week4_target"])
+        stop_loss = float(proj["projected_stop_loss"])
+        upside_pct = float(proj["week4_upside_pct"] or 0.0)
+        downside_pct = round(max(0.5, ((trigger - stop_loss) / max(trigger, 1e-6)) * 100.0), 2)
+        rr_ratio = float(proj.get("projected_rr") or round(upside_pct / max(downside_pct, 0.5), 2))
+        verdict = str(synth_sig.get("action_verdict") or ("BUY" if proj["readiness_score"] >= 72 else "ACCUMULATE")).upper()
+        conf_score = _extract_numeric_val(synth_sig.get("confidence_score") or synth_sig.get("confidence_percentage")) or float(proj["readiness_score"])
+
+        picks.append({
+            "symbol": sym_clean,
+            "name": meta["name"],
+            "sector": meta["sector"],
+            "last_price": round(float(last_price), 2),
+            "pattern_name": top_p.get("name", "Bullish Setup"),
+            "pattern_category": top_p.get("category", "Pre-Breakout"),
+            "pattern_status": top_p.get("status", ""),
+            "direction": "Bullish",
+            "setup_stage": proj["setup_stage"],
+            "is_pre_breakout": proj["is_pre_breakout"],
+            "is_late_entry": proj["is_late_entry"],
+            "entry_window": proj["entry_window"],
+            "breakout_trigger": trigger,
+            "distance_to_breakout_pct": proj["distance_to_breakout_pct"],
+            "week4_target": w4_tgt,
+            "week4_target_low": proj["week4_target_low"],
+            "week4_upside_pct": upside_pct,
+            "week4_upside_from_ltp_pct": proj["week4_upside_from_ltp_pct"],
+            "full_pattern_target": proj["full_pattern_target"],
+            "stop_loss": stop_loss,
+            "risk_reward": rr_ratio,
+            "readiness_score": proj["readiness_score"],
+            "quality_score": int(top_p.get("quality_score") or 80),
+            "rsi_14": round(rsi_14, 1) if rsi_14 is not None else None,
+            "up_down_vol_ratio": round(ud_ratio, 2) if ud_ratio is not None else None,
+            "action_verdict": verdict,
+            "confidence_score": conf_score,
+            "entry_range": f"Buy above Rs. {trigger:.2f}",
+            "target_price": w4_tgt,
+            "upside_pct": upside_pct,
+            "downside_pct": downside_pct,
+            "projection_summary": proj["projection_summary"],
+            "forming_evidence": proj["forming_evidence"],
+            "sparkline": sparkline,
+            "timestamp": str(ts)[:10] if ts else "",
+        })
+
+    picks.sort(
+        key=lambda x: (
+            stage_rank_map.get(x["setup_stage"], 0),
+            x["readiness_score"],
+            x["risk_reward"],
+            x["week4_upside_pct"],
+        ),
+        reverse=True,
+    )
+    limited = picks[:limit]
+    return {
+        "count": len(limited),
+        "total_matches": len(picks),
+        "universe": universe,
+        "scanned_symbols": len(sym_meta),
+        "as_of": datetime.now().isoformat(),
+        "advisory_note": (
+            "Educational & research projection only — not SEBI-registered investment advice. "
+            "Wait for breakout confirmation above the trigger level and observe stop loss."
+        ),
+        "picks": limited,
+    }
 
 
 def get_top_pattern_picks(cache_mgr, tech_engine, min_upside: float = 0.0) -> List[Dict[str, Any]]:
@@ -613,7 +942,7 @@ def _compute_top_pattern_picks(cache_mgr, tech_engine, min_upside: float = 0.0) 
 
         sig = data.get("structured_signal", {})
         pattern_str = sig.get("chart_patterns") or ""
-        if not pattern_str or pattern_str == "N/A":
+        if not pattern_str or pattern_str in ("N/A", "Consolidation Range"):
             continue
 
         verdict = str(sig.get("action_verdict", "HOLD")).upper()
@@ -635,6 +964,38 @@ def _compute_top_pattern_picks(cache_mgr, tech_engine, min_upside: float = 0.0) 
         if not last_price or last_price <= 0:
             continue
 
+        tech_out = (agents.get(TECH_AGENT) or {}).get("output") or {}
+        raw_ind = tech_out.get("raw_indicators") or {}
+        det_pats = tech_out.get("detected_patterns") or raw_ind.get("detected_patterns") or []
+        p_lower = pattern_str.lower()
+        inferred_dir = (
+            "Bullish"
+            if ("bull" in p_lower or "golden" in p_lower or "inverse" in p_lower or "bottom" in p_lower or "spring" in p_lower or "saucer" in p_lower or "cup" in p_lower or "ascending" in p_lower or "vcp" in p_lower)
+            else ("Bearish" if ("bear" in p_lower or "death" in p_lower or "top" in p_lower or "descending" in p_lower or "evening" in p_lower or "utad" in p_lower) else "Neutral")
+        )
+        top_p = det_pats[0] if det_pats else {
+            "name": pattern_str,
+            "direction": inferred_dir,
+            "entry_trigger": _extract_numeric_val(entry_raw),
+            "target_price": target_price,
+            "stop_loss": stop_loss,
+            "quality_score": conf_score,
+        }
+        ret_10d = None
+        if len(sparkline) >= 11 and sparkline[-11] > 0:
+            ret_10d = ((float(last_price) - float(sparkline[-11])) / float(sparkline[-11])) * 100.0
+        proj = compute_pattern_projection(
+            top_p,
+            curr_close=float(last_price),
+            atr_14=_extract_numeric_val(raw_ind.get("atr_14")),
+            rsi_14=_extract_numeric_val(raw_ind.get("rsi_14")),
+            rvol=_extract_numeric_val(raw_ind.get("rvol")),
+            ud_ratio=_extract_numeric_val(raw_ind.get("up_down_vol_ratio")),
+            ret_10d=ret_10d,
+            sma_50=_extract_numeric_val(raw_ind.get("sma_50")),
+            symbol=sym_clean,
+        )
+
         upside_pct = round(((target_price - last_price) / last_price) * 100, 2) if (target_price and target_price > last_price) else 0.0
         downside_pct = round(((last_price - stop_loss) / last_price) * 100, 2) if (stop_loss and stop_loss < last_price) else 4.0
         rr_ratio = round(upside_pct / downside_pct, 2) if (downside_pct > 0 and upside_pct > 0) else (_extract_numeric_val(sig.get("reward_to_risk_ratio")) or 1.5)
@@ -643,10 +1004,9 @@ def _compute_top_pattern_picks(cache_mgr, tech_engine, min_upside: float = 0.0) 
             continue
 
         meta = sym_meta.get(sym_clean, {"name": sym_clean, "sector": "Indian Equities"})
-        p_lower = pattern_str.lower()
         if "cross" in p_lower or "moving average" in p_lower:
             category = "Moving Average"
-        elif "saucer" in p_lower or "rounding bottom" in p_lower or "cup" in p_lower:
+        elif "saucer" in p_lower or "rounding bottom" in p_lower or "cup" in p_lower or "vcp" in p_lower:
             category = "Accumulation & Cup"
         elif "head" in p_lower or "shoulder" in p_lower or "wyckoff" in p_lower or "double" in p_lower:
             category = "Reversal"
@@ -664,7 +1024,7 @@ def _compute_top_pattern_picks(cache_mgr, tech_engine, min_upside: float = 0.0) 
             "last_price": round(last_price, 2),
             "pattern_name": pattern_str,
             "pattern_category": category,
-            "direction": "Bullish" if ("bull" in p_lower or "golden" in p_lower or "inverse" in p_lower or "bottom" in p_lower or "spring" in p_lower or upside_pct > 0) else "Bearish",
+            "direction": "Bullish" if (inferred_dir == "Bullish" or upside_pct > 0) else "Bearish",
             "action_verdict": verdict,
             "confidence_score": conf_score,
             "entry_range": entry_raw,
@@ -673,13 +1033,27 @@ def _compute_top_pattern_picks(cache_mgr, tech_engine, min_upside: float = 0.0) 
             "upside_pct": upside_pct,
             "downside_pct": round(downside_pct, 2),
             "risk_reward": rr_ratio,
+            "setup_stage": proj["setup_stage"],
+            "is_pre_breakout": proj["is_pre_breakout"],
+            "is_late_entry": proj["is_late_entry"],
+            "entry_window": proj["entry_window"],
+            "breakout_trigger": proj["breakout_trigger"],
+            "distance_to_breakout_pct": proj["distance_to_breakout_pct"],
+            "week4_target": proj["week4_target"],
+            "week4_target_low": proj["week4_target_low"],
+            "week4_upside_pct": proj["week4_upside_pct"],
+            "readiness_score": proj["readiness_score"],
+            "projection_summary": proj["projection_summary"],
+            "forming_evidence": proj["forming_evidence"],
             "sparkline": sparkline,
             "timestamp": ts[:10] if ts else "",
         })
 
     picks.sort(key=lambda x: (
+        bool(x.get("is_pre_breakout", False)),
         x["action_verdict"] in ("BUY", "ACCUMULATE"),
         x["upside_pct"] > 0,
+        x.get("readiness_score", 0),
         x["risk_reward"],
         x["upside_pct"],
     ), reverse=True)

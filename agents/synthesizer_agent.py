@@ -107,7 +107,11 @@ def _pattern_signal(top_pattern: Optional[dict], all_patterns: Optional[List[dic
     if "neutral" in dir_lower:
         return 0.0, f"neutral {name}"
     if "bullish" in dir_lower:
-        return quality, f"bullish {name} ({quality * 100:.0f}/100){warning_str}"
+        late_note = ""
+        if top_pattern.get("is_late_entry"):
+            quality = max(0.20, quality * 0.55)
+            late_note = " [Extended / Late — wait for pullback]"
+        return quality, f"bullish {name} ({quality * 100:.0f}/100){warning_str}{late_note}"
     if "bearish" in dir_lower:
         return -quality, f"bearish {name} ({quality * 100:.0f}/100){warning_str}"
     return 0.0, f"neutral {name}"
@@ -866,6 +870,21 @@ class MasterPredictionSynthesizerAgent:
             forensic_data=fund_ctx.get("forensic_analysis"),
         )
 
+        pre_breakout_proj = None
+        if top_pattern and "bullish" in str(p_dir).lower() and top_pattern.get("is_pre_breakout"):
+            pre_breakout_proj = {
+                "setup_stage": top_pattern.get("setup_stage"),
+                "entry_window": top_pattern.get("entry_window"),
+                "breakout_trigger": top_pattern.get("breakout_trigger"),
+                "distance_to_breakout_pct": top_pattern.get("distance_to_breakout_pct"),
+                "week4_target": top_pattern.get("week4_target"),
+                "week4_target_low": top_pattern.get("week4_target_low"),
+                "week4_upside_pct": top_pattern.get("week4_upside_pct"),
+                "stop_loss": top_pattern.get("projected_stop_loss") or top_pattern.get("stop_loss"),
+                "readiness_score": top_pattern.get("readiness_score"),
+                "projection_summary": top_pattern.get("projection_summary"),
+            }
+
         return {
             "action_verdict": verdict,
             "confidence_rating": conf,
@@ -883,6 +902,7 @@ class MasterPredictionSynthesizerAgent:
             "long_term_horizon": lt_eval["long_term_horizon"],
             "suggested_long_term_peers": lt_eval["suggested_long_term_peers"],
             "chart_patterns": p_name,
+            "pre_breakout_projection": pre_breakout_proj,
             "upcoming_events_note": upcoming_events_note,
             "event_guardrail": guardrail,
             "key_rationale": rationale,

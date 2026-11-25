@@ -39,12 +39,33 @@ export class WebSocketService {
   }
 
   /**
-   * Connect to WebSocket.
+   * Connect to WebSocket (or fall back directly to HTTP polling if backend has no /ws support).
    */
-  connect(): void {
+  async connect(): Promise<void> {
     if (this.state !== 'disconnected') return;
 
     this.setState('connecting');
+
+    try {
+      const statusResp = await fetch('/api/status');
+      if (!statusResp.ok) {
+        this.setState('disconnected');
+        this.scheduleReconnect();
+        this.startPolling();
+        return;
+      }
+      const st = await statusResp.json();
+      if (!st?.ws_enabled) {
+        this.setState('disconnected');
+        this.startPolling();
+        return;
+      }
+    } catch {
+      this.setState('disconnected');
+      this.scheduleReconnect();
+      this.startPolling();
+      return;
+    }
 
     try {
       this.ws = new WebSocket(this.url);

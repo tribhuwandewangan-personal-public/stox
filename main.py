@@ -264,6 +264,83 @@ def build_quick_picks_section(symbols_list: list, results_dict: dict, cache_mgr)
     return "\n".join(lines)
 
 
+def build_pre_breakout_section(symbols_list: list, cache_mgr, tech_engine) -> str:
+    """
+    Builds a markdown section listing stocks currently forming bullish patterns
+    (pre-breakout or fresh at pivot) with buy-above trigger, entry timing, and 4-week projection.
+    """
+    try:
+        from tools.pattern_engine import compute_pattern_projection
+        target_syms = {str(s.get("symbol") or "").upper().strip() for s in symbols_list if s.get("symbol")}
+        if not target_syms:
+            return ""
+        quotes = cache_mgr.get_all_quotes()
+        bulk_outputs = cache_mgr.get_latest_agent_outputs_bulk()
+        picks = []
+        for s in symbols_list:
+            sym = str(s.get("symbol") or "").upper().strip()
+            if not sym:
+                continue
+            df = tech_engine.rag_engine._load_cached_df(sym).tail(120).reset_index(drop=True)
+            if df.empty or len(df) < 20:
+                continue
+            df_calc = tech_engine._compute_indicators(df)
+            pats = tech_engine.detect_chart_patterns(df_calc)
+            if not pats:
+                continue
+            last_price = float((quotes.get(sym) or {}).get("ltp") or df_calc["CLOSE_PRICE"].iloc[-1])
+            tech_ind = ((bulk_outputs.get(sym, {}).get("Technical Analysis Agent") or {}).get("output") or {}).get("raw_indicators") or {}
+            best = None
+            for p in pats:
+                if "bullish" not in str(p.get("direction", "")).lower():
+                    continue
+                proj = compute_pattern_projection(
+                    p,
+                    curr_close=last_price,
+                    atr_14=float(df_calc["ATR_14"].iloc[-1]) if "ATR_14" in df_calc and df_calc["ATR_14"].notna().iloc[-1] else None,
+                    rsi_14=float(df_calc["RSI_14"].iloc[-1]) if "RSI_14" in df_calc and df_calc["RSI_14"].notna().iloc[-1] else None,
+                    ud_ratio=tech_ind.get("up_down_vol_ratio"),
+                    symbol=sym,
+                )
+                if proj["setup_stage"] in ("IMMINENT_BREAKOUT", "FORMING_PRE_BREAKOUT", "FRESH_BREAKOUT") and not proj["is_late_entry"]:
+                    best = (p, proj)
+                    break
+            if best:
+                p, proj = best
+                picks.append({
+                    "sym": sym,
+                    "ltp": round(last_price, 2),
+                    "pattern": p.get("name", "Bullish Setup"),
+                    "stage": proj["setup_stage"],
+                    "window": proj["entry_window"],
+                    "trigger": proj["breakout_trigger"],
+                    "w4": proj["week4_target"],
+                    "upside": proj["week4_upside_pct"],
+                    "sl": proj["projected_stop_loss"],
+                    "readiness": proj["readiness_score"],
+                    "summary": proj["projection_summary"],
+                })
+        if not picks:
+            return "\n## 🚀 Pre-Breakout Bullish Radar (4-Week Projections)\n> No unextended pre-breakout setups detected right now.\n\n---\n"
+        picks.sort(key=lambda x: (x["stage"] == "IMMINENT_BREAKOUT", x["readiness"], x["upside"]), reverse=True)
+        lines = [
+            "\n## 🚀 Pre-Breakout Bullish Radar (4-Week Projections)",
+            "> Stocks **forming** bullish patterns *before* breakout (extended/late entries excluded).",
+            "",
+            "| # | Symbol | LTP | Forming Pattern | Timing | Close Above | 4W Target | Stop Loss | Projection |",
+            "|---|---|---|---|---|---|---|---|---|",
+        ]
+        for i, item in enumerate(picks[:15], 1):
+            lines.append(
+                f"| {i} | **{item['sym']}** | Rs. {item['ltp']:.2f} | {item['pattern']} | {item['window']} "
+                f"| Rs. {item['trigger']:.2f} | Rs. {item['w4']:.2f} (+{item['upside']:.1f}%) | Rs. {item['sl']:.2f} | {item['summary']} |"
+            )
+        lines.append("\n---\n")
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="NSE Multi-Agent RAG & Stock Prediction System")
     parser.add_argument("--force", "-f", action="store_true", help="Force fresh re-analysis of symbols (resets queue and cache)")
@@ -494,6 +571,11 @@ def main():
         # --- Build Quick Picks section first (top of report, after header) ---
         quick_picks_md = build_quick_picks_section(symbols_list, results_dict, cache_mgr)
         report_markdown.append(quick_picks_md)
+
+        # --- Build Pre-Breakout Bullish Radar section (forming patterns + 4W projections) ---
+        pre_breakout_md = build_pre_breakout_section(symbols_list, cache_mgr, workflow.tech_agent.tech_engine)
+        if pre_breakout_md:
+            report_markdown.append(pre_breakout_md)
 
         # --- Build Top 10 Fundamental Picks section ---
         from tools.fundamental_picks import build_fundamental_picks_section
