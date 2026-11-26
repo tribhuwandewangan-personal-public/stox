@@ -1,6 +1,6 @@
 {
   "description": "List of NSE stock symbols for multi-agent RAG analysis and prediction",
-  "updated_at": "2026-11-25",
+  "updated_at": "2026-11-26",
   "default_timeframe_days": 1825,
   "symbols": [
     {
@@ -483,6 +483,12 @@
       "symbol": "AEQUS",
       "name": "Aequs Limited",
       "sector": "Indian Equities",
+      "exchange": "NSE"
+    },
+    {
+      "symbol": "ETERNAL",
+      "name": "ETERNAL LIMITED",
+      "sector": "Consumer Services",
       "exchange": "NSE"
     }
   ]

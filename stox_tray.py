@@ -88,8 +88,20 @@ WM_USER = 0x0400
 WM_TRAYICON = WM_USER + 20
 WM_COMMAND = 0x0111
 WM_DESTROY = 0x0002
+WM_MEASUREITEM = 0x002C
+WM_DRAWITEM = 0x002B
 WM_LBUTTONDBLCLK = 0x0203
 WM_RBUTTONUP = 0x0205
+
+MF_STRING = 0x0000
+MF_OWNERDRAW = 0x0100
+MF_SEPARATOR = 0x0800
+ODS_SELECTED = 0x0001
+TRANSPARENT = 1
+DEFAULT_GUI_FONT = 17
+DT_LEFT = 0x0000
+DT_VCENTER = 0x0004
+DT_SINGLELINE = 0x0020
 
 NIM_ADD = 0x00000000
 NIM_MODIFY = 0x00000001
@@ -151,7 +163,41 @@ class NOTIFYICONDATAW(ctypes.Structure):
     ]
 
 
+class MEASUREITEMSTRUCT(ctypes.Structure):
+    _fields_ = [
+        ("CtlType", wintypes.UINT),
+        ("CtlID", wintypes.UINT),
+        ("itemID", wintypes.UINT),
+        ("itemWidth", wintypes.UINT),
+        ("itemHeight", wintypes.UINT),
+        ("itemData", ctypes.c_size_t),
+    ]
+
+
+class DRAWITEMSTRUCT(ctypes.Structure):
+    _fields_ = [
+        ("CtlType", wintypes.UINT),
+        ("CtlID", wintypes.UINT),
+        ("itemID", wintypes.UINT),
+        ("itemAction", wintypes.UINT),
+        ("itemState", wintypes.UINT),
+        ("hwndItem", wintypes.HWND),
+        ("hDC", wintypes.HDC),
+        ("rcItem", wintypes.RECT),
+        ("itemData", ctypes.c_size_t),
+    ]
+
+
 class StoxTraySupervisor:
+    MENU_ITEMS = [
+        (ID_OPEN, "Open Stox Dashboard"),
+        (ID_SCAN, "Run Catalyst Scan Now"),
+        (ID_VALKEY, "Check Valkey Status"),
+        (ID_RESTART, "Restart Backend Server"),
+        (0, None),
+        (ID_EXIT, "Exit Stox"),
+    ]
+
     def __init__(self):
         self.icon_path = ensure_stox_icon()
         self.proc: subprocess.Popen | None = None
@@ -159,10 +205,12 @@ class StoxTraySupervisor:
         self.hwnd = None
         self.hicon = None
         self._last_valkey_state: bool | None = None
+        self._menu_labels: dict[int, str] = {mid: lbl for mid, lbl in self.MENU_ITEMS if lbl}
 
         self.user32 = ctypes.windll.user32
         self.shell32 = ctypes.windll.shell32
         self.kernel32 = ctypes.windll.kernel32
+        self.gdi32 = ctypes.windll.gdi32
         self._mutex = None
         self._configure_win32_types()
 
@@ -220,6 +268,23 @@ class StoxTraySupervisor:
         self.user32.DispatchMessageW.restype = LRESULT
         self.shell32.Shell_NotifyIconW.argtypes = [wintypes.DWORD, ctypes.POINTER(NOTIFYICONDATAW)]
         self.shell32.Shell_NotifyIconW.restype = wintypes.BOOL
+
+        self.user32.FillRect.argtypes = [wintypes.HDC, ctypes.POINTER(wintypes.RECT), wintypes.HBRUSH]
+        self.user32.FillRect.restype = ctypes.c_int
+        self.user32.DrawTextW.argtypes = [wintypes.HDC, wintypes.LPCWSTR, ctypes.c_int, ctypes.POINTER(wintypes.RECT), wintypes.UINT]
+        self.user32.DrawTextW.restype = ctypes.c_int
+        self.gdi32.CreateSolidBrush.argtypes = [wintypes.COLORREF]
+        self.gdi32.CreateSolidBrush.restype = wintypes.HBRUSH
+        self.gdi32.DeleteObject.argtypes = [wintypes.HGDIOBJ]
+        self.gdi32.DeleteObject.restype = wintypes.BOOL
+        self.gdi32.SetTextColor.argtypes = [wintypes.HDC, wintypes.COLORREF]
+        self.gdi32.SetTextColor.restype = wintypes.COLORREF
+        self.gdi32.SetBkMode.argtypes = [wintypes.HDC, ctypes.c_int]
+        self.gdi32.SetBkMode.restype = ctypes.c_int
+        self.gdi32.GetStockObject.argtypes = [ctypes.c_int]
+        self.gdi32.GetStockObject.restype = wintypes.HGDIOBJ
+        self.gdi32.SelectObject.argtypes = [wintypes.HDC, wintypes.HGDIOBJ]
+        self.gdi32.SelectObject.restype = wintypes.HGDIOBJ
 
     def _acquire_single_instance(self) -> bool:
         """Ensure only one StoxTraySupervisor runs at a time using a Win32 named mutex."""
@@ -338,12 +403,11 @@ class StoxTraySupervisor:
 
     def _show_context_menu(self) -> None:
         hmenu = self.user32.CreatePopupMenu()
-        self.user32.AppendMenuW(hmenu, 0, ID_OPEN, "Open Stox Dashboard")
-        self.user32.AppendMenuW(hmenu, 0, ID_SCAN, "Run Catalyst Scan Now")
-        self.user32.AppendMenuW(hmenu, 0, ID_VALKEY, "Check Valkey Status")
-        self.user32.AppendMenuW(hmenu, 0, ID_RESTART, "Restart Backend Server")
-        self.user32.AppendMenuW(hmenu, 0x0800, 0, None)  # Separator
-        self.user32.AppendMenuW(hmenu, 0, ID_EXIT, "Exit Stox")
+        for mid, label in self.MENU_ITEMS:
+            if label is None:
+                self.user32.AppendMenuW(hmenu, MF_SEPARATOR, 0, None)
+            else:
+                self.user32.AppendMenuW(hmenu, MF_OWNERDRAW, mid, label)
 
         pt = wintypes.POINT()
         self.user32.GetCursorPos(ctypes.byref(pt))
@@ -351,8 +415,40 @@ class StoxTraySupervisor:
         self.user32.TrackPopupMenu(hmenu, TPM_LEFTALIGN | TPM_BOTTOMALIGN | TPM_RIGHTBUTTON, pt.x, pt.y, 0, self.hwnd, None)
         self.user32.DestroyMenu(hmenu)
 
+    def _on_measure_item(self, lparam: int) -> int:
+        mis = MEASUREITEMSTRUCT.from_address(lparam)
+        mis.itemWidth = 190
+        mis.itemHeight = 28
+        return 1
+
+    def _on_draw_item(self, lparam: int) -> int:
+        dis = DRAWITEMSTRUCT.from_address(lparam)
+        label = self._menu_labels.get(dis.itemID, "")
+        selected = bool(dis.itemState & ODS_SELECTED)
+        # BGR COLORREF: light slate hover (#E2E8F0 -> 0x00F0E8E2) vs white (#FFFFFF -> 0x00FFFFFF)
+        bg_color = 0x00F0E8E2 if selected else 0x00FFFFFF
+        fg_color = 0x002A170F  # Slate-900 (#0F172A in BGR)
+
+        brush = self.gdi32.CreateSolidBrush(bg_color)
+        self.user32.FillRect(dis.hDC, ctypes.byref(dis.rcItem), brush)
+        self.gdi32.DeleteObject(brush)
+
+        old_font = self.gdi32.SelectObject(dis.hDC, self.gdi32.GetStockObject(DEFAULT_GUI_FONT))
+        self.gdi32.SetBkMode(dis.hDC, TRANSPARENT)
+        self.gdi32.SetTextColor(dis.hDC, fg_color)
+
+        rc = wintypes.RECT(dis.rcItem.left + 12, dis.rcItem.top, dis.rcItem.right - 8, dis.rcItem.bottom)
+        self.user32.DrawTextW(dis.hDC, label, -1, ctypes.byref(rc), DT_LEFT | DT_VCENTER | DT_SINGLELINE)
+        if old_font:
+            self.gdi32.SelectObject(dis.hDC, old_font)
+        return 1
+
     def _wnd_proc(self, hwnd, msg, wparam, lparam):
-        if msg == WM_TRAYICON:
+        if msg == WM_MEASUREITEM:
+            return self._on_measure_item(lparam)
+        elif msg == WM_DRAWITEM:
+            return self._on_draw_item(lparam)
+        elif msg == WM_TRAYICON:
             if lparam == WM_LBUTTONDBLCLK:
                 webbrowser.open(DASHBOARD_URL)
             elif lparam == WM_RBUTTONUP:
