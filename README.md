@@ -11,7 +11,7 @@
 >
 > 👉 **Read the full statutory disclosure in [DISCLAIMER.md](DISCLAIMER.md).**
 
-This repository contains corporate-action adjusted historical stock market data paired with a zero-cost, **fully deterministic multi-agent stock analysis system** (rule-based, **no LLM**, no API keys). Historical data is automatically synced to SQLite (`storage/cache.db`) and exported to Excel ([`reports/NSE_Historical_Data.xlsx`](file:///c:/Users/tdewa/Documents/LearnPython/NSE-Data-bank/reports/NSE_Historical_Data.xlsx)).
+This repository contains corporate-action adjusted historical stock market data paired with a zero-cost, **fully deterministic multi-agent stock analysis system** (rule-based, **no LLM**, no required API keys). Historical data is automatically synced to SQLite (`storage/cache.db`) and exported to Excel ([`reports/NSE_Historical_Data.xlsx`](reports/NSE_Historical_Data.xlsx)).
 
 ---
 
@@ -30,45 +30,100 @@ The system uses 8 specialized rule-based agents working together to evaluate equ
 
 ---
 
-## 🛠️ Setup & Installation (Valkey Docker, Backend & Frontend)
+## 🛠️ Quick Setup & Installation
 
-### 1. Start Valkey Queue Server via Docker (Recommended)
-The background analysis queue ([`storage/queue_manager.py`](file:///c:/Users/tdewa/Documents/LearnPython/stox-main/storage/queue_manager.py)) connects to **Valkey** on `localhost:6379` by default (configurable via `VALKEY_HOST` and `VALKEY_PORT` environment variables), and automatically falls back to SQLite (`storage/cache.db`) if Valkey is offline.
+### Prerequisites
+- **Python 3.11+** (with `uv` or `pip`)
+- **Node.js 20+ & npm** (for the Angular frontend)
+- **Docker** (optional, recommended for Valkey queue; falls back to SQLite automatically if omitted)
 
-Run the following command to create and start a persistent **Valkey** Docker container:
+### Step 1: Install Backend & Frontend Dependencies
+```powershell
+# 1. Create virtual environment & install Python packages
+uv sync
+# (Or with pip: python -m venv .venv; .\.venv\Scripts\activate; pip install -r requirements.txt)
+
+# 2. Install Angular frontend packages
+cd frontend
+npm install
+cd ..
+```
+
+### Step 2: Start Valkey Queue Server via Docker (Optional, Recommended)
+The background queue ([`storage/queue_manager.py`](storage/queue_manager.py)) connects to **Valkey** on `localhost:6379` (configurable via `VALKEY_HOST` / `VALKEY_PORT`), and automatically falls back to SQLite (`storage/cache.db`) if Valkey is offline.
 
 ```powershell
 docker run -d --name stox-valkey --restart unless-stopped -p 127.0.0.1:6379:6379 -v stox-valkey-data:/data valkey/valkey:8-alpine valkey-server --appendonly yes
 ```
 
-**Useful Docker management commands:**
+**Useful Docker commands:**
 ```powershell
-# Verify Valkey container is running and responding
-docker exec -it stox-valkey valkey-cli ping
-
-# Stop / start existing container
-docker stop stox-valkey
-docker start stox-valkey
-
-# View Valkey logs
-docker logs -f stox-valkey
+docker exec -it stox-valkey valkey-cli ping   # Verify Valkey is responding
+docker start stox-valkey                      # Start existing container
+docker stop stox-valkey                       # Stop container
 ```
 
-### 2. Start the Backend API Server (`http://127.0.0.1:8765`)
+### Step 3: Run in Development or Deploy on Windows
+
+**Option A — Local Development (two terminals):**
 ```powershell
-# Start or restart the backend HTTP server
+# Terminal 1: Backend API (http://127.0.0.1:8765)
 powershell -ExecutionPolicy Bypass -File .\cleanup_server.ps1 -Restart
 
-# Or run directly using the virtual environment
-.\.venv\Scripts\python.exe dashboard_server.py --no-browser
-```
-
-### 3. Start the Angular Frontend (`http://localhost:4200`)
-```powershell
+# Terminal 2: Angular UI (http://localhost:4200)
 cd frontend
-npm install
 npm start
 ```
+
+**Option B — Production / Windows Startup Deployment (System Tray):**
+1. Build the Angular production bundle (`cd frontend; npm run build; cd ..`).
+2. Run the production installer to create Windows Startup, Desktop, and Quick Launch shortcuts and start `stox_tray.py`:
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\install_production.ps1
+   ```
+
+---
+
+## 🔐 Optional: Zerodha Kite Connect Setup (Read-Only)
+
+Stox works out of the box using Yahoo Finance quotes and offline holdings snapshots (`storage/my_holdings.json`). To enable **Zerodha Kite Connect** for live portfolio diagnostics (`kite.holdings()`) and Kite quotes (`kite.ltp()` / `kite.quote()`):
+
+> [!IMPORTANT]
+> `dashboard_server.py` and `stox_tray.py` do **not** auto-load `.env` files. When deployed via Windows Startup / tray, set your Kite credentials as **Windows User environment variables** so background processes pick them up automatically.
+
+1. **Install `kiteconnect`** (if not already installed):
+   ```powershell
+   .\.venv\Scripts\pip.exe install kiteconnect
+   ```
+2. **Set persistent Windows User environment variables** (once):
+   ```powershell
+   [Environment]::SetEnvironmentVariable("KITE_API_KEY", "your_kite_api_key", "User")
+   [Environment]::SetEnvironmentVariable("KITE_API_SECRET", "your_kite_api_secret", "User")
+   ```
+   Restart the backend/tray (`.\cleanup_server.ps1 -Restart` or re-run `.\install_production.ps1`) so the running process picks up the new variables.
+3. **Generate the daily access token** (Zerodha tokens expire daily around 06:00 IST):
+   ```powershell
+   .\.venv\Scripts\python.exe tools\kite_probe.py
+   # Or: .\.venv\Scripts\python.exe tools\kite_portfolio.py --login
+   ```
+   This opens the Kite login URL, exchanges the `request_token`, and saves `api_key` + `access_token` to `storage/kite_token.json` (gitignored).
+   - `tools/quote_tools.py` watches `storage/kite_token.json` and automatically re-enables Kite quotes once refreshed — no server restart required.
+   - If the token is missing or expired, Stox degrades gracefully to Yahoo quotes and `storage/my_holdings.json`.
+
+---
+
+## ⚙️ Environment Variables Reference
+
+| Variable | Default | Description |
+|---|---|---|
+| `AUTO_SCHEDULE` | `0` | Set to `1` to enable background pre-market (08:45 IST) & post-close (16:15 IST) runs |
+| `CATALYST_AUTO_SCAN` | `0` | Set to `1` to enable scheduled NSE/BSE/PIB catalyst scanning |
+| `CATALYST_POLL_SECONDS` | `900` | Interval (seconds) between catalyst scans |
+| `QUOTE_SOURCES` | `kite,yahoo` | Quote provider priority order (`yahoo` is final fallback) |
+| `QUOTE_POLL_SECONDS` | `300` | Live quote polling interval during market hours |
+| `DASHBOARD_HOST` | `127.0.0.1` | Bind host (loopback only recommended) |
+| `VALKEY_HOST` / `VALKEY_PORT` | `127.0.0.1` / `6379` | Valkey queue connection |
+| `KITE_API_KEY` / `KITE_API_SECRET` | *(unset)* | Optional Zerodha Kite Connect credentials (read-only mode) |
 
 ---
 
@@ -142,8 +197,8 @@ updates prices in place every 15 seconds. Each price shows its source and time (
 **Market calendar.** Weekends are automatic. Add exchange holidays as `YYYY-MM-DD` strings to `data/nse_holidays.json`
 (none are guessed). An unlisted holiday is also detected at runtime (no fresh trades) and shown as "market closed".
 
-**Scheduler** (inside the dashboard process; `AUTO_SCHEDULE=0` disables it): pre-market refresh of macro + news from
-08:45 IST, and after 16:00 IST a post-close run that downloads the final candles, re-analyses every symbol, scores past
+**Scheduler** (inside the dashboard process; enable with `AUTO_SCHEDULE=1`): pre-market refresh of macro + news from
+08:45 IST, and after 16:15 IST a post-close run that downloads the final candles, re-analyses every symbol, scores past
 predictions and prunes old agent outputs. Jobs are recorded per session, so a restart never repeats them and a missed
 session (PC off) is caught up the next time the dashboard starts. Today's unfinished candle is never stored as a close.
 
@@ -167,8 +222,8 @@ All parsed metrics, news, macro sentiment, and agent reports are stored incremen
 
 ## 🧪 Tests
 
-```bash
-python -m unittest discover -s tests -v
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover tests
 ```
 
 ---

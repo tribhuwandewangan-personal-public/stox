@@ -21,16 +21,24 @@ export class AppStore {
 
   constructor(private api: ApiService) {
     // Initial load
-    this.refreshStatus();
+    this.refreshStatus().then(() => this.scheduleNextStatusPoll());
     this.refreshQuotes();
     this.refreshEvents();
     this.refreshRiskShield();
 
     // Periodic refresh – mimic the previous RxJS timers.
-    setInterval(() => this.refreshStatus(), 30_000); // every 30 s
     setInterval(() => this.refreshQuotes(), 15_000); // every 15 s
     setInterval(() => this.refreshEvents(), 45_000); // every 45 s
     setInterval(() => this.refreshRiskShield(), 120_000); // every 2 min
+  }
+
+  private scheduleNextStatusPoll(): void {
+    const s = this.status();
+    const isBusy = Boolean(s?.scheduler?.active || (s?.running_symbols?.length ?? 0) > 0);
+    const delayMs = isBusy ? 5_000 : 20_000;
+    setTimeout(() => {
+      this.refreshStatus().finally(() => this.scheduleNextStatusPoll());
+    }, delayMs);
   }
 
   /** Refresh live Macro Risk Shield summary */

@@ -7,6 +7,7 @@ import { Component, Input, Output, EventEmitter, ChangeDetectionStrategy } from 
 import { CommonModule } from '@angular/common';
 import { Stock, PatternResult } from '../../core/models/stock.model';
 import { fmtPrice } from '../../core/utils/price';
+import { formatDate } from '../../core/utils/date';
 import { getStockBucket, verdictInfo } from '../../core/utils/verdict';
 import { SparklineComponent } from './sparkline.component';
 
@@ -644,9 +645,9 @@ export class StockCardComponent {
     if (ev.upcoming_events && typeof ev.upcoming_events === 'object') {
       for (const [type, val] of Object.entries(ev.upcoming_events)) {
         if (typeof val === 'string' && !labels.some(l => l.includes(type))) {
-          labels.push(`📅 ${type}: ${val}`);
+          labels.push(`📅 ${type}: ${formatDate(val)}`);
         } else if (val && typeof val === 'object' && (val as any).date) {
-          labels.push(`📅 ${type}: ${(val as any).date}`);
+          labels.push(`📅 ${type}: ${formatDate((val as any).date)}`);
         }
       }
     }

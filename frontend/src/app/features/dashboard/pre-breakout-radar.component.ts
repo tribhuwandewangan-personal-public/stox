@@ -510,6 +510,12 @@ export class PreBreakoutRadarComponent implements OnInit {
           distance_to_breakout_pct: pick.distance_to_breakout_pct,
           week4_target: pick.week4_target,
           week4_upside_pct: pick.week4_upside_pct,
+          rvol: pick.rvol,
+          confirmation_status: pick.confirmation_status,
+          daily_close_confirmed: pick.daily_close_confirmed,
+          volume_confirmed: pick.volume_confirmed,
+          retest_hold_confirmed: pick.retest_hold_confirmed,
+          regime_ok: pick.regime_ok,
           projection_summary: pick.projection_summary,
         },
       ],
@@ -523,6 +529,14 @@ export class PreBreakoutRadarComponent implements OnInit {
       long_term_signal: {
         long_term_target: 'N/A',
         long_term_verdict: 'N/A',
+      },
+    };
+    adHoc.tech_output = {
+      raw_indicators: {
+        last_price: pick.last_price,
+        rsi_14: pick.rsi_14 ?? null,
+        rvol: pick.rvol ?? null,
+        up_down_vol_ratio: pick.up_down_vol_ratio ?? null,
       },
     };
     stocksStore.selectStock(adHoc);

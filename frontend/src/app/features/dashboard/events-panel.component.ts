@@ -5,6 +5,7 @@
 import { Component, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { EventsData } from '../../core/models/stock.model';
+import { compareDateStrings, formatDate } from '../../core/utils/date';
 
 @Component({
   selector: 'app-events-panel',
@@ -162,12 +163,14 @@ export class EventsPanelComponent {
   @Input() events: EventsData = {};
 
   get macroCatalysts(): string[] {
-    const catalysts = this.events?.upcoming_macro_catalysts || [];
+    const catalysts = [...(this.events?.upcoming_macro_catalysts || [])].sort((a: any, b: any) =>
+      compareDateStrings(a?.date, b?.date)
+    );
     return catalysts.map(c => {
       if (typeof c === 'string') return c;
       if (c && typeof c === 'object') {
         const name = c.event_name || c.name || '';
-        const date = c.date ? ` (${c.date})` : '';
+        const date = c.date ? ` (${formatDate(c.date)})` : '';
         const note = c.note ? `: ${c.note}` : '';
         return `${name}${date}${note}`.trim();
       }
@@ -182,7 +185,7 @@ export class EventsPanelComponent {
       list.push({
         name: `Quarterly Results (${this.events.earnings_quarter || 'Earnings'})`,
         emoji: '📊',
-        date: this.events.earnings_date
+        date: formatDate(this.events.earnings_date)
       });
     }
 

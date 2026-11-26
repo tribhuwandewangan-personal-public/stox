@@ -1178,7 +1178,16 @@ def _compute_fundamental_picks(cache_mgr, universe: str) -> Dict[str, Any]:
     from tools.fundamental_picks import score_fundamental_pick
 
     symbols_list = _load_symbols_list(universe=universe)
-    sym_names = [str(s.get("symbol") or "").upper().strip() for s in symbols_list if s.get("symbol")]
+    sym_meta: Dict[str, Dict[str, str]] = {}
+    for s in symbols_list:
+        k = str(s.get("symbol") or "").upper().strip()
+        if k and k not in sym_meta:
+            sym_meta[k] = {
+                "name": s.get("name") or k,
+                "sector": s.get("sector") or "Indian Equities",
+            }
+    sym_names = list(sym_meta.keys())
+    quotes = cache_mgr.get_all_quotes()
     bulk_outputs = cache_mgr.get_latest_agent_outputs_bulk(symbols=sym_names)
     candle_summaries = (
         cache_mgr.get_candles_bulk_summary(sym_names, limit_days=260, sparkline_days=5)

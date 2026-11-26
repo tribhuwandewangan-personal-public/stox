@@ -22,6 +22,13 @@ import { verdictInfo, getStockBucket } from '../../core/utils/verdict';
 import { bestPrice, fmtPrice, fmtChg } from '../../core/utils/price';
 import { parseMarkdown } from '../../core/utils/markdown';
 
+interface ConfirmationCheckItem {
+  label: string;
+  status: 'bullish' | 'bearish' | 'neutral';
+  detail: string;
+  group: 'breakout' | 'technical' | 'evidence';
+}
+
 interface ChartProjection {
   patternName: string;
   setupStage?: string;
@@ -62,6 +69,10 @@ interface ChartProjection {
             <button class="modal-close-icon" (click)="closeModal()" title="Close (Esc)">✕</button>
           </div>
         </div>
+
+        <!-- 2-Column Body: Left = Main Deep-Dive, Right = Bullish/Bearish Confirmation Scorecard -->
+        <div class="modal-two-col">
+          <div class="modal-main-col">
 
         <!-- Interactive Candlestick Chart Box -->
         <div class="modal-chart-box">
@@ -381,6 +392,93 @@ interface ChartProjection {
           <div [innerHTML]="parsedReport()"></div>
         </div>
 
+          </div><!-- /.modal-main-col -->
+
+          <!-- Right Column: Confirmation Scorecard -->
+          <aside class="modal-confirm-col" *ngIf="confirmationScorecard() as sc">
+            <div class="confirm-card">
+              <div class="confirm-header">
+                <div class="confirm-title">🛡️ Confirmation Scorecard</div>
+                <span class="confirm-bias-pill" [ngClass]="'bias-' + sc.biasClass">{{ sc.biasLabel }}</span>
+              </div>
+
+              <!-- Bullish vs Bearish Tally -->
+              <div class="tally-row">
+                <div class="tally-box bull">
+                  <span class="tally-num">{{ sc.bullCount }}</span>
+                  <span class="tally-lbl">Bullish</span>
+                </div>
+                <div class="tally-box bear">
+                  <span class="tally-num">{{ sc.bearCount }}</span>
+                  <span class="tally-lbl">Bearish</span>
+                </div>
+                <div class="tally-box wait">
+                  <span class="tally-num">{{ sc.neutralCount }}</span>
+                  <span class="tally-lbl">Wait / Neutral</span>
+                </div>
+              </div>
+
+              <div class="tally-meter" title="Bullish vs Bearish check ratio">
+                <div class="tally-meter-bull" [style.width.%]="sc.bullPct"></div>
+                <div class="tally-meter-bear" [style.width.%]="sc.bearPct"></div>
+              </div>
+
+              <!-- 4 Breakout Entry Conditions -->
+              <div class="check-section-label">Breakout Entry Conditions</div>
+              <div class="check-list">
+                <div class="check-item" *ngFor="let c of sc.breakoutChecks" [ngClass]="'chk-' + c.status">
+                  <div class="chk-left">
+                    <span class="chk-dot">{{ c.status === 'bullish' ? '▲' : (c.status === 'bearish' ? '▼' : '•') }}</span>
+                    <div class="chk-text">
+                      <div class="chk-name">{{ c.label }}</div>
+                      <div class="chk-detail">{{ c.detail }}</div>
+                    </div>
+                  </div>
+                  <span class="chk-badge" [ngClass]="'badge-' + c.status">
+                    {{ c.status === 'bullish' ? 'BULL' : (c.status === 'bearish' ? 'BEAR' : 'WAIT') }}
+                  </span>
+                </div>
+              </div>
+
+              <!-- Technical & Quant Checks -->
+              <div class="check-section-label">Technical &amp; Quant Checks</div>
+              <div class="check-list">
+                <div class="check-item" *ngFor="let c of sc.technicalChecks" [ngClass]="'chk-' + c.status">
+                  <div class="chk-left">
+                    <span class="chk-dot">{{ c.status === 'bullish' ? '▲' : (c.status === 'bearish' ? '▼' : '•') }}</span>
+                    <div class="chk-text">
+                      <div class="chk-name">{{ c.label }}</div>
+                      <div class="chk-detail">{{ c.detail }}</div>
+                    </div>
+                  </div>
+                  <span class="chk-badge" [ngClass]="'badge-' + c.status">
+                    {{ c.status === 'bullish' ? 'BULL' : (c.status === 'bearish' ? 'BEAR' : 'NEUT') }}
+                  </span>
+                </div>
+              </div>
+
+              <!-- Synthesizer Evidence Signals (when available) -->
+              <ng-container *ngIf="sc.evidenceChecks.length > 0">
+                <div class="check-section-label">Multi-Agent Evidence</div>
+                <div class="check-list">
+                  <div class="check-item" *ngFor="let c of sc.evidenceChecks" [ngClass]="'chk-' + c.status">
+                    <div class="chk-left">
+                      <span class="chk-dot">{{ c.status === 'bullish' ? '▲' : (c.status === 'bearish' ? '▼' : '•') }}</span>
+                      <div class="chk-text">
+                        <div class="chk-name">{{ c.label }}</div>
+                        <div class="chk-detail">{{ c.detail }}</div>
+                      </div>
+                    </div>
+                    <span class="chk-badge" [ngClass]="'badge-' + c.status">
+                      {{ c.status === 'bullish' ? 'BULL' : (c.status === 'bearish' ? 'BEAR' : 'NEUT') }}
+                    </span>
+                  </div>
+                </div>
+              </ng-container>
+            </div>
+          </aside>
+        </div><!-- /.modal-two-col -->
+
       </div>
     </div>
   `,
@@ -401,9 +499,9 @@ interface ChartProjection {
       background: #0f172a;
       border: 1px solid rgba(56, 189, 248, 0.35);
       border-radius: 18px;
-      width: 95vw;
-      max-width: 1380px;
-      max-height: 90vh;
+      width: 96vw;
+      max-width: 1580px;
+      max-height: 92vh;
       overflow-y: auto;
       padding: 24px 28px;
       box-shadow: 0 24px 60px rgba(0, 0, 0, 0.85);
@@ -411,6 +509,31 @@ interface ChartProjection {
       display: flex;
       flex-direction: column;
       gap: 16px;
+    }
+
+    .modal-two-col {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 18px;
+      align-items: start;
+    }
+    .modal-main-col {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-width: 0;
+    }
+    .modal-confirm-col {
+      position: sticky;
+      top: 0;
+    }
+    @media (max-width: 1120px) {
+      .modal-two-col {
+        grid-template-columns: 1fr;
+      }
+      .modal-confirm-col {
+        position: static;
+      }
     }
 
     .modal-card::-webkit-scrollbar { width: 6px; }
@@ -929,6 +1052,132 @@ interface ChartProjection {
     .text-muted { color: #64748b; }
     .bold { font-weight: 700; }
     .empty-text { font-size: 0.8rem; color: #64748b; margin: 0; }
+
+    /* Confirmation Scorecard (Right Column) */
+    .confirm-card {
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: 14px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .confirm-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .confirm-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.96rem;
+      font-weight: 700;
+      color: #f8fafc;
+    }
+    .confirm-bias-pill {
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: 999px;
+      text-transform: uppercase;
+    }
+    .bias-bull { background: rgba(16, 185, 129, 0.18); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
+    .bias-bear { background: rgba(239, 68, 68, 0.18); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); }
+    .bias-mixed { background: rgba(245, 158, 11, 0.18); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
+
+    .tally-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    .tally-box {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      padding: 8px 6px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+    .tally-box.bull { border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.08); }
+    .tally-box.bear { border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.08); }
+    .tally-num { font-family: 'JetBrains Mono', monospace; font-size: 1.15rem; font-weight: 800; }
+    .tally-box.bull .tally-num { color: #34d399; }
+    .tally-box.bear .tally-num { color: #f87171; }
+    .tally-box.wait .tally-num { color: #94a3b8; }
+    .tally-lbl { font-size: 0.66rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; }
+
+    .tally-meter {
+      display: flex;
+      height: 6px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(148, 163, 184, 0.2);
+    }
+    .tally-meter-bull { background: #10b981; transition: width 0.25s ease; }
+    .tally-meter-bear { background: #ef4444; transition: width 0.25s ease; }
+
+    .check-section-label {
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #7dd3fc;
+      margin-top: 2px;
+    }
+    .check-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .check-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.025);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-left: 3px solid #64748b;
+    }
+    .check-item.chk-bullish { border-left-color: #10b981; }
+    .check-item.chk-bearish { border-left-color: #ef4444; }
+    .chk-left { display: flex; align-items: flex-start; gap: 7px; min-width: 0; }
+    .chk-dot { font-size: 0.7rem; margin-top: 2px; color: #64748b; }
+    .chk-bullish .chk-dot { color: #34d399; }
+    .chk-bearish .chk-dot { color: #f87171; }
+    .chk-text { min-width: 0; }
+    .chk-name { font-size: 0.75rem; font-weight: 600; color: #e2e8f0; line-height: 1.25; }
+    .chk-detail { font-size: 0.68rem; color: #94a3b8; line-height: 1.3; margin-top: 1px; }
+    .chk-badge {
+      font-size: 0.62rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 5px;
+      flex-shrink: 0;
+    }
+    .badge-bullish { background: rgba(16, 185, 129, 0.16); color: #34d399; }
+    .badge-bearish { background: rgba(239, 68, 68, 0.16); color: #f87171; }
+    .badge-neutral { background: rgba(148, 163, 184, 0.15); color: #94a3b8; }
+
+    :host-context([data-theme='light']) .confirm-card {
+      background: #f8fafc;
+      border-color: #cbd5e1;
+    }
+    :host-context([data-theme='light']) .confirm-title,
+    :host-context([data-theme='light']) .chk-name { color: #0f172a; }
+    :host-context([data-theme='light']) .check-item,
+    :host-context([data-theme='light']) .tally-box {
+      background: #ffffff;
+      border-color: #e2e8f0;
+    }
+    :host-context([data-theme='light']) .check-section-label { color: #0284c7; }
+    :host-context([data-theme='light']) .chk-detail,
+    :host-context([data-theme='light']) .tally-lbl { color: #475569; }
   `]
 })
 export class StockDetailModalComponent implements OnInit, AfterViewInit, OnDestroy {
@@ -1173,6 +1422,211 @@ export class StockDetailModalComponent implements OnInit, AfterViewInit, OnDestr
         sustainablePAT: eq.sustainable_pat
       } : null,
       forensicAnalysis: fd
+    };
+  });
+
+  confirmationScorecard = computed(() => {
+    const s = this.selectedStock;
+    if (!s) return null;
+
+    const tech = (s.tech_output?.raw_indicators || {}) as any;
+    const sig = (s.synth_output?.structured_signal || {}) as any;
+    const proj = this.activeProjection();
+    const topPat = (s.patterns && s.patterns[0]) ? s.patterns[0] : null;
+    const ltp = Number(bestPrice(s).price ?? tech.last_price ?? 0);
+    const candles = this.candles();
+
+    const breakoutChecks: ConfirmationCheckItem[] = [];
+    const technicalChecks: ConfirmationCheckItem[] = [];
+    const evidenceChecks: ConfirmationCheckItem[] = [];
+
+    // 1. Daily Candle Close > Trigger
+    const trigger = proj?.triggerPrice ?? topPat?.breakout_trigger ?? topPat?.entry_trigger ?? null;
+    const lastCandleClose = candles.length ? Number(candles[candles.length - 1].close ?? ltp) : ltp;
+    const dailyConfirmed = topPat?.daily_close_confirmed ?? (trigger != null && trigger > 0 ? lastCandleClose >= trigger : false);
+    const intradayCross = trigger != null && trigger > 0 && ltp >= trigger && !dailyConfirmed;
+    if (trigger != null && trigger > 0) {
+      if (dailyConfirmed) {
+        breakoutChecks.push({
+          label: 'Daily Close > Trigger',
+          status: 'bullish',
+          detail: `Closed Rs.${lastCandleClose.toFixed(2)} >= Rs.${trigger.toFixed(2)}`,
+          group: 'breakout',
+        });
+      } else if (intradayCross) {
+        breakoutChecks.push({
+          label: 'Daily Close > Trigger',
+          status: 'neutral',
+          detail: `Intraday Rs.${ltp.toFixed(2)} > Rs.${trigger.toFixed(2)} (await close)`,
+          group: 'breakout',
+        });
+      } else if (proj?.stopLoss && ltp > 0 && ltp < proj.stopLoss) {
+        breakoutChecks.push({
+          label: 'Daily Close > Trigger',
+          status: 'bearish',
+          detail: `Below stop loss Rs.${proj.stopLoss.toFixed(2)}`,
+          group: 'breakout',
+        });
+      } else {
+        const dist = ltp > 0 ? (((trigger - ltp) / ltp) * 100).toFixed(1) : '0.0';
+        breakoutChecks.push({
+          label: 'Daily Close > Trigger',
+          status: 'neutral',
+          detail: `+${dist}% below pivot Rs.${trigger.toFixed(2)}`,
+          group: 'breakout',
+        });
+      }
+    }
+
+    // 2. Volume >= 1.5x 20-day average
+    const rvol = Number(topPat?.rvol ?? tech.rvol ?? 0);
+    const hasRvol = topPat?.rvol != null || tech.rvol != null;
+    if (hasRvol && rvol > 0) {
+      breakoutChecks.push({
+        label: 'Volume >= 1.5x 20D Avg',
+        status: rvol >= 1.5 ? 'bullish' : (rvol < 1.0 ? 'bearish' : 'neutral'),
+        detail: `Current RVOL: ${rvol.toFixed(2)}x ${rvol >= 1.5 ? '(strong surge)' : '(below 1.5x threshold)'}`,
+        group: 'breakout',
+      });
+    } else {
+      breakoutChecks.push({
+        label: 'Volume >= 1.5x 20D Avg',
+        status: 'neutral',
+        detail: 'RVOL telemetry pending',
+        group: 'breakout',
+      });
+    }
+
+    // 3. Next-Session Hold / Retest
+    let retestHold = Boolean(topPat?.retest_hold_confirmed);
+    if (!retestHold && trigger != null && trigger > 0 && candles.length >= 2) {
+      const prevC = Number(candles[candles.length - 2].close ?? 0);
+      const currC = Number(candles[candles.length - 1].close ?? 0);
+      retestHold = prevC > trigger && currC >= trigger;
+    }
+    breakoutChecks.push({
+      label: 'Next-Session Hold / Retest',
+      status: retestHold ? 'bullish' : 'neutral',
+      detail: retestHold
+        ? (topPat?.confirmation_status === 'RETEST_HOLD' ? 'Retested pivot & held above' : '2+ sessions held above pivot')
+        : 'Awaiting post-breakout hold/retest',
+      group: 'breakout',
+    });
+
+    // 4. Market & Sector Regime
+    const regimeOk = topPat?.regime_ok;
+    const rsAlpha = tech.rs_63d_alpha_pct != null ? Number(tech.rs_63d_alpha_pct) : null;
+    if (regimeOk === true) {
+      breakoutChecks.push({
+        label: 'Market & Sector Regime',
+        status: 'bullish',
+        detail: 'Broader market & sector breadth healthy',
+        group: 'breakout',
+      });
+    } else if (regimeOk === false) {
+      breakoutChecks.push({
+        label: 'Market & Sector Regime',
+        status: 'bearish',
+        detail: 'Weak broader market or sector breadth',
+        group: 'breakout',
+      });
+    } else if (rsAlpha !== null) {
+      breakoutChecks.push({
+        label: 'Relative Strength vs Nifty',
+        status: rsAlpha >= 0 ? 'bullish' : 'bearish',
+        detail: `63D Alpha: ${rsAlpha >= 0 ? '+' : ''}${rsAlpha.toFixed(1)}%`,
+        group: 'breakout',
+      });
+    }
+
+    // 5. Trend vs SMA 50
+    const sma50 = Number(tech.sma_50 ?? 0);
+    if (sma50 > 0 && ltp > 0) {
+      technicalChecks.push({
+        label: 'Trend vs 50-DMA',
+        status: ltp >= sma50 ? 'bullish' : 'bearish',
+        detail: `LTP Rs.${ltp.toFixed(1)} vs SMA50 Rs.${sma50.toFixed(1)}`,
+        group: 'technical',
+      });
+    }
+
+    // 6. RSI Momentum
+    const rsi = tech.rsi_14 != null ? Number(tech.rsi_14) : null;
+    if (rsi !== null) {
+      const rsiStatus = (rsi >= 46 && rsi <= 68) ? 'bullish' : ((rsi < 40 || rsi > 75) ? 'bearish' : 'neutral');
+      technicalChecks.push({
+        label: 'Momentum (RSI 14)',
+        status: rsiStatus,
+        detail: `RSI ${rsi.toFixed(1)} ${rsi > 70 ? '(overbought)' : (rsi < 40 ? '(weak)' : '(healthy zone)')}`,
+        group: 'technical',
+      });
+    }
+
+    // 7. 20D Up/Down Volume Flow
+    const ud = tech.up_down_vol_ratio != null ? Number(tech.up_down_vol_ratio) : null;
+    if (ud !== null) {
+      technicalChecks.push({
+        label: 'Inst. Accumulation (20D U/D)',
+        status: ud >= 1.2 ? 'bullish' : (ud < 0.9 ? 'bearish' : 'neutral'),
+        detail: `${ud.toFixed(2)}x ${ud >= 1.2 ? 'accumulation' : (ud < 0.9 ? 'distribution' : 'balanced')}`,
+        group: 'technical',
+      });
+    }
+
+    // 8. Pattern Direction Balance
+    const pats = s.patterns || [];
+    const bullPats = pats.filter(p => String(p.direction || '').toLowerCase().includes('bull')).length;
+    const bearPats = pats.filter(p => String(p.direction || '').toLowerCase().includes('bear')).length;
+    if (pats.length > 0) {
+      technicalChecks.push({
+        label: 'Chart Pattern Bias',
+        status: bullPats > bearPats ? 'bullish' : (bearPats > bullPats ? 'bearish' : 'neutral'),
+        detail: `${bullPats} bullish vs ${bearPats} bearish pattern(s)`,
+        group: 'technical',
+      });
+    }
+
+    // 9. Synthesizer Evidence Breakdown (if present)
+    const evList = Array.isArray(sig.evidence_breakdown) ? sig.evidence_breakdown : [];
+    for (const ev of evList.slice(0, 6)) {
+      const val = Number(ev.value ?? 0);
+      evidenceChecks.push({
+        label: String(ev.signal || 'Signal'),
+        status: val > 0 ? 'bullish' : (val < 0 ? 'bearish' : 'neutral'),
+        detail: String(ev.note || (val > 0 ? `+${val}` : `${val}`)),
+        group: 'evidence',
+      });
+    }
+
+    const all = [...breakoutChecks, ...technicalChecks, ...evidenceChecks];
+    const bullCount = all.filter(c => c.status === 'bullish').length;
+    const bearCount = all.filter(c => c.status === 'bearish').length;
+    const neutralCount = all.filter(c => c.status === 'neutral').length;
+    const decisive = Math.max(1, bullCount + bearCount);
+    const bullPct = Math.round((bullCount / decisive) * 100);
+    const bearPct = 100 - bullPct;
+
+    let biasLabel = 'Mixed / Wait';
+    let biasClass = 'mixed';
+    if (bullCount >= bearCount + 2) {
+      biasLabel = 'Bullish Confirmed';
+      biasClass = 'bull';
+    } else if (bearCount >= bullCount + 2) {
+      biasLabel = 'Bearish Bias';
+      biasClass = 'bear';
+    }
+
+    return {
+      breakoutChecks,
+      technicalChecks,
+      evidenceChecks,
+      bullCount,
+      bearCount,
+      neutralCount,
+      bullPct,
+      bearPct,
+      biasLabel,
+      biasClass,
     };
   });
 

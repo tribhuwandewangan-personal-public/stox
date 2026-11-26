@@ -6,6 +6,7 @@
 import { Component, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { stocksStore } from '../../core/stores/stocks.store';
+import { compareDateStrings, formatDate } from '../../core/utils/date';
 
 interface MacroCatalyst {
   date: string;
@@ -32,7 +33,7 @@ interface MacroCatalyst {
           @for (c of catalysts(); track c.event_name + c.date) {
             <div class="event-card-item">
               <div class="event-item-top">
-                <span class="event-date-chip">{{ c.date }}</span>
+                <span class="event-date-chip">{{ formatDate(c.date) }}</span>
                 <span class="event-impact-chip" [ngClass]="'impact-' + c.impact.toLowerCase()">
                   {{ c.impact }}
                 </span>
@@ -174,6 +175,7 @@ interface MacroCatalyst {
 })
 export class MacroCatalystsBannerComponent {
   stocksStore = stocksStore;
+  formatDate = formatDate;
 
   catalysts = computed<MacroCatalyst[]>(() => {
     const stocks = this.stocksStore.stocks();
@@ -199,15 +201,15 @@ export class MacroCatalystsBannerComponent {
     }
 
     // Default macro calendar fallback matching the screenshot if stocks haven't loaded yet
-    if (map.size === 0) {
-      return [
-        { date: 'Nov 30, 2026', impact: 'High', event_name: 'India Q2 GDP Growth Data Release', affected_sectors: ['All Sectors', 'Capital Goods'] },
-        { date: 'Dec 06, 2026', impact: 'Critical', event_name: 'RBI MPC Rate Decision & Stance', affected_sectors: ['Banking', 'Real Estate', 'Auto'] },
-        { date: 'Dec 11, 2026', impact: 'Critical', event_name: 'US Fed FOMC Rate Decision & Powell', affected_sectors: ['IT & Tech', 'Pharma', 'FII'] },
-        { date: 'Dec 15, 2026', impact: 'High', event_name: 'OPEC+ Oil Production Review', affected_sectors: ['Energy', 'Paints', 'Chemicals'] }
-      ];
-    }
+    const list = map.size === 0
+      ? [
+          { date: 'Nov 30, 2026', impact: 'High' as const, event_name: 'India Q2 GDP Growth Data Release', affected_sectors: ['All Sectors', 'Capital Goods'] },
+          { date: 'Dec 06, 2026', impact: 'Critical' as const, event_name: 'RBI MPC Rate Decision & Stance', affected_sectors: ['Banking', 'Real Estate', 'Auto'] },
+          { date: 'Dec 11, 2026', impact: 'Critical' as const, event_name: 'US Fed FOMC Rate Decision & Powell', affected_sectors: ['IT & Tech', 'Pharma', 'FII'] },
+          { date: 'Dec 15, 2026', impact: 'High' as const, event_name: 'OPEC+ Oil Production Review', affected_sectors: ['Energy', 'Paints', 'Chemicals'] }
+        ]
+      : Array.from(map.values());
 
-    return Array.from(map.values());
+    return [...list].sort((a, b) => compareDateStrings(a.date, b.date));
   });
 }

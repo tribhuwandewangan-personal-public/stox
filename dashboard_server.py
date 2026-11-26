@@ -76,6 +76,7 @@ _REPORT_DIRS = ("news_reports", "reports")
 _trigger_slots = threading.BoundedSemaphore(MAX_CONCURRENT_TRIGGERS)
 _running_symbols = set()
 _running_lock = threading.Lock()
+_scheduler = None
 
 
 def generate_markdown_viewer_html(title: str, md_content: str, raw_url: str) -> str:
@@ -297,10 +298,15 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                         "code": "VALKEY_UNAVAILABLE",
                         "message": "Valkey server is not reachable on localhost:6379. Running in SQLite fallback mode.",
                     })
+                with _running_lock:
+                    running_syms = sorted(_running_symbols)
+                sched_status = _scheduler.get_status() if _scheduler is not None else None
                 resp_data = {
                     "model": ENGINE_LABEL,
                     "timestamp": datetime.now().isoformat(),
                     "queue_status": q_status,
+                    "scheduler": sched_status,
+                    "running_symbols": running_syms,
                     "bulletin": shared_bulletin,
                     "macro_items": macro_items,
                     "valkey_available": valkey_ok,
@@ -1025,13 +1031,15 @@ def start_dashboard_server(port=None, open_browser=True):
         })
     quote_poller.start()
     if AUTO_SCHEDULE:
-        Scheduler(
+        global _scheduler
+        _scheduler = Scheduler(
             cache_mgr,
             workflow_getter=get_workflow,
             symbols_loader=load_active_monitored_symbols,
             max_workers=MAX_SYMBOL_WORKERS,
             on_symbol_done=queue_mgr.mark_completed,
-        ).start()
+        )
+        _scheduler.start()
         BackgroundMacroSentinel(cache_mgr).start()
         print("🗓️ [Scheduler] Auto-schedule ON (pre-market refresh 08:45 IST, post-close analysis 16:00 IST) + MacroSentinel. "
               "Disable with AUTO_SCHEDULE=0.", flush=True)

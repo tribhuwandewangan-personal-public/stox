@@ -44,6 +44,31 @@ class Scheduler:
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._running = threading.Lock()          # one job at a time
+        self._status_lock = threading.Lock()
+        self._status: Dict[str, Any] = {
+            "active": False,
+            "job": None,
+            "phase": None,
+            "total": 0,
+            "completed": 0,
+            "failed": 0,
+            "in_progress": [],
+            "started_at": None,
+            "last_finished_at": None,
+            "last_job": None,
+            "last_summary": None,
+        }
+
+    def get_status(self) -> Dict[str, Any]:
+        """Return a thread-safe snapshot of current scheduler execution progress."""
+        with self._status_lock:
+            snap = dict(self._status)
+            snap["in_progress"] = list(self._status["in_progress"])
+            return snap
+
+    def _set_status(self, **kwargs: Any) -> None:
+        with self._status_lock:
+            self._status.update(kwargs)
 
     # ---- lifecycle -------------------------------------------------------------------------------
     def start(self) -> None:
@@ -110,54 +135,150 @@ class Scheduler:
         from tools.macro_tools import GlobalMacroEngine
         from tools.news_tools import NewsSentimentEngine
         print("🗓️ [Scheduler] Pre-market refresh: macro + news", flush=True)
-        GlobalMacroEngine(self.cache).fetch_macro_indicators(max_age_hours=0.05)
-        news = NewsSentimentEngine(self.cache)
         symbols = self.symbols_loader()
-        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
-            list(pool.map(lambda s: news.fetch_stock_news(s["symbol"], s.get("name", ""), force_refresh=True), symbols))
+        self._set_status(
+            active=True,
+            job="premarket",
+            phase="macro_and_news",
+            total=len(symbols),
+            completed=0,
+            failed=0,
+            in_progress=[],
+            started_at=self.clock().isoformat(),
+        )
         try:
             events_bus.publish("scheduler", {
                 "job": "premarket",
-                "message": f"Pre-market macro & news refresh completed for {len(symbols)} symbols.",
+                "status": "started",
+                "message": f"Pre-market macro & news refresh started for {len(symbols)} symbols.",
             })
         except Exception:
             pass
+        try:
+            GlobalMacroEngine(self.cache).fetch_macro_indicators(max_age_hours=0.05)
+            news = NewsSentimentEngine(self.cache)
+
+            def _fetch_news(s: Dict[str, Any]) -> None:
+                sym = str(s.get("symbol", "")).upper()
+                if sym:
+                    with self._status_lock:
+                        if sym not in self._status["in_progress"]:
+                            self._status["in_progress"].append(sym)
+                try:
+                    news.fetch_stock_news(s["symbol"], s.get("name", ""), force_refresh=True)
+                    with self._status_lock:
+                        self._status["completed"] += 1
+                except Exception:
+                    with self._status_lock:
+                        self._status["failed"] += 1
+                finally:
+                    if sym:
+                        with self._status_lock:
+                            if sym in self._status["in_progress"]:
+                                self._status["in_progress"].remove(sym)
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+                list(pool.map(_fetch_news, symbols))
+            summary = f"Pre-market macro & news refresh completed for {len(symbols)} symbols."
+            try:
+                events_bus.publish("scheduler", {
+                    "job": "premarket",
+                    "status": "completed",
+                    "message": summary,
+                })
+            except Exception:
+                pass
+            self._set_status(last_summary=summary)
+        finally:
+            self._set_status(
+                active=False,
+                job=None,
+                phase=None,
+                in_progress=[],
+                last_finished_at=self.clock().isoformat(),
+                last_job="premarket",
+            )
 
     def run_postclose(self) -> None:
         symbols = self.symbols_loader()
         workflow = self.workflow_getter()
         print(f"🗓️ [Scheduler] Post-close run for {len(symbols)} symbols: sync -> analyse -> score -> prune", flush=True)
-        workflow.hist_engine.sync_all_symbols(symbols)
-        if hasattr(workflow.hist_engine, "sync_benchmarks"):
-            try:
-                workflow.hist_engine.sync_benchmarks()
-            except Exception as e:
-                print(f"⚠️ [Scheduler] benchmark sync warning: {type(e).__name__}: {e}", flush=True)
-
-        def _analyse(item: Dict[str, Any]) -> None:
-            sym = item["symbol"].upper()
-            try:
-                workflow.run_analysis(sym, company_name=item.get("name", ""), sector=item.get("sector", ""), force_refresh=True)
-                if self.on_symbol_done:
-                    self.on_symbol_done(sym)
-                # Publish analysis completion event for WebSocket broadcast
-                events_bus.publish(events_bus.ANALYSIS_DONE, {
-                    "symbol": sym,
-                    "timestamp": datetime.now().isoformat()
-                })
-            except Exception as e:
-                print(f"⚠️ [Scheduler] analysis failed for {sym}: {type(e).__name__}: {e}", flush=True)
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as pool:
-            list(pool.map(_analyse, symbols))
-
-        counts = resolve_open_predictions(self.cache)
-        pruned = self.cache.prune_agent_runs(PRUNE_KEEP_DAYS)
-        print(f"🗓️ [Scheduler] Post-close done. Predictions scored: {counts}; old agent rows pruned: {pruned}", flush=True)
+        self._set_status(
+            active=True,
+            job="postclose",
+            phase="syncing_candles",
+            total=len(symbols),
+            completed=0,
+            failed=0,
+            in_progress=[],
+            started_at=self.clock().isoformat(),
+        )
         try:
             events_bus.publish("scheduler", {
                 "job": "postclose",
-                "message": f"Post-close sync & analysis finished for {len(symbols)} symbols.",
+                "status": "started",
+                "message": f"Stock analysis started for {len(symbols)} symbols (syncing candles)...",
             })
         except Exception:
             pass
+        try:
+            workflow.hist_engine.sync_all_symbols(symbols)
+            if hasattr(workflow.hist_engine, "sync_benchmarks"):
+                try:
+                    workflow.hist_engine.sync_benchmarks()
+                except Exception as e:
+                    print(f"⚠️ [Scheduler] benchmark sync warning: {type(e).__name__}: {e}", flush=True)
+
+            self._set_status(phase="analyzing_stocks")
+
+            def _analyse(item: Dict[str, Any]) -> None:
+                sym = item["symbol"].upper()
+                with self._status_lock:
+                    if sym not in self._status["in_progress"]:
+                        self._status["in_progress"].append(sym)
+                try:
+                    workflow.run_analysis(sym, company_name=item.get("name", ""), sector=item.get("sector", ""), force_refresh=True)
+                    if self.on_symbol_done:
+                        self.on_symbol_done(sym)
+                    with self._status_lock:
+                        self._status["completed"] += 1
+                    # Publish analysis completion event for WebSocket broadcast
+                    events_bus.publish(events_bus.ANALYSIS_DONE, {
+                        "symbol": sym,
+                        "timestamp": datetime.now().isoformat()
+                    })
+                except Exception as e:
+                    with self._status_lock:
+                        self._status["failed"] += 1
+                    print(f"⚠️ [Scheduler] analysis failed for {sym}: {type(e).__name__}: {e}", flush=True)
+                finally:
+                    with self._status_lock:
+                        if sym in self._status["in_progress"]:
+                            self._status["in_progress"].remove(sym)
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as pool:
+                list(pool.map(_analyse, symbols))
+
+            self._set_status(phase="scoring_predictions")
+            counts = resolve_open_predictions(self.cache)
+            pruned = self.cache.prune_agent_runs(PRUNE_KEEP_DAYS)
+            print(f"🗓️ [Scheduler] Post-close done. Predictions scored: {counts}; old agent rows pruned: {pruned}", flush=True)
+            summary = f"Post-close sync & analysis finished for {len(symbols)} symbols."
+            try:
+                events_bus.publish("scheduler", {
+                    "job": "postclose",
+                    "status": "completed",
+                    "message": summary,
+                })
+            except Exception:
+                pass
+            self._set_status(last_summary=summary)
+        finally:
+            self._set_status(
+                active=False,
+                job=None,
+                phase=None,
+                in_progress=[],
+                last_finished_at=self.clock().isoformat(),
+                last_job="postclose",
+            )

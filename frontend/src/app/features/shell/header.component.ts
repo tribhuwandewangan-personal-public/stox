@@ -7,6 +7,7 @@ import { Component, OnInit, Output, EventEmitter, Input, signal } from '@angular
 import { CommonModule } from '@angular/common';
 import { AppStore } from '../../core/stores/app.store';
 import { stocksStore, StockUniverse } from '../../core/stores/stocks.store';
+import { DATE_FORMAT_OPTIONS, DateFormatPreset, dateFormatSignal, setDateFormat } from '../../core/utils/date';
 
 export type AppView = 'watchlist' | 'screener' | 'sector' | 'catalysts';
 
@@ -87,15 +88,43 @@ export type AppView = 'watchlist' | 'screener' | 'sector' | 'catalysts';
           <span>{{ theme() === 'light' ? 'Dark' : 'Light' }}</span>
         </button>
 
+        <select
+          class="header-btn date-format-select"
+          [value]="dateFormat()"
+          (change)="onDateFormatChange($event)"
+          title="Configure date display format"
+          aria-label="Date format"
+        >
+          <option *ngFor="let opt of dateFormatOptions" [value]="opt.value">📅 {{ opt.label }}</option>
+        </select>
+
         <!-- Market status badge -->
         <div class="status-badge market-badge" [ngClass]="'market-' + marketState()">
           <span class="pulse-dot-market"></span>
           <span>Market {{ marketState() }}<ng-container *ngIf="isMarketOpen()"> &bull; live</ng-container></span>
         </div>
 
-        <!-- Valkey / Queue status -->
-        <div class="status-badge queue-badge" *ngIf="status?.queue_status as q">
-          <span>{{ q.engine ?? 'Queue' }}: {{ q.pending ?? q.pending_count ?? 0 }} Pending | {{ q.completed ?? q.completed_count ?? 0 }} Done</span>
+        <!-- Valkey / Queue / Live Analysis status -->
+        <div
+          class="status-badge queue-badge"
+          [class.queue-active]="isAnalyzing()"
+          *ngIf="status?.queue_status as q"
+          [title]="status.scheduler?.last_summary || 'Background analysis queue status'"
+        >
+          <span class="pulse-dot-active" *ngIf="isAnalyzing()"></span>
+          <ng-container *ngIf="status.scheduler as sched; else manualOrDefaultQueue">
+            <ng-container *ngIf="sched.active; else manualOrDefaultQueue">
+              <span>Analyzing {{ sched.completed }}/{{ sched.total }}</span>
+            </ng-container>
+          </ng-container>
+          <ng-template #manualOrDefaultQueue>
+            <ng-container *ngIf="(status.running_symbols?.length ?? 0) > 0; else defaultQueue">
+              <span>Analyzing {{ status.running_symbols?.length }} stock(s)</span>
+            </ng-container>
+            <ng-template #defaultQueue>
+              <span>{{ q.engine ?? 'Queue' }}: {{ q.pending ?? q.pending_count ?? 0 }} Pending | {{ q.completed ?? q.completed_count ?? 0 }} Done</span>
+            </ng-template>
+          </ng-template>
         </div>
       </div>
     </header>
@@ -318,6 +347,33 @@ export type AppView = 'watchlist' | 'screener' | 'sector' | 'catalysts';
       font-size: 0.68rem;
     }
 
+    .queue-badge.queue-active {
+      color: #38bdf8;
+      border-color: rgba(56, 189, 248, 0.35);
+      background: rgba(56, 189, 248, 0.1);
+    }
+
+    .date-format-select {
+      font-size: 0.72rem;
+      padding: 5px 8px;
+      background-color: rgba(15, 23, 42, 0.7);
+      color: #cbd5e1;
+      outline: none;
+    }
+
+    .date-format-select option {
+      background: #0f172a;
+      color: #f1f5f9;
+    }
+
+    .pulse-dot-active {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #38bdf8;
+      animation: pulse 1.2s infinite;
+    }
+
     @media (max-width: 1200px) {
       .subtitle { display: none; }
       .btn-graph { display: none; }
@@ -340,6 +396,13 @@ export class HeaderComponent implements OnInit {
 
   currentUniverse = stocksStore.activeUniverse;
   theme = signal<'dark' | 'light'>(HeaderComponent.readStoredTheme());
+  dateFormat = dateFormatSignal;
+  dateFormatOptions = DATE_FORMAT_OPTIONS;
+
+  onDateFormatChange(event: Event): void {
+    const val = (event.target as HTMLSelectElement).value as DateFormatPreset;
+    setDateFormat(val);
+  }
 
   private static readStoredTheme(): 'dark' | 'light' {
     try {
@@ -366,6 +429,11 @@ export class HeaderComponent implements OnInit {
 
   get status() { return this.appStore.status(); }
   get engineLabel() { return this.appStore.status()?.model ?? ''; }
+
+  isAnalyzing(): boolean {
+    const s = this.appStore.status();
+    return Boolean(s?.scheduler?.active || (s?.running_symbols?.length ?? 0) > 0);
+  }
 
   switchView(view: AppView): void {
     this.viewChange.emit(view);

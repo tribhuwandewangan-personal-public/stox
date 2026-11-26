@@ -157,6 +157,12 @@ export interface PatternResult {
   week4_upside_from_ltp_pct?: number | null;
   full_pattern_target?: number | null;
   readiness_score?: number;
+  rvol?: number | null;
+  confirmation_status?: string;
+  daily_close_confirmed?: boolean;
+  volume_confirmed?: boolean;
+  retest_hold_confirmed?: boolean;
+  regime_ok?: boolean | null;
   projection_summary?: string;
   forming_evidence?: string[];
 }

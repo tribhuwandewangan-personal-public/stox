@@ -76,11 +76,18 @@ async def status(request: Request) -> Response:
         shared_bulletin = cache_mgr.get_latest_market_bulletin()
         macro_items = cache_mgr.get_cached_macro(max_age_hours=24)
 
+        with _running_lock:
+            running_syms = sorted(_running_symbols)
+        sched = _managers.get("scheduler")
+        sched_status = sched.get_status() if sched is not None and hasattr(sched, "get_status") else None
+
         resp_data = {
             "model": ENGINE_LABEL,
             "timestamp": datetime.now().isoformat(),
             "ws_enabled": True,
             "queue_status": q_status,
+            "scheduler": sched_status,
+            "running_symbols": running_syms,
             "bulletin": shared_bulletin,
             "macro_items": macro_items
         }
