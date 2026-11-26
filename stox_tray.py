@@ -163,6 +163,71 @@ class StoxTraySupervisor:
         self.user32 = ctypes.windll.user32
         self.shell32 = ctypes.windll.shell32
         self.kernel32 = ctypes.windll.kernel32
+        self._mutex = None
+        self._configure_win32_types()
+
+    def _configure_win32_types(self) -> None:
+        """Set explicit 64-bit-safe argtypes/restype on Win32 API calls."""
+        LRESULT = getattr(wintypes, "LPARAM", ctypes.c_ssize_t)
+        UINT_PTR = getattr(wintypes, "WPARAM", ctypes.c_size_t)
+
+        self.kernel32.GetModuleHandleW.argtypes = [wintypes.LPCWSTR]
+        self.kernel32.GetModuleHandleW.restype = wintypes.HMODULE
+        self.kernel32.CreateMutexW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWSTR]
+        self.kernel32.CreateMutexW.restype = wintypes.HANDLE
+        self.kernel32.GetLastError.argtypes = []
+        self.kernel32.GetLastError.restype = wintypes.DWORD
+
+        self.user32.RegisterClassW.argtypes = [ctypes.POINTER(WNDCLASSW)]
+        self.user32.RegisterClassW.restype = wintypes.ATOM
+        self.user32.CreateWindowExW.argtypes = [
+            wintypes.DWORD, wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD,
+            ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+            wintypes.HWND, wintypes.HMENU, wintypes.HINSTANCE, wintypes.LPVOID,
+        ]
+        self.user32.CreateWindowExW.restype = wintypes.HWND
+        self.user32.DefWindowProcW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+        self.user32.DefWindowProcW.restype = LRESULT
+        self.user32.LoadImageW.argtypes = [
+            wintypes.HINSTANCE, wintypes.LPCWSTR, wintypes.UINT,
+            ctypes.c_int, ctypes.c_int, wintypes.UINT,
+        ]
+        self.user32.LoadImageW.restype = wintypes.HANDLE
+        self.user32.CreatePopupMenu.argtypes = []
+        self.user32.CreatePopupMenu.restype = wintypes.HMENU
+        self.user32.AppendMenuW.argtypes = [wintypes.HMENU, wintypes.UINT, UINT_PTR, wintypes.LPCWSTR]
+        self.user32.AppendMenuW.restype = wintypes.BOOL
+        self.user32.GetCursorPos.argtypes = [ctypes.POINTER(wintypes.POINT)]
+        self.user32.GetCursorPos.restype = wintypes.BOOL
+        self.user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+        self.user32.SetForegroundWindow.restype = wintypes.BOOL
+        self.user32.TrackPopupMenu.argtypes = [
+            wintypes.HMENU, wintypes.UINT, ctypes.c_int, ctypes.c_int,
+            ctypes.c_int, wintypes.HWND, wintypes.LPVOID,
+        ]
+        self.user32.TrackPopupMenu.restype = wintypes.BOOL
+        self.user32.DestroyMenu.argtypes = [wintypes.HMENU]
+        self.user32.DestroyMenu.restype = wintypes.BOOL
+        self.user32.DestroyWindow.argtypes = [wintypes.HWND]
+        self.user32.DestroyWindow.restype = wintypes.BOOL
+        self.user32.PostQuitMessage.argtypes = [ctypes.c_int]
+        self.user32.PostQuitMessage.restype = None
+        self.user32.GetMessageW.argtypes = [ctypes.POINTER(wintypes.MSG), wintypes.HWND, wintypes.UINT, wintypes.UINT]
+        self.user32.GetMessageW.restype = wintypes.BOOL
+        self.user32.TranslateMessage.argtypes = [ctypes.POINTER(wintypes.MSG)]
+        self.user32.TranslateMessage.restype = wintypes.BOOL
+        self.user32.DispatchMessageW.argtypes = [ctypes.POINTER(wintypes.MSG)]
+        self.user32.DispatchMessageW.restype = LRESULT
+        self.shell32.Shell_NotifyIconW.argtypes = [wintypes.DWORD, ctypes.POINTER(NOTIFYICONDATAW)]
+        self.shell32.Shell_NotifyIconW.restype = wintypes.BOOL
+
+    def _acquire_single_instance(self) -> bool:
+        """Ensure only one StoxTraySupervisor runs at a time using a Win32 named mutex."""
+        ERROR_ALREADY_EXISTS = 183
+        self._mutex = self.kernel32.CreateMutexW(None, False, "Local\\StoxWorkstationTrayMutex")
+        if self.kernel32.GetLastError() == ERROR_ALREADY_EXISTS:
+            return False
+        return True
 
     def _start_backend(self) -> None:
         if self.proc and self.proc.poll() is None:
@@ -326,6 +391,11 @@ class StoxTraySupervisor:
         return self.user32.DefWindowProcW(hwnd, msg, wparam, lparam)
 
     def run(self) -> None:
+        if not self._acquire_single_instance():
+            # Already running — just open the dashboard instead of adding a duplicate tray icon
+            webbrowser.open(DASHBOARD_URL)
+            return
+
         hinst = self.kernel32.GetModuleHandleW(None)
         wndproc_cb = WNDPROC(self._wnd_proc)
         wc = WNDCLASSW()
