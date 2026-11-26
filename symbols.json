@@ -490,6 +490,12 @@
       "name": "ETERNAL LIMITED",
       "sector": "Consumer Services",
       "exchange": "NSE"
+    },
+    {
+      "symbol": "OLECTRA",
+      "name": "Olectra Greentech Limited",
+      "sector": "Information Technology",
+      "exchange": "NSE"
     }
   ]
 }

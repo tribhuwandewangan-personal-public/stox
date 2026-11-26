@@ -225,30 +225,84 @@ class MultiAgentWorkflow:
         if VERBOSE_LOGGING:
             safe_print(f"  └─ [Complete] Total multi-agent parallel runtime: {time.time()-start_time:.2f}s (Synthesis: {time.time()-t_synth:.2f}s)")
 
-        # Check previous verdict before overwriting cache so we can emit verdict-change alerts
+        # Check previous synthesis output before overwriting cache so we can emit change alerts
         prev_synth = self.cache_manager.get_latest_agent_output(symbol, "Master Prediction Synthesizer Agent", max_age_hours=720)
-        old_verdict = ((prev_synth or {}).get("structured_signal") or {}).get("action_verdict")
-        new_verdict = (final_synth.get("structured_signal") or {}).get("action_verdict")
+        old_sig = (prev_synth or {}).get("structured_signal") or {}
+        new_sig = final_synth.get("structured_signal") or {}
+
+        old_verdict = old_sig.get("action_verdict")
+        new_verdict = new_sig.get("action_verdict")
+        old_lt_verdict = old_sig.get("long_term_verdict")
+        new_lt_verdict = new_sig.get("long_term_verdict")
+        old_pattern = old_sig.get("chart_patterns")
+        new_pattern = new_sig.get("chart_patterns")
+        old_pb = old_sig.get("pre_breakout_projection") or {}
+        new_pb = new_sig.get("pre_breakout_projection") or {}
+        old_stage = old_pb.get("setup_stage")
+        new_stage = new_pb.get("setup_stage")
+        old_proj = old_pb.get("projection_summary")
+        new_proj = new_pb.get("projection_summary")
 
         # Save Synthesizer output in incremental cache
         self.cache_manager.save_agent_output(symbol, "Master Prediction Synthesizer Agent", final_synth)
 
         try:
             from tools import events_bus
-            if old_verdict and new_verdict and old_verdict != new_verdict:
+            price_now = final_synth.get("last_price")
+            if prev_synth:
+                if old_verdict and new_verdict and old_verdict != new_verdict:
+                    events_bus.publish("verdict_change", {
+                        "symbol": symbol,
+                        "old_verdict": old_verdict,
+                        "new_verdict": new_verdict,
+                        "price": price_now,
+                        "message": f"{symbol} verdict changed: {old_verdict} -> {new_verdict} @ Rs.{price_now}",
+                    })
+                if old_lt_verdict and new_lt_verdict and old_lt_verdict != new_lt_verdict:
+                    events_bus.publish("fundamental_change", {
+                        "symbol": symbol,
+                        "old_verdict": old_lt_verdict,
+                        "new_verdict": new_lt_verdict,
+                        "price": price_now,
+                        "message": f"{symbol} fundamental verdict changed: {old_lt_verdict} -> {new_lt_verdict}",
+                    })
+                if old_stage != new_stage and (old_stage or new_stage):
+                    events_bus.publish("prebreakout_stage_change", {
+                        "symbol": symbol,
+                        "old_stage": old_stage or "NONE",
+                        "new_stage": new_stage or "CLEARED",
+                        "pattern": new_pattern,
+                        "trigger": new_pb.get("breakout_trigger"),
+                        "week4_target": new_pb.get("week4_target"),
+                        "message": (
+                            f"{symbol} pre-breakout stage: {old_stage or 'NONE'} -> {new_stage or 'CLEARED'}"
+                            + (f" ({new_pattern})" if new_pattern and new_pattern != "None" else "")
+                        ),
+                    })
+                elif (old_pattern != new_pattern and (old_pattern or new_pattern)) or (old_proj != new_proj and (old_proj or new_proj)):
+                    parts = []
+                    if old_pattern != new_pattern:
+                        parts.append(f"Pattern: {old_pattern or 'None'} -> {new_pattern or 'None'}")
+                    if old_proj != new_proj and new_proj:
+                        parts.append(f"Projection: {new_proj}")
+                    events_bus.publish("pattern_projection_change", {
+                        "symbol": symbol,
+                        "old_pattern": old_pattern,
+                        "new_pattern": new_pattern,
+                        "stage": new_stage,
+                        "message": f"{symbol} " + " | ".join(parts),
+                    })
+            elif new_verdict and (new_verdict in ("BUY", "ACCUMULATE") or new_stage):
                 events_bus.publish("verdict_change", {
                     "symbol": symbol,
-                    "old_verdict": old_verdict,
                     "new_verdict": new_verdict,
-                    "price": final_synth.get("last_price"),
-                    "message": f"{symbol} verdict changed: {old_verdict} -> {new_verdict}",
-                })
-            elif new_verdict:
-                events_bus.publish("analysis_done", {
-                    "symbol": symbol,
-                    "verdict": new_verdict,
-                    "price": final_synth.get("last_price"),
-                    "message": f"{symbol} analyzed: {new_verdict} @ Rs.{final_synth.get('last_price')}",
+                    "stage": new_stage,
+                    "price": price_now,
+                    "message": (
+                        f"{symbol} initial signal: {new_verdict}"
+                        + (f" | Stage: {new_stage}" if new_stage else "")
+                        + f" @ Rs.{price_now}"
+                    ),
                 })
         except Exception:
             pass

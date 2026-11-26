@@ -5,7 +5,7 @@ import { stocksStore } from '../../core/stores/stocks.store';
 
 interface FeedMessage {
   id: string;
-  category: 'verdict' | 'catalyst' | 'system';
+  category: 'verdict' | 'catalyst' | 'info' | 'system';
   icon: string;
   symbol?: string;
   title: string;
@@ -48,6 +48,7 @@ interface FeedMessage {
           <button type="button" class="flt-btn" [class.active]="filter() === 'all'" (click)="filter.set('all')">All</button>
           <button type="button" class="flt-btn" [class.active]="filter() === 'verdict'" (click)="filter.set('verdict')">Verdicts</button>
           <button type="button" class="flt-btn" [class.active]="filter() === 'catalyst'" (click)="filter.set('catalyst')">Catalysts</button>
+          <button type="button" class="flt-btn" [class.active]="filter() === 'info'" (click)="filter.set('info')">Info</button>
           <button type="button" class="flt-btn" [class.active]="filter() === 'system'" (click)="filter.set('system')">System</button>
         </div>
 
@@ -181,6 +182,7 @@ interface FeedMessage {
       font-size: 0.75rem;
     }
     .chat-bubble.cat-catalyst { border-left-color: #10b981; }
+    .chat-bubble.cat-info { border-left-color: #64748b; }
     .chat-bubble.cat-system { border-left-color: #f59e0b; }
     .bubble-top {
       display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-bottom: 4px;
@@ -231,7 +233,7 @@ interface FeedMessage {
 })
 export class ActivityChatComponent implements OnInit, OnDestroy {
   isOpen = signal<boolean>(false);
-  filter = signal<'all' | 'verdict' | 'catalyst' | 'system'>('all');
+  filter = signal<'all' | 'verdict' | 'catalyst' | 'info' | 'system'>('all');
   messages = signal<FeedMessage[]>([]);
   unreadCount = signal<number>(0);
 
@@ -307,7 +309,9 @@ export class ActivityChatComponent implements OnInit, OnDestroy {
       if (res.latest_id > this.lastEventId) {
         this.lastEventId = res.latest_id;
       }
-      const mapped: FeedMessage[] = (res.events || []).map((ev: any) => this.mapEvent(ev));
+      const mapped: FeedMessage[] = (res.events || [])
+        .filter((ev: any) => String(ev.type || '') !== 'analysis_done' || Boolean(ev.payload?.message))
+        .map((ev: any) => this.mapEvent(ev));
       if (mapped.length > 0) {
         this.appendMessages(mapped);
       }
@@ -319,7 +323,10 @@ export class ActivityChatComponent implements OnInit, OnDestroy {
   private appendMessages(incoming: FeedMessage[]): void {
     this.messages.update(prev => [...incoming.reverse(), ...prev].slice(0, 120));
     if (!this.isOpen()) {
-      this.unreadCount.update(c => c + incoming.length);
+      const importantCount = incoming.filter(m => m.category !== 'info').length;
+      if (importantCount > 0) {
+        this.unreadCount.update(c => c + importantCount);
+      }
     }
   }
 
@@ -385,29 +392,73 @@ export class ActivityChatComponent implements OnInit, OnDestroy {
     if (t === 'catalyst_scan_done') {
       return {
         id: `srv-${ev.id}`,
-        category: 'catalyst',
-        icon: '📡',
-        title: 'Catalyst Scan',
+        category: 'info',
+        icon: 'ℹ️',
+        title: 'Catalyst Scan Info',
         detail: p.message || 'Primary disclosure scan finished',
         time: timeStr,
       };
     }
-    if (t === 'verdict_change' || t === 'analysis_done') {
+    if (t === 'prebreakout_stage_change') {
+      return {
+        id: `srv-${ev.id}`,
+        category: 'verdict',
+        icon: '🚀',
+        symbol: p.symbol,
+        title: 'Pre-Breakout Stage Changed',
+        detail: p.message || `${p.symbol}: ${p.old_stage || 'NONE'} -> ${p.new_stage || 'CLEARED'}`,
+        time: timeStr,
+      };
+    }
+    if (t === 'pattern_projection_change') {
+      return {
+        id: `srv-${ev.id}`,
+        category: 'verdict',
+        icon: '📐',
+        symbol: p.symbol,
+        title: 'Pattern / Projection Updated',
+        detail: p.message || `${p.symbol} pattern/projection updated`,
+        time: timeStr,
+      };
+    }
+    if (t === 'fundamental_change') {
+      return {
+        id: `srv-${ev.id}`,
+        category: 'verdict',
+        icon: '🏛️',
+        symbol: p.symbol,
+        title: 'Fundamental Verdict Changed',
+        detail: p.message || `${p.symbol} fundamental verdict: ${p.old_verdict} -> ${p.new_verdict}`,
+        time: timeStr,
+      };
+    }
+    if (t === 'verdict_change') {
       return {
         id: `srv-${ev.id}`,
         category: 'verdict',
         icon: '📊',
         symbol: p.symbol,
-        title: t === 'verdict_change' ? 'Verdict Changed' : 'Analysis Complete',
+        title: 'Verdict Changed',
         detail: p.message || `${p.symbol} -> ${p.new_verdict || p.verdict}`,
+        time: timeStr,
+      };
+    }
+    if (t === 'analysis_done') {
+      return {
+        id: `srv-${ev.id}`,
+        category: 'info',
+        icon: 'ℹ️',
+        symbol: p.symbol,
+        title: 'Analysis Info',
+        detail: p.message || `${p.symbol} analysis completed`,
         time: timeStr,
       };
     }
     return {
       id: `srv-${ev.id}`,
-      category: 'system',
+      category: t === 'scheduler' && p.level !== 'warning' ? 'info' : 'system',
       icon: p.level === 'warning' ? '⚠️' : 'ℹ️',
-      title: t === 'scheduler' ? 'Scheduler' : 'System Alert',
+      title: t === 'scheduler' ? 'Scheduler Info' : 'System Alert',
       detail: p.message || JSON.stringify(p),
       time: timeStr,
     };
