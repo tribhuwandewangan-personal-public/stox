@@ -14,7 +14,7 @@ from storage.cache_manager import open_db
 import urllib.request
 import urllib.parse
 from datetime import datetime
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Optional, Tuple
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 from config import SYMBOLS_FILE_PATH, CACHE_DB_PATH, MIDCAP_250_SYMBOLS_FILE_PATH, ALL_NSE_SYMBOLS_FILE_PATH, NSE_CATALOG_FILE_PATH
@@ -298,6 +298,21 @@ def add_symbol_to_json(
     existing_list = symbols_data.get("symbols", [])
     for item in existing_list:
         if item.get("symbol", "").upper() == clean_sym:
+            tags = item.setdefault("tags", [])
+            if "Watchlist" not in tags:
+                tags.append("Watchlist")
+                symbols_data["updated_at"] = datetime.now().strftime("%Y-%m-%d")
+                temp_file = f"{symbols_file}.tmp"
+                with open(temp_file, "w", encoding="utf-8") as f:
+                    json.dump(symbols_data, f, indent=2, ensure_ascii=False)
+                os.replace(temp_file, symbols_file)
+                return {
+                    "status": "added",
+                    "symbol": clean_sym,
+                    "name": item.get("name", clean_sym),
+                    "sector": item.get("sector", "Equities"),
+                    "message": f"Tagged {clean_sym} with Watchlist in symbols.json."
+                }
             return {
                 "status": "exists",
                 "symbol": clean_sym,
@@ -314,7 +329,8 @@ def add_symbol_to_json(
         "symbol": clean_sym,
         "name": clean_name,
         "sector": clean_sector,
-        "exchange": clean_exchange
+        "exchange": clean_exchange,
+        "tags": ["Watchlist"],
     }
 
     existing_list.append(new_stock)
@@ -411,4 +427,102 @@ def remove_symbol_from_json(
         "symbol": clean_sym,
         "total_symbols": len(filtered_list),
         "message": f"Successfully removed {clean_sym} from symbols.json."
+    }
+
+
+def _normalize_tags(raw_tags: Any) -> List[str]:
+    if not raw_tags:
+        return []
+    out: List[str] = []
+    seen = set()
+    for t in raw_tags:
+        val = str(t or "").strip()
+        if val and val not in seen:
+            seen.add(val)
+            out.append(val)
+    return out
+
+
+def update_symbol_tags(
+    symbols: List[str],
+    add_tags: Optional[List[str]] = None,
+    remove_tags: Optional[List[str]] = None,
+    set_tags: Optional[List[str]] = None,
+    symbols_file: str = SYMBOLS_FILE_PATH,
+) -> Dict[str, Any]:
+    """Add, remove, or replace logical tags for one or more symbols in symbols.json."""
+    target_syms = {str(s or "").upper().strip() for s in (symbols or []) if str(s or "").strip()}
+    if not target_syms:
+        return {"status": "error", "message": "No symbols provided."}
+    if not os.path.exists(symbols_file):
+        return {"status": "error", "message": "symbols.json not found."}
+
+    with open(symbols_file, "r", encoding="utf-8") as f:
+        symbols_data = json.load(f)
+
+    to_add = _normalize_tags(add_tags)
+    to_remove = set(_normalize_tags(remove_tags))
+    to_set = _normalize_tags(set_tags) if set_tags is not None else None
+
+    updated = 0
+    for item in symbols_data.get("symbols", []):
+        sym = str(item.get("symbol") or "").upper().strip()
+        if sym not in target_syms:
+            continue
+        if to_set is not None:
+            item["tags"] = list(to_set)
+        else:
+            cur = _normalize_tags(item.get("tags"))
+            cur = [t for t in cur if t not in to_remove]
+            for t in to_add:
+                if t not in cur:
+                    cur.append(t)
+            item["tags"] = cur
+        updated += 1
+
+    symbols_data["updated_at"] = datetime.now().strftime("%Y-%m-%d")
+    temp_file = f"{symbols_file}.tmp"
+    with open(temp_file, "w", encoding="utf-8") as f:
+        json.dump(symbols_data, f, indent=2, ensure_ascii=False)
+    os.replace(temp_file, symbols_file)
+
+    return {
+        "status": "ok",
+        "updated": updated,
+        "message": f"Updated tags for {updated} symbol(s).",
+    }
+
+
+def delete_tag_globally(
+    tag: str,
+    symbols_file: str = SYMBOLS_FILE_PATH,
+) -> Dict[str, Any]:
+    """Remove a tag from all symbols in symbols.json."""
+    clean_tag = str(tag or "").strip()
+    if not clean_tag:
+        return {"status": "error", "message": "Tag name is required."}
+    if not os.path.exists(symbols_file):
+        return {"status": "error", "message": "symbols.json not found."}
+
+    with open(symbols_file, "r", encoding="utf-8") as f:
+        symbols_data = json.load(f)
+
+    removed_from = 0
+    for item in symbols_data.get("symbols", []):
+        cur = _normalize_tags(item.get("tags"))
+        if clean_tag in cur:
+            item["tags"] = [t for t in cur if t != clean_tag]
+            removed_from += 1
+
+    symbols_data["updated_at"] = datetime.now().strftime("%Y-%m-%d")
+    temp_file = f"{symbols_file}.tmp"
+    with open(temp_file, "w", encoding="utf-8") as f:
+        json.dump(symbols_data, f, indent=2, ensure_ascii=False)
+    os.replace(temp_file, symbols_file)
+
+    return {
+        "status": "ok",
+        "tag": clean_tag,
+        "removed_from": removed_from,
+        "message": f"Removed tag '{clean_tag}' from {removed_from} symbol(s).",
     }

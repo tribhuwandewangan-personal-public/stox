@@ -3,13 +3,12 @@
  * Includes nav tabs to switch between Watchlist and Pattern Screener views.
  */
 
-import { Component, OnInit, Output, EventEmitter, Input, signal } from '@angular/core';
+import { Component, OnInit, Output, EventEmitter, Input, signal, HostListener, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AppStore } from '../../core/stores/app.store';
 import { stocksStore, StockUniverse } from '../../core/stores/stocks.store';
-import { DATE_FORMAT_OPTIONS, DateFormatPreset, dateFormatSignal, setDateFormat } from '../../core/utils/date';
 
-export type AppView = 'watchlist' | 'screener' | 'sector' | 'catalysts';
+export type AppView = 'watchlist' | 'screener' | 'sector' | 'catalysts' | 'tags';
 
 @Component({
   selector: 'app-header',
@@ -24,84 +23,103 @@ export type AppView = 'watchlist' | 'screener' | 'sector' | 'catalysts';
           <div class="subtitle">Technical Indicators, Pattern Recognition (H&amp;S, Bollinger, Saucer) &amp; Catalysts Calendar</div>
         </div>
 
-        <!-- Nav Tabs -->
-        <nav class="nav-tabs">
-          <button class="nav-tab" [class.active]="activeView === 'watchlist' && currentUniverse() === 'curated'" (click)="selectUniverse('curated')">
-            📋 Watchlist
+        <!-- Views Dropdown -->
+        <div class="menu-dropdown">
+          <button
+            type="button"
+            class="header-btn menu-trigger"
+            [class.active-menu]="openMenu() === 'views'"
+            (click)="toggleMenu('views', $event)"
+            title="Switch primary views"
+          >
+            <span>{{ activeViewLabel() }}</span> <span class="caret">▾</span>
           </button>
-          <button class="nav-tab" [class.active]="activeView === 'watchlist' && currentUniverse() === 'all_nse'" (click)="selectUniverse('all_nse')">
-            🏛️ Nifty 100
-            <span class="nav-badge">100 STOCKS</span>
-          </button>
-          <button class="nav-tab" [class.active]="activeView === 'watchlist' && currentUniverse() === 'midcap250'" (click)="selectUniverse('midcap250')">
-            🏢 Midcap 100
-            <span class="nav-badge midcap-badge">100 STOCKS</span>
-          </button>
-          <button class="nav-tab" [class.active]="activeView === 'sector'" (click)="switchView('sector')">
-            🧭 Sector Research
-            <span class="nav-badge">GEMINI + QUANT</span>
-          </button>
-          <button class="nav-tab" [class.active]="activeView === 'catalysts'" (click)="switchView('catalysts')">
-            ⚡ Catalyst Radar
-            <span class="nav-badge">EARLY WARNING</span>
-          </button>
-        </nav>
+          <div class="dropdown-panel dropdown-panel-left" *ngIf="openMenu() === 'views'">
+            <div class="dropdown-group-label">Views</div>
+            <button type="button" class="dropdown-item" [class.active-item]="activeView === 'watchlist'" (click)="selectUniverse('curated'); closeMenu()">
+              <span>📋</span> All Stocks
+              <span class="nav-badge" *ngIf="totalStocksCount() > 0">{{ totalStocksCount() }}</span>
+            </button>
+            <button type="button" class="dropdown-item" [class.active-item]="activeView === 'sector'" (click)="switchView('sector'); closeMenu()">
+              <span>🧭</span> Sector Research
+              <span class="nav-badge">GEMINI + QUANT</span>
+            </button>
+            <button type="button" class="dropdown-item" [class.active-item]="activeView === 'catalysts'" (click)="switchView('catalysts'); closeMenu()">
+              <span>⚡</span> Catalyst Radar
+              <span class="nav-badge">EARLY WARNING</span>
+            </button>
+            <button type="button" class="dropdown-item" [class.active-item]="activeView === 'tags'" (click)="switchView('tags'); closeMenu()">
+              <span>🏷️</span> Manage Tags
+            </button>
+          </div>
+        </div>
       </div>
 
       <div class="bar-right">
-        <!-- Action Buttons matching legacy UI -->
-        <button class="header-btn btn-risk" title="View Global Shock Safeguards & Risk Shield Playbook">
-          <span>🛡️</span> Risk: <strong class="risk-val">LOW</strong>
-        </button>
-
-        <button class="header-btn btn-portfolio" (click)="openPortfolio.emit()" title="View Zerodha Kite Portfolio Holdings, Diagnostics & Actions">
-          <span>💼</span> My Portfolio
-        </button>
-
-        <button class="header-btn btn-scanner" (click)="switchView('screener')" title="Discover High-Strength Leaders Outside Active Watchlist">
-          <span>🔍</span> Market Scanner
-        </button>
-
-        <a href="/news_reports/latest_market_news.md" target="_blank" rel="noopener noreferrer" class="header-btn btn-link" title="Open Latest Market News Markdown report">
-          <span>📰</span> Market News (.md) ↗
-        </a>
-
-        <a href="/news_reports/latest_stocks_news.md" target="_blank" rel="noopener noreferrer" class="header-btn btn-link" title="Open Latest Stocks News Markdown report">
-          <span>📊</span> Stocks News (.md) ↗
-        </a>
-
-        <button class="header-btn btn-graph" title="View Multi-Agent Architecture & Pipeline">
-          <span>🕸️</span> Multi-Agent Graph
-        </button>
-
-        <div class="status-badge engine-badge">
-          <div class="pulse-dot"></div>
-          <span>{{ engineLabel || 'Rule-based engine (no LLM)' }}</span>
+        <!-- Grouped Tools & Research Dropdown -->
+        <div class="menu-dropdown">
+          <button
+            type="button"
+            class="header-btn menu-trigger"
+            [class.active-menu]="openMenu() === 'tools'"
+            (click)="toggleMenu('tools', $event)"
+            title="Portfolio, Scanner, Risk & Accuracy tools"
+          >
+            <span>🧰</span> Tools &amp; Analytics <span class="caret">▾</span>
+          </button>
+          <div class="dropdown-panel" *ngIf="openMenu() === 'tools'">
+            <div class="dropdown-group-label">Portfolio &amp; Discovery</div>
+            <button type="button" class="dropdown-item" (click)="openPortfolio.emit(); closeMenu()">
+              <span>💼</span> My Portfolio
+            </button>
+            <button type="button" class="dropdown-item" (click)="switchView('screener'); closeMenu()">
+              <span>🔍</span> Market Scanner
+            </button>
+            <div class="dropdown-divider"></div>
+            <div class="dropdown-group-label">Diagnostics &amp; Safeguards</div>
+            <button type="button" class="dropdown-item" title="View Global Shock Safeguards & Risk Shield Playbook" (click)="closeMenu()">
+              <span>🛡️</span> Risk Shield: <strong class="risk-val">LOW</strong>
+            </button>
+            <button type="button" class="dropdown-item" title="Past verdict performance tracking" (click)="closeMenu()">
+              <span>🎯</span> Accuracy
+            </button>
+            <button type="button" class="dropdown-item" title="View Multi-Agent Architecture & Pipeline" (click)="closeMenu()">
+              <span>🕸️</span> Multi-Agent Graph
+            </button>
+          </div>
         </div>
 
-        <button class="header-btn btn-accuracy" title="Past verdict performance tracking">
-          <span>🎯</span> Accuracy
-        </button>
+        <!-- Grouped Reports Dropdown -->
+        <div class="menu-dropdown">
+          <button
+            type="button"
+            class="header-btn menu-trigger"
+            [class.active-menu]="openMenu() === 'reports'"
+            (click)="toggleMenu('reports', $event)"
+            title="Daily generated Markdown reports"
+          >
+            <span>📰</span> Reports <span class="caret">▾</span>
+          </button>
+          <div class="dropdown-panel" *ngIf="openMenu() === 'reports'">
+            <div class="dropdown-group-label">Daily News Digests</div>
+            <a href="/news_reports/latest_market_news.md" target="_blank" rel="noopener noreferrer" class="dropdown-item" (click)="closeMenu()">
+              <span>📰</span> Market News (.md) ↗
+            </a>
+            <a href="/news_reports/latest_stocks_news.md" target="_blank" rel="noopener noreferrer" class="dropdown-item" (click)="closeMenu()">
+              <span>📊</span> Stocks News (.md) ↗
+            </a>
+          </div>
+        </div>
 
-        <button class="header-btn btn-theme" (click)="toggleTheme()" title="Switch between Light and Dark mode">
-          <span>{{ theme() === 'light' ? '🌙' : '☀️' }}</span>
-          <span>{{ theme() === 'light' ? 'Dark' : 'Light' }}</span>
-        </button>
-
-        <select
-          class="header-btn date-format-select"
-          [value]="dateFormat()"
-          (change)="onDateFormatChange($event)"
-          title="Configure date display format"
-          aria-label="Date format"
-        >
-          <option *ngFor="let opt of dateFormatOptions" [value]="opt.value">📅 {{ opt.label }}</option>
-        </select>
+        <div class="status-badge engine-badge" [title]="engineLabel || 'Rule-based engine (no LLM)'">
+          <div class="pulse-dot"></div>
+          <span>Rule-based</span>
+        </div>
 
         <!-- Market status badge -->
         <div class="status-badge market-badge" [ngClass]="'market-' + marketState()">
           <span class="pulse-dot-market"></span>
-          <span>Market {{ marketState() }}<ng-container *ngIf="isMarketOpen()"> &bull; live</ng-container></span>
+          <span>{{ marketState() }}<ng-container *ngIf="isMarketOpen()"> &bull; live</ng-container></span>
         </div>
 
         <!-- Valkey / Queue / Live Analysis status -->
@@ -109,59 +127,64 @@ export type AppView = 'watchlist' | 'screener' | 'sector' | 'catalysts';
           class="status-badge queue-badge"
           [class.queue-active]="isAnalyzing()"
           *ngIf="status?.queue_status as q"
-          [title]="status.scheduler?.last_summary || 'Background analysis queue status'"
+          [title]="status.scheduler?.last_summary || ((q.engine ?? 'Queue') + ': ' + (q.pending ?? q.pending_count ?? 0) + ' Pending | ' + (q.completed ?? q.completed_count ?? 0) + ' Done')"
         >
           <span class="pulse-dot-active" *ngIf="isAnalyzing()"></span>
           <ng-container *ngIf="status.scheduler as sched; else manualOrDefaultQueue">
             <ng-container *ngIf="sched.active; else manualOrDefaultQueue">
-              <span>Analyzing {{ sched.completed }}/{{ sched.total }}</span>
+              <span>{{ sched.completed }}/{{ sched.total }}</span>
             </ng-container>
           </ng-container>
           <ng-template #manualOrDefaultQueue>
             <ng-container *ngIf="(status.running_symbols?.length ?? 0) > 0; else defaultQueue">
-              <span>Analyzing {{ status.running_symbols?.length }} stock(s)</span>
+              <span>{{ status.running_symbols?.length }} running</span>
             </ng-container>
             <ng-template #defaultQueue>
-              <span>{{ q.engine ?? 'Queue' }}: {{ q.pending ?? q.pending_count ?? 0 }} Pending | {{ q.completed ?? q.completed_count ?? 0 }} Done</span>
+              <span>{{ q.pending ?? q.pending_count ?? 0 }}P / {{ q.completed ?? q.completed_count ?? 0 }}D</span>
             </ng-template>
           </ng-template>
         </div>
+
+        <!-- Theme Toggle pinned on the far right -->
+        <button class="header-btn btn-theme" (click)="toggleTheme()" title="Switch between Light and Dark mode">
+          <span>{{ theme() === 'light' ? '🌙' : '☀️' }}</span>
+          <span>{{ theme() === 'light' ? 'Dark' : 'Light' }}</span>
+        </button>
       </div>
     </header>
   `,
   styles: [`
     .top-bar {
-      position: sticky;
-      top: 31px; /* Just below ticker ribbon */
+      position: relative;
       z-index: 100;
       background: rgba(10, 15, 26, 0.95);
       backdrop-filter: blur(16px);
       border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      padding: 10px 20px;
+      padding: 6px 14px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 16px;
+      gap: 8px;
       flex-wrap: wrap;
     }
 
     .bar-left {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 8px;
       flex-shrink: 0;
     }
 
     .brand-logo {
-      width: 36px;
-      height: 36px;
-      border-radius: 9px;
+      width: 28px;
+      height: 28px;
+      border-radius: 7px;
       background: linear-gradient(135deg, #38bdf8, #818cf8);
       display: flex;
       align-items: center;
       justify-content: center;
       font-weight: 800;
-      font-size: 1.15rem;
+      font-size: 0.95rem;
       color: #0f172a;
       flex-shrink: 0;
     }
@@ -173,41 +196,39 @@ export type AppView = 'watchlist' | 'screener' | 'sector' | 'catalysts';
 
     .title {
       font-family: 'Outfit', sans-serif;
-      font-size: 1.05rem;
+      font-size: 0.92rem;
       font-weight: 700;
       color: #fff;
       margin: 0;
-      line-height: 1.2;
+      line-height: 1.15;
     }
 
     .subtitle {
-      font-size: 0.68rem;
-      color: #64748b;
-      font-weight: 500;
+      display: none;
     }
 
     /* ---- Nav Tabs ---- */
     .nav-tabs {
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 2px;
       background: rgba(255, 255, 255, 0.04);
       border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 8px;
-      padding: 2px 4px;
-      margin-left: 8px;
+      padding: 2px;
+      margin-left: 4px;
     }
 
     .nav-tab {
       display: flex;
       align-items: center;
-      gap: 5px;
+      gap: 4px;
       background: transparent;
       border: none;
       color: #64748b;
-      padding: 5px 11px;
+      padding: 4px 8px;
       border-radius: 6px;
-      font-size: 0.74rem;
+      font-size: 0.71rem;
       font-weight: 600;
       cursor: pointer;
       transition: all 0.18s;
@@ -353,17 +374,108 @@ export type AppView = 'watchlist' | 'screener' | 'sector' | 'catalysts';
       background: rgba(56, 189, 248, 0.1);
     }
 
-    .date-format-select {
-      font-size: 0.72rem;
-      padding: 5px 8px;
-      background-color: rgba(15, 23, 42, 0.7);
-      color: #cbd5e1;
-      outline: none;
+    .menu-dropdown {
+      position: relative;
+      display: inline-flex;
     }
 
-    .date-format-select option {
-      background: #0f172a;
-      color: #f1f5f9;
+    .menu-trigger .caret {
+      font-size: 0.65rem;
+      opacity: 0.8;
+    }
+
+    .active-menu {
+      background: rgba(56, 189, 248, 0.16);
+      border-color: rgba(56, 189, 248, 0.45);
+      color: #7dd3fc;
+    }
+
+    .dropdown-panel {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      min-width: 220px;
+      background: rgba(15, 23, 42, 0.98);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 10px;
+      padding: 6px;
+      box-shadow: 0 14px 30px rgba(2, 6, 23, 0.65);
+      z-index: 300;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .dropdown-group-label {
+      font-size: 0.64rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #64748b;
+      padding: 4px 8px 2px;
+    }
+
+    .dropdown-divider {
+      height: 1px;
+      background: rgba(255, 255, 255, 0.08);
+      margin: 4px 2px;
+    }
+
+    .dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      border: none;
+      color: #e2e8f0;
+      padding: 7px 10px;
+      border-radius: 7px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      box-sizing: border-box;
+    }
+
+    .dropdown-item:hover {
+      background: rgba(56, 189, 248, 0.15);
+      color: #ffffff;
+    }
+
+    .dropdown-panel-left {
+      left: 0;
+      right: auto;
+    }
+
+    .dropdown-item.active-item {
+      background: rgba(56, 189, 248, 0.16);
+      color: #7dd3fc;
+    }
+
+    :host-context([data-theme='light']) .dropdown-panel {
+      background: #ffffff;
+      border-color: #cbd5e1;
+      box-shadow: 0 14px 30px rgba(15, 23, 42, 0.15);
+    }
+
+    :host-context([data-theme='light']) .dropdown-item {
+      color: #1e293b;
+    }
+
+    :host-context([data-theme='light']) .dropdown-item:hover {
+      background: #e0f2fe;
+      color: #0369a1;
+    }
+
+    :host-context([data-theme='light']) .dropdown-item.active-item {
+      background: #e0f2fe;
+      color: #0369a1;
+    }
+
+    :host-context([data-theme='light']) .dropdown-divider {
+      background: #e2e8f0;
     }
 
     .pulse-dot-active {
@@ -390,18 +502,47 @@ export class HeaderComponent implements OnInit {
   @Output() viewChange = new EventEmitter<AppView>();
   @Output() openPortfolio = new EventEmitter<void>();
 
-  constructor(public appStore: AppStore) {
+  constructor(public appStore: AppStore, private elRef: ElementRef) {
     this.applyTheme(this.theme());
   }
 
   currentUniverse = stocksStore.activeUniverse;
+  totalStocksCount = () => stocksStore.stocks().length;
   theme = signal<'dark' | 'light'>(HeaderComponent.readStoredTheme());
-  dateFormat = dateFormatSignal;
-  dateFormatOptions = DATE_FORMAT_OPTIONS;
+  openMenu = signal<'views' | 'tools' | 'reports' | null>(null);
 
-  onDateFormatChange(event: Event): void {
-    const val = (event.target as HTMLSelectElement).value as DateFormatPreset;
-    setDateFormat(val);
+  toggleMenu(menu: 'views' | 'tools' | 'reports', event: Event): void {
+    event.stopPropagation();
+    this.openMenu.set(this.openMenu() === menu ? null : menu);
+  }
+
+  activeViewLabel(): string {
+    switch (this.activeView) {
+      case 'sector':
+        return '🧭 Sector Research';
+      case 'catalysts':
+        return '⚡ Catalyst Radar';
+      case 'tags':
+        return '🏷️ Manage Tags';
+      case 'screener':
+        return '🔍 Market Scanner';
+      case 'watchlist':
+      default: {
+        const count = this.totalStocksCount();
+        return count > 0 ? `📋 All Stocks (${count})` : '📋 All Stocks';
+      }
+    }
+  }
+
+  closeMenu(): void {
+    this.openMenu.set(null);
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: Event): void {
+    if (this.openMenu() && !this.elRef.nativeElement.contains(event.target)) {
+      this.openMenu.set(null);
+    }
   }
 
   private static readStoredTheme(): 'dark' | 'light' {

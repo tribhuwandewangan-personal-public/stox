@@ -22,6 +22,7 @@ interface StocksStoreState {
   horizonStrategy: HorizonStrategy;
   activeUniverse: StockUniverse;
   filter: {
+    tag: string | null;
     sector: string | null;
     verdict: VerdictBucket | null;
     search: string;
@@ -38,6 +39,7 @@ const initialState: StocksStoreState = {
   horizonStrategy: 'ALL',
   activeUniverse: 'curated',
   filter: {
+    tag: null,
     sector: null,
     verdict: null,
     search: ''
@@ -85,6 +87,26 @@ class StocksStore {
   });
 
   // Derived computations
+  availableTags = computed(() => {
+    const counts = new Map<string, number>();
+    for (const stock of this.state().stocks) {
+      for (const t of stock.tags ?? []) {
+        counts.set(t, (counts.get(t) ?? 0) + 1);
+      }
+    }
+    const preferred = ['Watchlist', 'Nifty 100', 'Midcap 100'];
+    return Array.from(counts.entries())
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => {
+        const ia = preferred.indexOf(a.tag);
+        const ib = preferred.indexOf(b.tag);
+        if (ia !== -1 && ib !== -1) return ia - ib;
+        if (ia !== -1) return -1;
+        if (ib !== -1) return 1;
+        return a.tag.localeCompare(b.tag);
+      });
+  });
+
   sectors = computed(() => {
     const sectors = new Set(this.state().stocks.map(s => s.sector).filter(Boolean));
     return Array.from(sectors).sort();
@@ -126,6 +148,11 @@ class StocksStore {
         const lt = s.long_term_signal || s.synth_output?.structured_signal?.long_term_signal;
         return !!lt?.is_top_wealth_pick;
       });
+    }
+
+    // Filter by tag
+    if (filter.tag) {
+      result = result.filter(s => (s.tags ?? []).includes(filter.tag!));
     }
 
     // Filter by sector
@@ -223,12 +250,16 @@ class StocksStore {
     }));
   }
 
+  setTagFilter(tag: string | null): void {
+    this.updateState(s => ({ ...s, filter: { ...s.filter, tag } }));
+  }
+
   setHorizonStrategy(horizonStrategy: HorizonStrategy): void {
     this.updateState(s => ({ ...s, horizonStrategy }));
   }
 
   setActiveUniverse(activeUniverse: StockUniverse): void {
-    this.updateState(s => ({ ...s, activeUniverse, filter: { sector: null, verdict: null, search: '' }, selectedSymbol: null }));
+    this.updateState(s => ({ ...s, activeUniverse, filter: { tag: null, sector: null, verdict: null, search: '' }, selectedSymbol: null }));
   }
 
   async loadUniverse(universe: StockUniverse): Promise<void> {
@@ -237,7 +268,7 @@ class StocksStore {
       ...s,
       activeUniverse: universe,
       horizonStrategy: 'ALL',
-      filter: { sector: null, verdict: null, search: '' },
+      filter: { tag: null, sector: null, verdict: null, search: '' },
       selectedSymbol: null,
       loading: true,
       error: null
@@ -296,7 +327,7 @@ class StocksStore {
   clearFilters(): void {
     this.updateState(s => ({
       ...s,
-      filter: { sector: null, verdict: null, search: '' }
+      filter: { tag: null, sector: null, verdict: null, search: '' }
     }));
   }
 

@@ -53,14 +53,26 @@ import { stocksStore } from '../../core/stores/stocks.store';
         <div class="grid-header">
           <div class="grid-title">
             Equities Decision Dashboard
-            <span class="universe-tag" [class.midcap]="activeUniverse() === 'midcap250'">
+            <span class="universe-tag">
               {{ universeLabel() }}
             </span>
           </div>
           <div class="grid-actions">
-            <button class="btn-universe-toggle" (click)="toggleUniverse()">
-              {{ nextUniverseButtonLabel() }}
-            </button>
+            <div class="tag-filter-pills" *ngIf="stocksStore.availableTags().length > 0">
+              <button
+                type="button"
+                class="btn-universe-toggle"
+                [class.active-tag-pill]="stocksStore.filter().tag === null"
+                (click)="stocksStore.setTagFilter(null)"
+              >All ({{ stocksStore.stocks().length }})</button>
+              <button
+                type="button"
+                class="btn-universe-toggle"
+                *ngFor="let t of stocksStore.availableTags()"
+                [class.active-tag-pill]="stocksStore.filter().tag === t.tag"
+                (click)="stocksStore.setTagFilter(t.tag)"
+              >{{ t.tag }} ({{ t.count }})</button>
+            </div>
             <a href="/news_reports/latest_market_news.md" target="_blank" rel="noopener noreferrer" class="btn-grid-link">
               <span>📰</span> Market News (.md) ↗
             </a>
@@ -85,25 +97,21 @@ import { stocksStore } from '../../core/stores/stocks.store';
       display: flex;
       flex: 1;
       min-height: 0;
-      height: 100%;
-      overflow: hidden;
     }
 
     .dashboard-container {
       display: flex;
       flex: 1;
       gap: 0;
-      overflow: hidden;
-      height: 100%;
       min-height: 0;
+      align-items: flex-start;
     }
 
     .dashboard-main-flow {
       flex: 1;
+      min-width: 0;
       display: flex;
       flex-direction: column;
-      overflow-y: auto;
-      min-height: 0;
       padding: 16px 20px 40px 20px;
       gap: 16px;
     }
@@ -148,9 +156,9 @@ import { stocksStore } from '../../core/stores/stocks.store';
     }
 
     .btn-universe-toggle {
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.18);
-      color: #cbd5e1;
+      background: rgba(15, 23, 42, 0.75);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      color: #e2e8f0;
       padding: 6px 12px;
       border-radius: 8px;
       font-size: 0.75rem;
@@ -163,13 +171,32 @@ import { stocksStore } from '../../core/stores/stocks.store';
     }
 
     .btn-universe-toggle:hover {
-      background: rgba(255, 255, 255, 0.15);
-      color: #fff;
+      background: rgba(56, 189, 248, 0.16);
+      border-color: rgba(56, 189, 248, 0.5);
+      color: #ffffff;
+    }
+
+    :host-context([data-theme='light']) .btn-universe-toggle {
+      background: #f1f5f9;
+      border-color: #cbd5e1;
+      color: #1e293b;
+    }
+
+    :host-context([data-theme='light']) .btn-universe-toggle:hover {
+      background: #e2e8f0;
+      color: #0f172a;
+    }
+
+    :host-context([data-theme='light']) .active-tag-pill {
+      background: #e0f2fe !important;
+      border-color: #0284c7 !important;
+      color: #0369a1 !important;
     }
 
     .grid-actions {
       display: flex;
       align-items: center;
+      flex-wrap: wrap;
       gap: 10px;
     }
 
@@ -235,6 +262,19 @@ import { stocksStore } from '../../core/stores/stocks.store';
       color: #0f172a;
     }
 
+    .tag-filter-pills {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .active-tag-pill {
+      background: rgba(56, 189, 248, 0.22) !important;
+      border-color: rgba(56, 189, 248, 0.55) !important;
+      color: #7dd3fc !important;
+    }
+
     @media (max-width: 900px) {
       .dashboard-container {
         flex-direction: column;
@@ -246,6 +286,7 @@ import { stocksStore } from '../../core/stores/stocks.store';
   `]
 })
 export class DashboardComponent {
+  stocksStore = stocksStore;
   activeUniverse = stocksStore.activeUniverse;
   showAddSymbolModal = signal<boolean>(false);
 
@@ -254,23 +295,10 @@ export class DashboardComponent {
   }
 
   universeLabel(): string {
-    const u = this.activeUniverse();
-    if (u === 'all_nse') return 'Nifty 100 (symbols_nse_all.json)';
-    if (u === 'midcap250') return 'Midcap 100 (symbols_midcap_250.json)';
-    return 'Curated Watchlist (symbols.json)';
-  }
-
-  nextUniverseButtonLabel(): string {
-    const u = this.activeUniverse();
-    if (u === 'curated') return '🏛️ Switch to Nifty 100';
-    if (u === 'all_nse') return '🏢 Switch to Midcap 100';
-    return '📋 Switch to Curated Watchlist';
-  }
-
-  toggleUniverse(): void {
-    const u = this.activeUniverse();
-    const next = u === 'curated' ? 'all_nse' : (u === 'all_nse' ? 'midcap250' : 'curated');
-    stocksStore.loadUniverse(next);
+    const activeTag = stocksStore.filter().tag;
+    return activeTag
+      ? `Tag: ${activeTag} (symbols.json)`
+      : `Unified Universe (${stocksStore.stocks().length} stocks in symbols.json)`;
   }
 
   refreshData(): void {

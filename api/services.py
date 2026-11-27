@@ -93,15 +93,10 @@ def safe_json_dumps(obj) -> bytes:
 
 
 def _load_symbols_list(universe: str = "curated"):
-    """Load and mtime-cache symbols list from curated symbols.json, midcap 250, or all NSE."""
+    """Load and mtime-cache symbols list from unified symbols.json (optionally filtered by universe tag)."""
     target_path = SYMBOLS_FILE_PATH
-    if universe == "midcap250":
-        target_path = MIDCAP_250_SYMBOLS_FILE_PATH
-    elif universe == "all_nse":
-        target_path = ALL_NSE_SYMBOLS_FILE_PATH
-
     if not os.path.exists(target_path):
-        target_path = SYMBOLS_FILE_PATH
+        return []
 
     try:
         mtime = os.path.getmtime(target_path)
@@ -111,17 +106,30 @@ def _load_symbols_list(universe: str = "curated"):
     with _symbols_cache_lock:
         hit = _symbols_cache.get(target_path)
         if hit and hit.get("mtime") == mtime:
-            return list(hit["data"])
+            data = list(hit["data"])
+        else:
+            data = None
 
-    try:
-        with open(target_path, "r", encoding="utf-8") as f:
-            data = json.load(f).get("symbols", [])
-        with _symbols_cache_lock:
-            _symbols_cache[target_path] = {"mtime": mtime, "data": data}
-        return list(data)
-    except Exception as e:
-        print(f"⚠️ [Services] Could not parse {target_path}: {e}", flush=True)
-        return []
+    if data is None:
+        try:
+            with open(target_path, "r", encoding="utf-8") as f:
+                data = json.load(f).get("symbols", [])
+            with _symbols_cache_lock:
+                _symbols_cache[target_path] = {"mtime": mtime, "data": data}
+            data = list(data)
+        except Exception as e:
+            print(f"⚠️ [Services] Could not parse {target_path}: {e}", flush=True)
+            return []
+
+    if universe == "midcap250":
+        filtered = [s for s in data if "Midcap 100" in (s.get("tags") or [])]
+        if filtered:
+            return filtered
+    elif universe == "all_nse":
+        filtered = [s for s in data if "Nifty 100" in (s.get("tags") or [])]
+        if filtered:
+            return filtered
+    return data
 
 
 def load_active_monitored_symbols(
@@ -515,6 +523,7 @@ def get_all_stock_data(cache_mgr, queue_mgr, hist_engine, tech_engine, events_en
             "symbol": sym,
             "name": name,
             "sector": sector,
+            "tags": s.get("tags") or [],
             "queue_status": q_status,
             "is_stale": is_stale,
             "has_analysis": synth_output is not None,
@@ -538,10 +547,6 @@ def get_stocks_response_body(cache_mgr, queue_mgr, hist_engine, tech_engine, eve
     symbols file changed) or after STOCKS_CACHE_SECONDS, so repeated polling is nearly free.
     """
     target_path = SYMBOLS_FILE_PATH
-    if universe == "midcap250":
-        target_path = MIDCAP_250_SYMBOLS_FILE_PATH
-    elif universe == "all_nse":
-        target_path = ALL_NSE_SYMBOLS_FILE_PATH
 
     try:
         symbols_mtime = os.path.getmtime(target_path)

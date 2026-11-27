@@ -81,13 +81,13 @@ class KitePortfolioEngine:
         self._load_saved_credentials()
 
     def _load_saved_credentials(self):
-        """Loads API key and token from storage/kite_token.json if not present in env."""
-        if os.path.exists(self.token_path):
+        """Loads API key from storage/kite_token.json so token and api_key stay paired."""
+        if not os.getenv("KITE_ACCESS_TOKEN", "").strip() and os.path.exists(self.token_path):
             try:
                 with open(self.token_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    if not self.api_key and data.get("api_key"):
-                        self.api_key = data.get("api_key", "").strip()
+                    if data.get("api_key"):
+                        self.api_key = str(data.get("api_key", "")).strip()
             except Exception:
                 pass
 
@@ -130,7 +130,8 @@ class KitePortfolioEngine:
         if not os.getenv("KITE_ACCESS_TOKEN", "").strip() and os.path.exists(self.token_path):
             try:
                 with open(self.token_path, "r", encoding="utf-8") as f:
-                    created_raw = json.load(f).get("created_at", "")
+                    tok_data = json.load(f)
+                    created_raw = tok_data.get("created_at") or tok_data.get("created") or ""
                 if created_raw:
                     created_dt = datetime.fromisoformat(str(created_raw)).date()
                     if created_dt != datetime.now().date():
@@ -260,11 +261,10 @@ class KitePortfolioEngine:
                         "last_updated": datetime.now().isoformat()
                     })
 
-                # Cache to local snapshot file for offline access
-                if normalized:
-                    self._last_fetch_source = "Live Kite API"
-                    self._save_local_snapshot(normalized)
-                    return normalized
+                # Cache to local snapshot file for offline access (even if empty, so old account holdings are cleared)
+                self._last_fetch_source = "Live Kite API"
+                self._save_local_snapshot(normalized)
+                return normalized
             except Exception as e:
                 print(f"⚠️ [Kite Notice] Live holdings fetch failed ({type(e).__name__}: {e}). Checking local snapshot...")
 

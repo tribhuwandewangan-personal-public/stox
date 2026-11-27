@@ -911,6 +911,35 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json(200, remove_symbol_from_json(symbol=sym))
             return
 
+        elif parsed_path.path == "/api/tags/update":
+            req_data = self._read_json_body()
+            if req_data is None:
+                return
+            try:
+                from tools.symbol_search_tools import update_symbol_tags
+                res = update_symbol_tags(
+                    symbols=req_data.get("symbols") or [],
+                    add_tags=req_data.get("add_tags"),
+                    remove_tags=req_data.get("remove_tags"),
+                    set_tags=req_data.get("set_tags"),
+                )
+                self._send_json(200 if res.get("status") == "ok" else 400, res)
+            except Exception as e:
+                self._send_json(500, {"status": "error", "message": str(e)})
+            return
+
+        elif parsed_path.path == "/api/tags/delete":
+            req_data = self._read_json_body()
+            if req_data is None:
+                return
+            try:
+                from tools.symbol_search_tools import delete_tag_globally
+                res = delete_tag_globally(tag=req_data.get("tag", ""))
+                self._send_json(200 if res.get("status") == "ok" else 400, res)
+            except Exception as e:
+                self._send_json(500, {"status": "error", "message": str(e)})
+            return
+
         elif parsed_path.path == "/api/market-scanner/scan":
             try:
                 from tools.market_scanner import run_market_scan

@@ -300,6 +300,31 @@ export class ApiService {
   }
 
   /**
+   * POST /api/tags/update: Add, remove, or set logical tags on symbols.
+   */
+  static updateSymbolTags(payload: {
+    symbols: string[];
+    add_tags?: string[];
+    remove_tags?: string[];
+    set_tags?: string[];
+  }): Promise<any> {
+    return fetchJson<any>('/tags/update', withCsrfHeaders({
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }));
+  }
+
+  /**
+   * POST /api/tags/delete: Remove a tag from all symbols in symbols.json.
+   */
+  static deleteTag(tag: string): Promise<any> {
+    return fetchJson<any>('/tags/delete', withCsrfHeaders({
+      method: 'POST',
+      body: JSON.stringify({ tag })
+    }));
+  }
+
+  /**
    * GET /api/catalysts/early-warning: List scored corporate catalysts.
    */
   static getCatalystEarlyWarning(tier: string = '', symbol: string = ''): Promise<{ events: any[]; count: number }> {

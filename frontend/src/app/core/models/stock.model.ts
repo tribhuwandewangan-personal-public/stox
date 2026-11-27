@@ -7,6 +7,7 @@ export interface Stock {
   symbol: string;
   name: string;
   sector: string;
+  tags?: string[];
   queue_status: 'pending' | 'queued' | 'in_progress' | 'completed';
   is_stale: boolean;
   has_analysis: boolean;

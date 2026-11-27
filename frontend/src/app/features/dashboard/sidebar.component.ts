@@ -3,12 +3,13 @@
  * Fixes layout & styling to match Jinja reference (Image 1).
  */
 
-import { Component, signal, computed, Output, EventEmitter, ChangeDetectionStrategy } from '@angular/core';
+import { Component, signal, computed, Output, EventEmitter, ChangeDetectionStrategy, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { stocksStore } from '../../core/stores/stocks.store';
 import { Stock } from '../../core/models/stock.model';
 import { fmtPrice } from '../../core/utils/price';
+import { APP_CONFIG } from '../../core/config/app.config';
 
 type SidebarViewMode = 'flat' | 'sector';
 type SidebarFilter = 'ALL' | 'BUY' | 'HOLD' | 'SELL' | 'ACTIVE';
@@ -19,12 +20,13 @@ type SidebarFilter = 'ALL' | 'BUY' | 'HOLD' | 'SELL' | 'ACTIVE';
   imports: [CommonModule, FormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
+    <div class="sidebar-shell" [style.width.px]="sidebarWidth()">
     <aside class="sidebar-watchlist-panel">
       <!-- Header -->
       <div class="sidebar-header">
         <div class="sidebar-title-row">
           <div class="sidebar-title">
-            <span>📋</span> {{ stocksStore.activeUniverse() === 'all_nse' ? 'Nifty 100' : (stocksStore.activeUniverse() === 'midcap250' ? 'Midcap 100' : 'Stocks Watchlist') }}
+            <span>📋</span> Stocks Universe
             <span class="sidebar-badge">{{ stocksStore.availableCount() }}/{{ stocksStore.stocks().length }}</span>
           </div>
         </div>
@@ -56,6 +58,25 @@ type SidebarFilter = 'ALL' | 'BUY' | 'HOLD' | 'SELL' | 'ACTIVE';
           </button>
           <button class="sidebar-filter-chip" [class.active]="filterMode() === 'ACTIVE'" (click)="setFilter('ACTIVE')">
             Active <span>{{ counts().active }}</span>
+          </button>
+        </div>
+
+        <!-- Logical Tag Group Chips -->
+        <div class="sidebar-filters sidebar-tags" *ngIf="stocksStore.availableTags().length > 0">
+          <button
+            class="sidebar-filter-chip"
+            [class.active]="stocksStore.filter().tag === null"
+            (click)="stocksStore.setTagFilter(null)"
+          >
+            All Tags <span>{{ stocksStore.stocks().length }}</span>
+          </button>
+          <button
+            class="sidebar-filter-chip"
+            *ngFor="let t of stocksStore.availableTags()"
+            [class.active]="stocksStore.filter().tag === t.tag"
+            (click)="stocksStore.setTagFilter(t.tag)"
+          >
+            {{ t.tag }} <span>{{ t.count }}</span>
           </button>
         </div>
       </div>
@@ -138,17 +159,37 @@ type SidebarFilter = 'ALL' | 'BUY' | 'HOLD' | 'SELL' | 'ACTIVE';
         </ng-container>
       </div>
     </aside>
+    <div
+      class="sidebar-resizer"
+      [class.resizing]="isResizing()"
+      (mousedown)="startResize($event)"
+      (dblclick)="resetWidth()"
+      title="Drag to resize stock universe width (double-click to reset)"
+    ></div>
+    </div>
   `,
   styles: [`
     :host {
       display: flex;
+      position: sticky;
+      top: 68px;
+      height: calc(100vh - 68px);
+      align-self: flex-start;
+      flex-shrink: 0;
+      z-index: 40;
+    }
+
+    .sidebar-shell {
+      position: relative;
+      display: flex;
+      flex-shrink: 0;
       height: 100%;
       min-height: 0;
     }
 
     .sidebar-watchlist-panel {
-      width: 250px;
-      flex-shrink: 0;
+      width: 100%;
+      flex: 1;
       background: rgba(10, 15, 26, 0.85);
       border-right: 1px solid rgba(255, 255, 255, 0.08);
       display: flex;
@@ -156,6 +197,20 @@ type SidebarFilter = 'ALL' | 'BUY' | 'HOLD' | 'SELL' | 'ACTIVE';
       height: 100%;
       min-height: 0;
       overflow: hidden;
+    }
+
+    .sidebar-resizer {
+      width: 6px;
+      cursor: col-resize;
+      background: transparent;
+      transition: background 0.15s;
+      flex-shrink: 0;
+      margin-left: -3px;
+      z-index: 10;
+    }
+    .sidebar-resizer:hover,
+    .sidebar-resizer.resizing {
+      background: rgba(56, 189, 248, 0.55);
     }
 
     .sidebar-header {
@@ -230,6 +285,24 @@ type SidebarFilter = 'ALL' | 'BUY' | 'HOLD' | 'SELL' | 'ACTIVE';
       scrollbar-width: none;
     }
     .sidebar-filters::-webkit-scrollbar { display: none; }
+
+    .sidebar-tags {
+      flex-wrap: wrap;
+      overflow-x: visible;
+      gap: 5px;
+      padding-top: 2px;
+    }
+
+    :host-context([data-theme='light']) .sidebar-filter-chip {
+      background: #f1f5f9;
+      border-color: #cbd5e1;
+      color: #334155;
+    }
+    :host-context([data-theme='light']) .sidebar-filter-chip.active {
+      background: #e0f2fe;
+      border-color: #0284c7;
+      color: #0369a1;
+    }
 
     .sidebar-filter-chip {
       background: rgba(255, 255, 255, 0.04);
@@ -451,11 +524,69 @@ type SidebarFilter = 'ALL' | 'BUY' | 'HOLD' | 'SELL' | 'ACTIVE';
     }
   `]
 })
-export class SidebarComponent {
+export class SidebarComponent implements OnDestroy {
   stocksStore = stocksStore;
   searchQuery = signal('');
   viewMode = signal<SidebarViewMode>('flat');
   filterMode = signal<SidebarFilter>('ALL');
+  sidebarWidth = signal<number>(SidebarComponent.readStoredWidth());
+  isResizing = signal<boolean>(false);
+
+  private moveListener?: (e: MouseEvent) => void;
+  private upListener?: () => void;
+
+  private static readStoredWidth(): number {
+    try {
+      const raw = Number(localStorage.getItem('stox_sidebar_width'));
+      if (Number.isFinite(raw) && raw >= APP_CONFIG.minSidebarWidth && raw <= APP_CONFIG.maxSidebarWidth) {
+        return raw;
+      }
+    } catch {}
+    return APP_CONFIG.defaultSidebarWidth;
+  }
+
+  startResize(event: MouseEvent): void {
+    event.preventDefault();
+    this.isResizing.set(true);
+    const startX = event.clientX;
+    const startW = this.sidebarWidth();
+
+    this.moveListener = (e: MouseEvent) => {
+      const next = Math.min(APP_CONFIG.maxSidebarWidth, Math.max(APP_CONFIG.minSidebarWidth, startW + (e.clientX - startX)));
+      this.sidebarWidth.set(next);
+    };
+    this.upListener = () => {
+      this.isResizing.set(false);
+      try {
+        localStorage.setItem('stox_sidebar_width', String(this.sidebarWidth()));
+      } catch {}
+      this.cleanupListeners();
+    };
+    document.addEventListener('mousemove', this.moveListener);
+    document.addEventListener('mouseup', this.upListener);
+  }
+
+  resetWidth(): void {
+    this.sidebarWidth.set(APP_CONFIG.defaultSidebarWidth);
+    try {
+      localStorage.setItem('stox_sidebar_width', String(APP_CONFIG.defaultSidebarWidth));
+    } catch {}
+  }
+
+  private cleanupListeners(): void {
+    if (this.moveListener) {
+      document.removeEventListener('mousemove', this.moveListener);
+      this.moveListener = undefined;
+    }
+    if (this.upListener) {
+      document.removeEventListener('mouseup', this.upListener);
+      this.upListener = undefined;
+    }
+  }
+
+  ngOnDestroy(): void {
+    this.cleanupListeners();
+  }
 
   selectedSymbol = stocksStore.selectedSymbol;
 
@@ -475,7 +606,12 @@ export class SidebarComponent {
   displayedStocks = computed<Stock[]>(() => {
     const q = this.searchQuery().toLowerCase().trim();
     const mode = this.filterMode();
+    const activeTag = this.stocksStore.filter().tag;
     let list = this.stocksStore.stocks();
+
+    if (activeTag) {
+      list = list.filter(s => (s.tags ?? []).includes(activeTag));
+    }
 
     // Filter by mode
     if (mode === 'BUY') {

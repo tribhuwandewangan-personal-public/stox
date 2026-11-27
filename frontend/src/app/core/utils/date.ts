@@ -4,8 +4,9 @@
  */
 
 import { signal } from '@angular/core';
+import { APP_CONFIG, DateFormatPreset } from '../config/app.config';
 
-export type DateFormatPreset = 'DD/MM/YYYY' | 'DD MMM YYYY' | 'YYYY-MM-DD' | 'MM/DD/YYYY';
+export type { DateFormatPreset };
 
 export const DATE_FORMAT_OPTIONS: Array<{ value: DateFormatPreset; label: string }> = [
   { value: 'DD/MM/YYYY', label: 'DD/MM/YYYY (IN)' },
@@ -14,30 +15,12 @@ export const DATE_FORMAT_OPTIONS: Array<{ value: DateFormatPreset; label: string
   { value: 'MM/DD/YYYY', label: 'MM/DD/YYYY (US)' },
 ];
 
-const STORAGE_KEY = 'stox_date_format';
 const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-function readStoredDateFormat(): DateFormatPreset {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY) as DateFormatPreset | null;
-    if (raw && DATE_FORMAT_OPTIONS.some(o => o.value === raw)) {
-      return raw;
-    }
-  } catch {
-    // Ignore storage errors (SSR / restricted context)
-  }
-  return 'DD/MM/YYYY';
-}
-
-export const dateFormatSignal = signal<DateFormatPreset>(readStoredDateFormat());
+export const dateFormatSignal = signal<DateFormatPreset>(APP_CONFIG.dateFormat);
 
 export function setDateFormat(fmt: DateFormatPreset): void {
   dateFormatSignal.set(fmt);
-  try {
-    localStorage.setItem(STORAGE_KEY, fmt);
-  } catch {
-    // Ignore storage errors
-  }
 }
 
 /**

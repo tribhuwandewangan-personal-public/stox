@@ -1,501 +1,2389 @@
 {
-  "description": "List of NSE stock symbols for multi-agent RAG analysis and prediction",
-  "updated_at": "2026-11-26",
+  "description": "Unified NSE stock universe logically grouped by tags (Watchlist, Nifty 100, Midcap 100)",
+  "updated_at": "2026-11-27",
   "default_timeframe_days": 1825,
   "symbols": [
+    {
+      "symbol": "360ONE",
+      "name": "360 ONE WAM Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
     {
       "symbol": "ABB",
       "name": "ABB India Limited",
       "sector": "Capital Goods & Electricals",
       "sub_sector": "Electrification, Motion & Industrial Automation",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "ABCAPITAL",
+      "name": "Aditya Birla Capital Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "ADANIENSOL",
+      "name": "Adani Energy Solutions Ltd.",
+      "sector": "Power & Utilities",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "ADANIENT",
+      "name": "Adani Enterprises Ltd.",
+      "sector": "Metals & Mining",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "ADANIGREEN",
+      "name": "Adani Green Energy Ltd.",
+      "sector": "Power & Utilities",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
     },
     {
       "symbol": "ADANIPORTS",
       "name": "Adani Ports and Special Economic Zone Limited",
       "sector": "Infrastructure & Logistics",
       "sub_sector": "Ports & Terminals",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "ADANIPOWER",
+      "name": "Adani Power Ltd.",
+      "sector": "Power & Utilities",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "AEQUS",
+      "name": "Aequs Limited",
+      "sector": "Indian Equities",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
     },
     {
       "symbol": "AETHER",
       "name": "Aether Industries Limited",
       "sector": "Chemicals",
       "sub_sector": "Specialty Chemicals",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
     },
     {
       "symbol": "AGI",
       "name": "AGI Greenpac Limited",
       "sector": "Packaging",
       "sub_sector": "Glass Containers & Plastic Packaging",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
     },
     {
       "symbol": "AMBUJACEM",
       "name": "Ambuja Cements Limited",
       "sector": "Construction Materials",
       "sub_sector": "Cement",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "APARINDS",
+      "name": "Apar Industries Ltd.",
+      "sector": "Capital Goods",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "APLAPOLLO",
+      "name": "APL Apollo Tubes Ltd.",
+      "sector": "Capital Goods",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "APOLLO",
+      "name": "Apollo Micro Systems Limited",
+      "sector": "Indian Equities",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "APOLLOHOSP",
+      "name": "Apollo Hospitals Enterprise Ltd.",
+      "sector": "Pharma & Healthcare",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "ASHOKLEY",
+      "name": "Ashok Leyland Ltd.",
+      "sector": "Capital Goods",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "ASIANPAINT",
+      "name": "Asian Paints Ltd.",
+      "sector": "Consumer Durables",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "ASTRAL",
+      "name": "Astral Ltd.",
+      "sector": "Capital Goods",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
     },
     {
       "symbol": "ASTRAMICRO",
       "name": "Astra Microwave Products Limited",
       "sector": "Aerospace & Defence",
       "sub_sector": "Radar & RF/Microwave Systems",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "ATGL",
+      "name": "Adani Total Gas Ltd.",
+      "sector": "Oil, Gas & Consumable Fuels",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "AUBANK",
+      "name": "AU Small Finance Bank Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "AUROPHARMA",
+      "name": "Aurobindo Pharma Ltd.",
+      "sector": "Pharma & Healthcare",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "AXISBANK",
+      "name": "Axis Bank Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "BAJAJ-AUTO",
+      "name": "Bajaj Auto Ltd.",
+      "sector": "Automobiles",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "BAJAJFINSV",
+      "name": "Bajaj Finserv Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "BAJAJHLDNG",
+      "name": "Bajaj Holdings & Investment Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "BAJFINANCE",
+      "name": "Bajaj Finance Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "BANKBARODA",
+      "name": "Bank of Baroda",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "BANKINDIA",
+      "name": "Bank of India",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "BCG",
+      "name": "Brightcom Group Limited",
+      "sector": "Indian Equities",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "BDL",
+      "name": "Bharat Dynamics Limited",
+      "sector": "Capital Goods",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Midcap 100"
+      ]
     },
     {
       "symbol": "BEL",
       "name": "Bharat Electronics Limited",
       "sector": "Aerospace & Defence",
       "sub_sector": "Defence Electronics (PSU)",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "BELRISE",
+      "name": "BELRISE INDUSTRIES LTD",
+      "sector": "Consumer Cyclical",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "BEML",
+      "name": "BEML Limited",
+      "sector": "Indian Equities",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "BHARATFORG",
+      "name": "Bharat Forge Ltd.",
+      "sector": "Automobiles",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "BHARTFO",
+      "name": "BHARTFO Limited",
+      "sector": "Indian Equities",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
     },
     {
       "symbol": "BHARTIARTL",
       "name": "Bharti Airtel Limited",
       "sector": "Telecommunication",
       "sub_sector": "Telecom Services",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "BHEL",
+      "name": "Bharat Heavy Electricals Ltd.",
+      "sector": "Capital Goods",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "BIOCON",
+      "name": "Biocon Ltd.",
+      "sector": "Pharma & Healthcare",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "BLUESTARCO",
+      "name": "Blue Star Ltd.",
+      "sector": "Consumer Durables",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "BOSCHLTD",
+      "name": "Bosch Ltd.",
+      "sector": "Automobiles",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "BPCL",
+      "name": "Bharat Petroleum Corporation Ltd.",
+      "sector": "Oil, Gas & Consumable Fuels",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "BRITANNIA",
+      "name": "Britannia Industries Ltd.",
+      "sector": "FMCG",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
     },
     {
       "symbol": "BSE",
       "name": "BSE Limited",
       "sector": "Capital Markets",
       "sub_sector": "Stock Exchange",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "CANBK",
+      "name": "Canara Bank",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
     },
     {
       "symbol": "CARBORUNIV",
       "name": "Carborundum Universal Limited",
       "sector": "Industrial Products",
       "sub_sector": "Abrasives & Industrial Ceramics",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
     },
     {
       "symbol": "CDSL",
       "name": "Central Depository Services (India) Limited",
       "sector": "Capital Markets",
       "sub_sector": "Depository Services",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
     },
     {
       "symbol": "CGPOWER",
       "name": "CG Power and Industrial Solutions Limited",
       "sector": "Capital Goods & Electricals",
       "sub_sector": "Motors, Transformers & Switchgear",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "CHOLAFIN",
+      "name": "Cholamandalam Investment and Finance Company Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "CIPLA",
+      "name": "Cipla Ltd.",
+      "sector": "Pharma & Healthcare",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "COALINDIA",
+      "name": "Coal India Ltd.",
+      "sector": "Oil, Gas & Consumable Fuels",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "COCHINSHIP",
+      "name": "Cochin Shipyard Ltd.",
+      "sector": "Capital Goods",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
     },
     {
       "symbol": "COFORGE",
       "name": "Coforge Limited",
       "sector": "Information Technology",
       "sub_sector": "IT Services & Consulting",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "COLPAL",
+      "name": "Colgate Palmolive (India) Ltd.",
+      "sector": "FMCG",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "CONCOR",
+      "name": "Container Corporation of India Ltd.",
+      "sector": "Services & Logistics",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "CUMMINSIND",
+      "name": "Cummins India Ltd.",
+      "sector": "Capital Goods",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "DABUR",
+      "name": "Dabur India Ltd.",
+      "sector": "FMCG",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
     },
     {
       "symbol": "DATAPATTNS",
       "name": "Data Patterns (India) Limited",
       "sector": "Aerospace & Defence",
       "sub_sector": "Defence & Aerospace Electronics",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "DIVISLAB",
+      "name": "Divi's Laboratories Ltd.",
+      "sector": "Pharma & Healthcare",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
     },
     {
       "symbol": "DIXON",
       "name": "Dixon Technologies (India) Limited",
       "sector": "Electronics Manufacturing",
       "sub_sector": "Consumer Electronics & EMS",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "DLF",
+      "name": "DLF Ltd.",
+      "sector": "Real Estate",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "DMART",
+      "name": "Avenue Supermarts Ltd.",
+      "sector": "Consumer Services",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "DRREDDY",
+      "name": "Dr. Reddy's Laboratories Ltd.",
+      "sector": "Pharma & Healthcare",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "DWARKESH",
+      "name": "Dwarikesh Sugar Industries Limited",
+      "sector": "Indian Equities",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "EICHERMOT",
+      "name": "Eicher Motors Ltd.",
+      "sector": "Automobiles",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "ENRIN",
+      "name": "Siemens Energy India Ltd.",
+      "sector": "Capital Goods",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "ETERNAL",
+      "name": "ETERNAL LIMITED",
+      "sector": "Consumer Services",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "EXIDEIND",
+      "name": "Exide Industries Ltd.",
+      "sector": "Automobiles",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "FEDERALBNK",
+      "name": "Federal Bank Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "FIRSTCRY",
+      "name": "Brainbees Solutions Limited",
+      "sector": "Indian Equities",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "FORTIS",
+      "name": "Fortis Healthcare Ltd.",
+      "sector": "Pharma & Healthcare",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
     },
     {
       "symbol": "GABRIEL",
       "name": "Gabriel India Limited",
       "sector": "Auto Ancillaries",
       "sub_sector": "Ride Control (Shock Absorbers & Struts)",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "GAIL",
+      "name": "GAIL (India) Ltd.",
+      "sector": "Oil, Gas & Consumable Fuels",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "GLENMARK",
+      "name": "Glenmark Pharmaceuticals Ltd.",
+      "sector": "Pharma & Healthcare",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "GMRAIRPORT",
+      "name": "GMR Airports Ltd.",
+      "sector": "Services & Logistics",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "GODFRYPHLP",
+      "name": "Godfrey Phillips India Ltd.",
+      "sector": "FMCG",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "GODREJCP",
+      "name": "Godrej Consumer Products Ltd.",
+      "sector": "FMCG",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "GODREJPROP",
+      "name": "Godrej Properties Ltd.",
+      "sector": "Real Estate",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "GRASIM",
+      "name": "Grasim Industries Ltd.",
+      "sector": "Cement & Construction Materials",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "GREAVESCOT",
+      "name": "Greaves Cotton Limited",
+      "sector": "Indian Equities",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
     },
     {
       "symbol": "GROWW",
       "name": "Groww (Nextbillion Technology)",
       "sector": "Capital Markets & Fintech",
       "sub_sector": "Discount Broking & WealthTech Platform",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "GRSE",
+      "name": "Garden Reach Shipbuilders & Engineers Limited",
+      "sector": "Indian Equities",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "GVT&D",
+      "name": "GE Vernova T&D India Ltd.",
+      "sector": "Capital Goods",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "HAL",
+      "name": "Hindustan Aeronautics Limited",
+      "sector": "Capital Goods",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Nifty 100"
+      ]
     },
     {
       "symbol": "HAPPSTMNDS",
       "name": "Happiest Minds Technologies Limited",
       "sector": "Information Technology",
       "sub_sector": "Digital Transformation & Cloud Services",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
     },
     {
       "symbol": "HARSHA",
       "name": "Harsha Engineers International Limited",
       "sector": "Industrial Products",
       "sub_sector": "Precision Bearing Cages",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "HAVELLS",
+      "name": "Havells India Ltd.",
+      "sector": "Consumer Durables",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "HCLTECH",
+      "name": "HCL Technologies Ltd.",
+      "sector": "Information Technology",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "HDFCAMC",
+      "name": "HDFC Asset Management Company Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
     },
     {
       "symbol": "HDFCBANK",
       "name": "HDFC Bank Limited",
       "sector": "Banking & Financial Services",
       "sub_sector": "Private Sector Bank",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Nifty 100"
+      ]
     },
     {
-      "symbol": "POWERINDIA",
-      "name": "Hitachi Energy India Limited",
-      "sector": "Capital Goods & Electricals",
-      "sub_sector": "Power Transmission Equipment (HVDC, Transformers)",
-      "exchange": "NSE"
+      "symbol": "HDFCLIFE",
+      "name": "HDFC Life Insurance Company Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "HEROMOTOCO",
+      "name": "Hero MotoCorp Limited",
+      "sector": "Automobiles",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "HINDALCO",
+      "name": "Hindalco Industries Ltd.",
+      "sector": "Metals & Mining",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "HINDCOPPER",
+      "name": "Hindustan Copper Ltd.",
+      "sector": "Metals & Mining",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "HINDPETRO",
+      "name": "Hindustan Petroleum Corporation Ltd.",
+      "sector": "Oil, Gas & Consumable Fuels",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "HINDUNILVR",
+      "name": "Hindustan Unilever Ltd.",
+      "sector": "FMCG",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "HINDZINC",
+      "name": "Hindustan Zinc Ltd.",
+      "sector": "Metals & Mining",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "HSCL",
+      "name": "HIMADRI SPECIALITY CHEM L",
+      "sector": "Basic Materials",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "HYUNDAI",
+      "name": "Hyundai Motor India Ltd.",
+      "sector": "Automobiles",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "ICICIAMC",
+      "name": "ICICI Prudential Asset Management Company Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
     },
     {
       "symbol": "ICICIBANK",
       "name": "ICICI Bank Limited",
       "sector": "Banking & Financial Services",
       "sub_sector": "Private Sector Bank",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "ICICIGI",
+      "name": "ICICI Lombard General Insurance Company Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "IDEA",
+      "name": "Vodafone Idea Ltd.",
+      "sector": "Telecom",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "IDFCFIRSTB",
+      "name": "IDFC First Bank Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "INDHOTEL",
+      "name": "Indian Hotels Co. Ltd.",
+      "sector": "Consumer Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "INDIANB",
+      "name": "Indian Bank",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "INDIGO",
+      "name": "InterGlobe Aviation Ltd.",
+      "sector": "Services & Logistics",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "INDUSINDBK",
+      "name": "IndusInd Bank Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "INDUSTOWER",
+      "name": "Indus Towers Limited",
+      "sector": "Telecom",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "INFY",
+      "name": "Infosys Ltd.",
+      "sector": "Information Technology",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "IOC",
+      "name": "Indian Oil Corporation Ltd.",
+      "sector": "Oil, Gas & Consumable Fuels",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "IRCTC",
+      "name": "Indian Railway Catering And Tourism Corporation Ltd.",
+      "sector": "Consumer Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "IREDA",
+      "name": "INDIAN RENEWABLE ENERGY",
+      "sector": "Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "IRFC",
+      "name": "Indian Railway Finance Corporation Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "ITC",
+      "name": "ITC Limited",
+      "sector": "FMCG",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "ITCHOTELS",
+      "name": "ITC Hotels Limited",
+      "sector": "Indian Equities",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "JINDALSTEL",
+      "name": "Jindal Steel Ltd.",
+      "sector": "Metals & Mining",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "JIOFIN",
+      "name": "Jio Financial Services Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "JSWENERGY",
+      "name": "JSW Energy Ltd.",
+      "sector": "Power & Utilities",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "JSWSTEEL",
+      "name": "JSW Steel Ltd.",
+      "sector": "Metals & Mining",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "JUBLFOOD",
+      "name": "Jubilant Foodworks Ltd.",
+      "sector": "Consumer Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "KALYANKJIL",
+      "name": "Kalyan Jewellers India Ltd.",
+      "sector": "Consumer Durables",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
     },
     {
       "symbol": "KAYNES",
       "name": "Kaynes Technology India Limited",
       "sector": "Electronics Manufacturing",
       "sub_sector": "EMS & OSAT",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "KEI",
+      "name": "KEI Industries Ltd.",
+      "sector": "Capital Goods",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "KOTAKBANK",
+      "name": "KOTAK MAHINDRA BANK LTD",
+      "sector": "Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "KPITTECH",
+      "name": "KPIT TECHNOLOGIES LIMITED",
+      "sector": "Technology",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
     },
     {
       "symbol": "KRBL",
       "name": "KRBL Limited",
       "sector": "FMCG & Agri",
       "sub_sector": "Basmati Rice",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
     },
     {
-      "symbol": "LT",
-      "name": "Larsen & Toubro Limited",
-      "sector": "Capital Goods & Construction",
-      "sub_sector": "EPC & Infrastructure",
-      "exchange": "NSE"
+      "symbol": "LAURUSLABS",
+      "name": "Laurus Labs Ltd.",
+      "sector": "Pharma & Healthcare",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "LENSKART",
+      "name": "Lenskart Solutions Ltd.",
+      "sector": "Consumer Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "LGEINDIA",
+      "name": "LG Electronics India Ltd.",
+      "sector": "Consumer Durables",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "LICHSGFIN",
+      "name": "LIC Housing Finance Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "LICI",
+      "name": "Life Insurance Corporation of India",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
     },
     {
       "symbol": "LINDEINDIA",
       "name": "Linde India Limited",
       "sector": "Chemicals",
       "sub_sector": "Industrial Gases",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
     },
     {
       "symbol": "LLOYDSENGG",
       "name": "Lloyds Engineering Works Limited",
       "sector": "Capital Goods & Electricals",
       "sub_sector": "Heavy Engineering & Process Equipment",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "LODHA",
+      "name": "Lodha Developers Ltd.",
+      "sector": "Real Estate",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "LT",
+      "name": "Larsen & Toubro Limited",
+      "sector": "Capital Goods & Construction",
+      "sub_sector": "EPC & Infrastructure",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "LTF",
+      "name": "L&T Finance Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "LTFOODS",
+      "name": "LT FOODS LIMITED",
+      "sector": "Consumer Defensive",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "LTM",
+      "name": "LTM Ltd.",
+      "sector": "Information Technology",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "LUPIN",
+      "name": "Lupin Ltd.",
+      "sector": "Pharma & Healthcare",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "M&M",
+      "name": "Mahindra & Mahindra Ltd.",
+      "sector": "Automobiles",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "M&MFIN",
+      "name": "Mahindra & Mahindra Financial Services Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "MAHABANK",
+      "name": "Bank of Maharashtra",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "MANKIND",
+      "name": "Mankind Pharma Ltd.",
+      "sector": "Pharma & Healthcare",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "MARICO",
+      "name": "Marico Ltd.",
+      "sector": "FMCG",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "MARUTI",
+      "name": "Maruti Suzuki India Ltd.",
+      "sector": "Automobiles",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "MAXHEALTH",
+      "name": "Max Healthcare Institute Ltd.",
+      "sector": "Pharma & Healthcare",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
     },
     {
       "symbol": "MAZDOCK",
       "name": "Mazagon Dock Shipbuilders Limited",
       "sector": "Aerospace & Defence",
       "sub_sector": "Naval Shipbuilding (PSU)",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "MCX",
+      "name": "Multi Commodity Exchange of India Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "MEESHO",
+      "name": "Meesho Ltd.",
+      "sector": "Consumer Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "MFSL",
+      "name": "Max Financial Services Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "MIDHANI",
+      "name": "Mishra Dhatu Nigam Limited",
+      "sector": "Indian Equities",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
     },
     {
       "symbol": "MOLDTKPAC",
       "name": "Mold-Tek Packaging Limited",
       "sector": "Packaging",
       "sub_sector": "Rigid Plastic Containers",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
     },
     {
       "symbol": "MOSCHIP",
       "name": "MosChip Technologies Limited",
       "sector": "Semiconductors & Electronics",
       "sub_sector": "Chip Design & VLSI Services",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "MTARTECH",
-      "name": "MTAR Technologies Limited",
-      "sector": "Aerospace & Defence",
-      "sub_sector": "Precision Engineering (Nuclear, Space, Clean Energy)",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "MUTHOOTFIN",
-      "name": "Muthoot Finance Limited",
-      "sector": "Banking & Financial Services",
-      "sub_sector": "NBFC (Gold Loans)",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "NSE",
-      "name": "National Stock Exchange of India Limited",
-      "sector": "Capital Markets",
-      "sub_sector": "Stock Exchange",
-      "exchange": "BSE"
-    },
-    {
-      "symbol": "POLYCAB",
-      "name": "Polycab India Limited",
-      "sector": "Capital Goods & Electricals",
-      "sub_sector": "Wires, Cables & FMEG",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "RML",
-      "name": "Rane (Madras) Limited",
-      "sector": "Auto Ancillaries",
-      "sub_sector": "Steering, Linkages & Aluminium Die Casting",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "RELIANCE",
-      "name": "Reliance Industries Limited",
-      "sector": "Energy & Conglomerate",
-      "sub_sector": "Refining, Petrochemicals, Retail & Telecom",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "RIR",
-      "name": "RIR Power Electronics Limited",
-      "sector": "Semiconductors & Electronics",
-      "sub_sector": "Power Semiconductors (SiC)",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
     },
     {
       "symbol": "MOTHERSON",
       "name": "Samvardhana Motherson International Limited",
       "sector": "Auto Ancillaries",
       "sub_sector": "Wiring Harness & Auto Components",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "MOTILALOFS",
+      "name": "Motilal Oswal Financial Services Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "MPHASIS",
+      "name": "MphasiS Ltd.",
+      "sector": "Information Technology",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "MRF",
+      "name": "MRF Ltd.",
+      "sector": "Automobiles",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "MTARTECH",
+      "name": "MTAR Technologies Limited",
+      "sector": "Aerospace & Defence",
+      "sub_sector": "Precision Engineering (Nuclear, Space, Clean Energy)",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "MUTHOOTFIN",
+      "name": "Muthoot Finance Limited",
+      "sector": "Banking & Financial Services",
+      "sub_sector": "NBFC (Gold Loans)",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "NATIONALUM",
+      "name": "National Aluminium Co. Ltd.",
+      "sector": "Metals & Mining",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "NAUKRI",
+      "name": "Info Edge (India) Ltd.",
+      "sector": "Consumer Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "NESTLEIND",
+      "name": "Nestle India Ltd.",
+      "sector": "FMCG",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "NETWEB",
+      "name": "NETWEB TECH INDIA LTD",
+      "sector": "Technology",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "NHPC",
+      "name": "NHPC Ltd.",
+      "sector": "Power & Utilities",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "NLCINDIA",
+      "name": "NLC India Ltd.",
+      "sector": "Power & Utilities",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "NMDC",
+      "name": "NMDC Ltd.",
+      "sector": "Metals & Mining",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "NSE",
+      "name": "National Stock Exchange of India Limited",
+      "sector": "Capital Markets",
+      "sub_sector": "Stock Exchange",
+      "exchange": "BSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "NTPC",
+      "name": "NTPC Ltd.",
+      "sector": "Power & Utilities",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "NYKAA",
+      "name": "FSN E-Commerce Ventures Ltd.",
+      "sector": "Consumer Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "OBEROIRLTY",
+      "name": "Oberoi Realty Ltd.",
+      "sector": "Real Estate",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "OFSS",
+      "name": "Oracle Financial Services Software Ltd.",
+      "sector": "Information Technology",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "OIL",
+      "name": "Oil India Ltd.",
+      "sector": "Oil, Gas & Consumable Fuels",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "OLAELEC",
+      "name": "Ola Electric Mobility Limited",
+      "sector": "Electrical Equipment",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "OLECTRA",
+      "name": "Olectra Greentech Limited",
+      "sector": "Information Technology",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "ONGC",
+      "name": "Oil & Natural Gas Corporation Ltd.",
+      "sector": "Oil, Gas & Consumable Fuels",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "PAGEIND",
+      "name": "Page Industries Ltd.",
+      "sector": "Textiles",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "PARAS",
+      "name": "Paras Defence and Space Technologies Limited",
+      "sector": "Information Technology",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "PATANJALI",
+      "name": "Patanjali Foods Ltd.",
+      "sector": "FMCG",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "PAYTM",
+      "name": "One 97 Communications Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "PERSISTENT",
+      "name": "Persistent Systems Ltd.",
+      "sector": "Information Technology",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "PFC",
+      "name": "Power Finance Corporation Limited",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "PHOENIXLTD",
+      "name": "Phoenix Mills Ltd.",
+      "sector": "Real Estate",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "PIDILITIND",
+      "name": "Pidilite Industries Ltd.",
+      "sector": "Chemicals",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "PIIND",
+      "name": "PI Industries Ltd.",
+      "sector": "Chemicals",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "PNB",
+      "name": "Punjab National Bank",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "POLICYBZR",
+      "name": "PB Fintech Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "POLYCAB",
+      "name": "Polycab India Limited",
+      "sector": "Capital Goods & Electricals",
+      "sub_sector": "Wires, Cables & FMEG",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "POWERGRID",
+      "name": "Power Grid Corporation of India Ltd.",
+      "sector": "Power & Utilities",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "POWERINDIA",
+      "name": "Hitachi Energy India Limited",
+      "sector": "Capital Goods & Electricals",
+      "sub_sector": "Power Transmission Equipment (HVDC, Transformers)",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "PREMIERENE",
+      "name": "Premier Energies Ltd.",
+      "sector": "Capital Goods",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "PRESTIGE",
+      "name": "Prestige Estates Projects Ltd.",
+      "sector": "Real Estate",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "RADICO",
+      "name": "RADICO KHAITAN LTD",
+      "sector": "Consumer Defensive",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "RECLTD",
+      "name": "REC Limited",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "RELIANCE",
+      "name": "Reliance Industries Limited",
+      "sector": "Energy & Conglomerate",
+      "sub_sector": "Refining, Petrochemicals, Retail & Telecom",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "RIR",
+      "name": "RIR Power Electronics Limited",
+      "sector": "Semiconductors & Electronics",
+      "sub_sector": "Power Semiconductors (SiC)",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "RML",
+      "name": "Rane (Madras) Limited",
+      "sector": "Auto Ancillaries",
+      "sub_sector": "Steering, Linkages & Aluminium Die Casting",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "RTNINDIA",
+      "name": "RattanIndia Enterprises Limited",
+      "sector": "Indian Equities",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "RVNL",
+      "name": "Rail Vikas Nigam Limited",
+      "sector": "Infrastructure & Construction",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "SAIL",
+      "name": "Steel Authority of India Ltd.",
+      "sector": "Metals & Mining",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "SBICARD",
+      "name": "SBI Cards and Payment Services Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "SBILIFE",
+      "name": "SBI Life Insurance Company Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
     },
     {
       "symbol": "SBIN",
       "name": "State Bank of India",
       "sector": "Banking & Financial Services",
       "sub_sector": "Public Sector Bank",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "SCI",
+      "name": "Shipping Corporation Of India Limited",
+      "sector": "Indian Equities",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "SHRIRAMFIN",
+      "name": "Shriram Finance Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "SIEMENS",
+      "name": "Siemens Ltd.",
+      "sector": "Capital Goods",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "SOLARINDS",
+      "name": "Solar Industries India Limited",
+      "sector": "Chemicals",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "SOLARINDU",
+      "name": "SOLARINDU Limited",
+      "sector": "Indian Equities",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "SRF",
+      "name": "SRF Ltd.",
+      "sector": "Chemicals",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
     },
     {
       "symbol": "STLTECH",
       "name": "Sterlite Technologies Limited",
       "sector": "Telecommunication Equipment",
       "sub_sector": "Optical Fibre & Network Solutions",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "SUNPHARMA",
+      "name": "Sun Pharmaceutical Industries Ltd.",
+      "sector": "Pharma & Healthcare",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "SUPREMEIND",
+      "name": "Supreme Industries Ltd.",
+      "sector": "Capital Goods",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
     },
     {
       "symbol": "SUPRIYA",
       "name": "Supriya Lifescience Limited",
       "sector": "Healthcare & Pharmaceuticals",
       "sub_sector": "Active Pharmaceutical Ingredients (API)",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "SUZLON",
+      "name": "Suzlon Energy Ltd.",
+      "sector": "Capital Goods",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "SWIGGY",
+      "name": "Swiggy Ltd.",
+      "sector": "Consumer Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
     },
     {
       "symbol": "SYRMA",
       "name": "Syrma SGS Technology Limited",
       "sector": "Electronics Manufacturing",
       "sub_sector": "EMS & Magnetics",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
     },
     {
       "symbol": "TANLA",
       "name": "Tanla Platforms Limited",
       "sector": "Information Technology",
       "sub_sector": "CPaaS & Enterprise Cloud Communications",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "TMPV",
-      "name": "Tata Motors Passenger Vehicles Ltd",
-      "sector": "Automobile",
-      "sub_sector": "Passenger & EV Vehicles",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "TATASTEEL",
-      "name": "Tata Steel Limited",
-      "sector": "Metals & Mining",
-      "sub_sector": "Integrated Steel",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "TATATECH",
-      "name": "Tata Technologies Limited",
-      "sector": "Information Technology",
-      "sub_sector": "Engineering R&D Services",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "TECHM",
-      "name": "Tech Mahindra Limited",
-      "sector": "Information Technology",
-      "sub_sector": "IT Services & Consulting",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
     },
     {
       "symbol": "TARIL",
       "name": "Transformers and Rectifiers (India) Limited",
       "sector": "Capital Goods & Electricals",
       "sub_sector": "Power & Distribution Transformers",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "TATACAP",
+      "name": "Tata Capital Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "TATACOMM",
+      "name": "Tata Communications Ltd.",
+      "sector": "Telecom",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "TATACONSUM",
+      "name": "Tata Consumer Products Ltd.",
+      "sector": "FMCG",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "TATAELXSI",
+      "name": "Tata Elxsi Limited",
+      "sector": "Technology",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "TATAPOWER",
+      "name": "Tata Power Co. Ltd.",
+      "sector": "Power & Utilities",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "TATASTEEL",
+      "name": "Tata Steel Limited",
+      "sector": "Metals & Mining",
+      "sub_sector": "Integrated Steel",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "TATATECH",
+      "name": "Tata Technologies Limited",
+      "sector": "Information Technology",
+      "sub_sector": "Engineering R&D Services",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "TCS",
+      "name": "Tata Consultancy Services Ltd.",
+      "sector": "Information Technology",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "TECHM",
+      "name": "Tech Mahindra Limited",
+      "sector": "Information Technology",
+      "sub_sector": "IT Services & Consulting",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "TIINDIA",
+      "name": "Tube Investments of India Ltd.",
+      "sector": "Automobiles",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "TITAN",
+      "name": "Titan Company Ltd.",
+      "sector": "Consumer Durables",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "TMCV",
+      "name": "Tata Motors Ltd.",
+      "sector": "Capital Goods",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "TMPV",
+      "name": "Tata Motors Passenger Vehicles Ltd",
+      "sector": "Automobile",
+      "sub_sector": "Passenger & EV Vehicles",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist",
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "TORNTPHARM",
+      "name": "Torrent Pharmaceuticals Ltd.",
+      "sector": "Pharma & Healthcare",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "TRENT",
+      "name": "Trent Ltd.",
+      "sector": "Consumer Services",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "TRIDENT",
+      "name": "Trident Limited",
+      "sector": "Indian Equities",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "TTML",
+      "name": "Tata Teleservices (Maharashtra) Limited",
+      "sector": "Telecommunications",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "TVSMOTOR",
+      "name": "TVS Motor Company Ltd.",
+      "sector": "Automobiles",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "ULTRACEMCO",
+      "name": "UltraTech Cement Ltd.",
+      "sector": "Cement & Construction Materials",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "UNIECOM",
+      "name": "Unicommerce Esolutions Limited",
+      "sector": "Indian Equities",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "UNIONBANK",
+      "name": "Union Bank of India",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "UNITDSPR",
+      "name": "United Spirits Ltd.",
+      "sector": "FMCG",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "UNOMINDA",
+      "name": "UNO MINDA LIMITED",
+      "sector": "Consumer Cyclical",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "UPL",
+      "name": "UPL Ltd.",
+      "sector": "Chemicals",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "VAML",
+      "name": "Vedanta Aluminium Metal Ltd.",
+      "sector": "Metals & Mining",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "VBL",
+      "name": "Varun Beverages Ltd.",
+      "sector": "FMCG",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "VEDL",
+      "name": "Vedanta Ltd.",
+      "sector": "Metals & Mining",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
+    },
+    {
+      "symbol": "VMM",
+      "name": "Vishal Mega Mart Ltd.",
+      "sector": "Consumer Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "VOLTAS",
+      "name": "Voltas Ltd.",
+      "sector": "Consumer Durables",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "WAAREEENER",
+      "name": "Waaree Energies Ltd.",
+      "sector": "Capital Goods",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
+    },
+    {
+      "symbol": "WABAG",
+      "name": "VA TECH WABAG LTD",
+      "sector": "Industrials",
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "WIPRO",
+      "name": "Wipro Ltd.",
+      "sector": "Information Technology",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
     },
     {
       "symbol": "XPROINDIA",
       "name": "Xpro India Limited",
       "sector": "Industrial Products",
       "sub_sector": "Polymer Films & Capacitor Films",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
+    },
+    {
+      "symbol": "YESBANK",
+      "name": "Yes Bank Ltd.",
+      "sector": "Banking & Financial Services",
+      "exchange": "NSE",
+      "tags": [
+        "Midcap 100"
+      ]
     },
     {
       "symbol": "ZENTEC",
       "name": "Zen Technologies Limited",
       "sector": "Aerospace & Defence",
       "sub_sector": "Simulators & Anti-Drone Systems",
-      "exchange": "NSE"
+      "exchange": "NSE",
+      "tags": [
+        "Watchlist"
+      ]
     },
     {
-      "symbol": "BELRISE",
-      "name": "BELRISE INDUSTRIES LTD",
-      "sector": "Consumer Cyclical",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "KOTAKBANK",
-      "name": "KOTAK MAHINDRA BANK LTD",
-      "sector": "Financial Services",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "TATAELXSI",
-      "name": "Tata Elxsi Limited",
-      "sector": "Technology",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "KPITTECH",
-      "name": "KPIT TECHNOLOGIES LIMITED",
-      "sector": "Technology",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "IREDA",
-      "name": "INDIAN RENEWABLE ENERGY",
-      "sector": "Financial Services",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "UNOMINDA",
-      "name": "UNO MINDA LIMITED",
-      "sector": "Consumer Cyclical",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "RADICO",
-      "name": "RADICO KHAITAN LTD",
-      "sector": "Consumer Defensive",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "LTFOODS",
-      "name": "LT FOODS LIMITED",
-      "sector": "Consumer Defensive",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "HSCL",
-      "name": "HIMADRI SPECIALITY CHEM L",
-      "sector": "Basic Materials",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "NETWEB",
-      "name": "NETWEB TECH INDIA LTD",
-      "sector": "Technology",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "WABAG",
-      "name": "VA TECH WABAG LTD",
-      "sector": "Industrials",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "BHARTFO",
-      "name": "BHARTFO Limited",
-      "sector": "Indian Equities",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "SOLARINDU",
-      "name": "SOLARINDU Limited",
-      "sector": "Indian Equities",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "HAL",
-      "name": "Hindustan Aeronautics Limited",
-      "sector": "Capital Goods",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "BDL",
-      "name": "Bharat Dynamics Limited",
-      "sector": "Capital Goods",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "SOLARINDS",
-      "name": "Solar Industries India Limited",
-      "sector": "Chemicals",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "MIDHANI",
-      "name": "Mishra Dhatu Nigam Limited",
-      "sector": "Indian Equities",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "GRSE",
-      "name": "Garden Reach Shipbuilders & Engineers Limited",
-      "sector": "Indian Equities",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "PARAS",
-      "name": "Paras Defence and Space Technologies Limited",
-      "sector": "Information Technology",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "BEML",
-      "name": "BEML Limited",
-      "sector": "Indian Equities",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "APOLLO",
-      "name": "Apollo Micro Systems Limited",
-      "sector": "Indian Equities",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "AEQUS",
-      "name": "Aequs Limited",
-      "sector": "Indian Equities",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "ETERNAL",
-      "name": "ETERNAL LIMITED",
-      "sector": "Consumer Services",
-      "exchange": "NSE"
-    },
-    {
-      "symbol": "OLECTRA",
-      "name": "Olectra Greentech Limited",
-      "sector": "Information Technology",
-      "exchange": "NSE"
+      "symbol": "ZYDUSLIFE",
+      "name": "Zydus Lifesciences Ltd.",
+      "sector": "Pharma & Healthcare",
+      "exchange": "NSE",
+      "tags": [
+        "Nifty 100"
+      ]
     }
-  ]
+  ],
+  "count": 255
 }

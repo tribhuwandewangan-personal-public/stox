@@ -12,6 +12,7 @@ import { DashboardComponent } from '../dashboard/dashboard.component';
 import { PatternScreenerComponent } from '../screener/pattern-screener.component';
 import { SectorResearchComponent } from '../sector-research/sector-research.component';
 import { CatalystRadarComponent } from '../catalyst-radar/catalyst-radar.component';
+import { TagManagerComponent } from '../tags/tag-manager.component';
 import { PortfolioModalComponent } from '../dashboard/portfolio-modal.component';
 import { StockDetailModalComponent } from '../dashboard/stock-detail-modal.component';
 import { ActivityChatComponent } from './activity-chat.component';
@@ -30,20 +31,23 @@ import { AppStore } from '../../core/stores/app.store';
     PatternScreenerComponent,
     SectorResearchComponent,
     CatalystRadarComponent,
+    TagManagerComponent,
     PortfolioModalComponent,
     StockDetailModalComponent,
     ActivityChatComponent,
   ],
   template: `
     <div class="app-container">
-      <!-- Top Macro Ticker Ribbon -->
-      <app-ticker-bar></app-ticker-bar>
+      <!-- Sticky Top Macro Ticker & Header -->
+      <div class="top-chrome-sticky">
+        <app-ticker-bar></app-ticker-bar>
 
-      <app-header
-        [activeView]="activeView()"
-        (viewChange)="onViewChange($event)"
-        (openPortfolio)="showPortfolioModal.set(true)">
-      </app-header>
+        <app-header
+          [activeView]="activeView()"
+          (viewChange)="onViewChange($event)"
+          (openPortfolio)="showPortfolioModal.set(true)">
+        </app-header>
+      </div>
 
       <app-bulletin></app-bulletin>
 
@@ -77,6 +81,9 @@ import { AppStore } from '../../core/stores/app.store';
 
         <!-- Stock Catalyst Early-Warning Radar -->
         <app-catalyst-radar *ngIf="activeView() === 'catalysts'"></app-catalyst-radar>
+
+        <!-- Stock Tag Manager -->
+        <app-tag-manager *ngIf="activeView() === 'tags'"></app-tag-manager>
       </main>
 
       <!-- Portfolio Diagnostics Modal -->
@@ -105,46 +112,43 @@ import { AppStore } from '../../core/stores/app.store';
 :host {
       display: flex;
       flex-direction: column;
-      height: 100vh;
-      overflow: hidden;
+      min-height: 100vh;
     }
 
     .app-container {
       display: flex;
       flex-direction: column;
-      height: 100%;
-      overflow: hidden;
+      min-height: 100vh;
       background-color: var(--bg-dark, #0a0f1a);
       background-image:
         radial-gradient(at 10% 10%, rgba(56, 189, 248, 0.05) 0px, transparent 50%),
         radial-gradient(at 90% 90%, rgba(139, 92, 246, 0.05) 0px, transparent 50%);
     }
 
+    .top-chrome-sticky {
+      position: sticky;
+      top: 0;
+      z-index: 120;
+    }
+
     .main-content {
       flex: 1;
       display: flex;
       flex-direction: column;
-      overflow: hidden;
-      min-height: 0;
     }
 
     .main-content > app-dashboard {
       display: flex;
       flex: 1;
       min-height: 0;
-      height: 100%;
-      overflow: hidden;
     }
 
     .main-content > app-pattern-screener,
     .main-content > app-sector-research,
-    .main-content > app-catalyst-radar {
+    .main-content > app-catalyst-radar,
+    .main-content > app-tag-manager {
       display: block;
       flex: 1;
-      min-height: 0;
-      height: 100%;
-      overflow-y: auto;
-      overflow-x: hidden;
     }
 
     .app-footer {

@@ -91,22 +91,39 @@ Stox works out of the box using Yahoo Finance quotes and offline holdings snapsh
 > [!IMPORTANT]
 > `dashboard_server.py` and `stox_tray.py` do **not** auto-load `.env` files. When deployed via Windows Startup / tray, set your Kite credentials as **Windows User environment variables** so background processes pick them up automatically.
 
-1. **Install `kiteconnect`** (if not already installed):
+### 1. Create a Kite Connect App on Zerodha
+1. Go to [developers.kite.trade](https://developers.kite.trade/) and create an app (**Connect** for quotes + portfolio, or **Personal** for portfolio/holdings only).
+2. Fill in the app form:
+   - **Redirect URL**: `http://127.0.0.1:8765` (or `https://127.0.0.1` if Zerodha requires HTTPS).
+     > Stox does **not** need a live callback endpoint — after you log in on Zerodha, your browser will redirect to this URL with `?request_token=...` in the address bar (even if the page shows a 404 or connection error, that is completely normal).
+   - **Postback URL**: Leave blank (optional).
+3. Copy your **API Key** and **API Secret** from the app details page.
+
+### 2. Install `kiteconnect` & Save Credentials on Windows
+1. Install `kiteconnect`:
    ```powershell
    .\.venv\Scripts\pip.exe install kiteconnect
    ```
-2. **Set persistent Windows User environment variables** (once):
+2. Set persistent **Windows User** environment variables (once):
    ```powershell
    [Environment]::SetEnvironmentVariable("KITE_API_KEY", "your_kite_api_key", "User")
    [Environment]::SetEnvironmentVariable("KITE_API_SECRET", "your_kite_api_secret", "User")
    ```
    Restart the backend/tray (`.\cleanup_server.ps1 -Restart` or re-run `.\install_production.ps1`) so the running process picks up the new variables.
-3. **Generate the daily access token** (Zerodha tokens expire daily around 06:00 IST):
-   ```powershell
-   .\.venv\Scripts\python.exe tools\kite_probe.py
-   # Or: .\.venv\Scripts\python.exe tools\kite_portfolio.py --login
-   ```
-   This opens the Kite login URL, exchanges the `request_token`, and saves `api_key` + `access_token` to `storage/kite_token.json` (gitignored).
+
+### 3. Daily Login & Token Refresh
+Zerodha access tokens expire daily around 06:00 IST. Run the login helper once each morning:
+
+```powershell
+.\.venv\Scripts\python.exe tools\kite_probe.py
+# Or for portfolio-only login:
+.\.venv\Scripts\python.exe tools\kite_portfolio.py --login
+```
+
+1. Open the printed `https://kite.zerodha.com/connect/login?...` URL in your browser and log in with your Zerodha credentials + TOTP.
+2. After approval, Zerodha redirects your browser to `http://127.0.0.1:8765/?status=success&request_token=XXXX...` (ignore any 404/connection message on that page).
+3. **Copy the entire URL from the browser address bar** and paste it into the terminal prompt.
+4. The script exchanges `request_token` for an `access_token` and saves it to `storage/kite_token.json` (gitignored).
    - `tools/quote_tools.py` watches `storage/kite_token.json` and automatically re-enables Kite quotes once refreshed — no server restart required.
    - If the token is missing or expired, Stox degrades gracefully to Yahoo quotes and `storage/my_holdings.json`.
 

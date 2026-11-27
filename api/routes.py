@@ -717,6 +717,36 @@ async def catalyst_backtest(request: Request) -> Response:
         return _json_response({"error": str(e)}, status_code=500)
 
 
+async def tags_update(request: Request) -> Response:
+    """POST /api/tags/update: Add/remove/set tags on symbols in symbols.json."""
+    try:
+        data = await request.json()
+        from tools.symbol_search_tools import update_symbol_tags
+        res = await asyncio.to_thread(
+            update_symbol_tags,
+            symbols=data.get("symbols") or [],
+            add_tags=data.get("add_tags"),
+            remove_tags=data.get("remove_tags"),
+            set_tags=data.get("set_tags"),
+        )
+        return _json_response(res, status_code=200 if res.get("status") == "ok" else 400)
+    except Exception as e:
+        return _json_response({"error": str(e)}, status_code=500)
+
+
+async def tags_delete(request: Request) -> Response:
+    """POST /api/tags/delete: Remove a tag from all symbols in symbols.json."""
+    try:
+        data = await request.json()
+        from tools.symbol_search_tools import delete_tag_globally
+        res = await asyncio.to_thread(delete_tag_globally, tag=data.get("tag", ""))
+        return _json_response(res, status_code=200 if res.get("status") == "ok" else 400)
+    except Exception as e:
+        return _json_response({"error": str(e)}, status_code=500)
+    except Exception as e:
+        return _json_response({"error": str(e)}, status_code=500)
+
+
 async def activity_feed(request: Request) -> Response:
     """GET /api/activity-feed?since_id=0&limit=60: Recent change-feed events."""
     try:
@@ -763,6 +793,8 @@ routes = [
     Route("/api/sector-research/{run_id:int}/delete", endpoint=sector_research_delete, methods=["POST"]),
     Route("/api/catalysts/early-warning", endpoint=catalyst_early_warning, methods=["GET"]),
     Route("/api/catalysts/scan", endpoint=catalyst_scan, methods=["POST"]),
+    Route("/api/tags/update", endpoint=tags_update, methods=["POST"]),
+    Route("/api/tags/delete", endpoint=tags_delete, methods=["POST"]),
     Route("/api/catalysts/analyze", endpoint=catalyst_analyze, methods=["POST"]),
     Route("/api/catalysts/backtest", endpoint=catalyst_backtest, methods=["GET"]),
     Route("/api/activity-feed", endpoint=activity_feed, methods=["GET"]),

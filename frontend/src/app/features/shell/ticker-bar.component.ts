@@ -43,15 +43,12 @@ export interface MacroTickerItem {
     .ticker-bar {
       background: rgba(10, 15, 26, 0.98);
       border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      padding: 6px 16px;
+      padding: 4px 14px;
       display: flex;
       overflow-x: auto;
       white-space: nowrap;
-      font-size: 0.76rem;
+      font-size: 0.72rem;
       scrollbar-width: none;
-      z-index: 101;
-      position: sticky;
-      top: 0;
     }
     .ticker-bar::-webkit-scrollbar { display: none; }
 
